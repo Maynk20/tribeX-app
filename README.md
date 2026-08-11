@@ -85,3 +85,10 @@ Production assets are generated in the `.output/` and `dist/` directories.
 ├── capacitor.config.ts      # Capacitor web asset setup
 └── package.json             # Build configurations & packages
 ```
+## Team
+
+1. Mayank Thakkar
+2. Himanshu Singh Rajput
+3. Manish Yadav
+
+### This Project Was Under Development.
