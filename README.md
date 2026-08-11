@@ -91,4 +91,4 @@ Production assets are generated in the `.output/` and `dist/` directories.
 2. Himanshu Singh Rajput
 3. Manish Yadav
 
-### This Project Was Under Development.
+### This Project is Under Development.
