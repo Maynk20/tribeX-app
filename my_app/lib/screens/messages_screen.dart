@@ -1,0 +1,310 @@
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
+
+import '../core/constants/categories.dart';
+import '../core/theme/app_colors.dart';
+import '../core/utils/date_formatter.dart';
+import '../models/join_request.dart';
+import '../state/activities_state.dart';
+import '../state/auth_state.dart';
+import 'auth_screen.dart';
+import 'chat_screen.dart';
+
+class MessagesScreen extends StatefulWidget {
+  const MessagesScreen({super.key});
+
+  @override
+  State<MessagesScreen> createState() => _MessagesScreenState();
+}
+
+class _MessagesScreenState extends State<MessagesScreen> {
+  String _query = "";
+
+  @override
+  Widget build(BuildContext context) {
+    final actState = context.watch<ActivitiesState>();
+    final authState = context.watch<AuthState>();
+    final user = authState.currentUser;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
+    final border = isDark ? AppColors.borderDark : AppColors.borderLight;
+
+    if (user == null) {
+      return Scaffold(
+        backgroundColor: isDark
+            ? AppColors.backgroundDark
+            : AppColors.backgroundLight,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Your squad chats',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Sign in to see messages from plans you host or joined.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark
+                        ? AppColors.mutedForegroundDark
+                        : AppColors.mutedForegroundLight,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AuthScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text('Sign in'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // User's active chats (plans hosted or joined)
+    final myJoinedIds = actState.joinRequests
+        .where((r) => r.userId == user.id && r.status == JoinStatus.accepted)
+        .map((r) => r.activityId)
+        .toSet();
+
+    final myChats = actState.activities.where((a) {
+      final isHost = a.hostId == user.id;
+      final isJoined = myJoinedIds.contains(a.id);
+      if (!isHost && !isJoined) return false;
+
+      final q = _query.trim().toLowerCase();
+      if (q.isEmpty) return true;
+      return a.title.toLowerCase().contains(q) ||
+          a.location.toLowerCase().contains(q) ||
+          a.category.toLowerCase().contains(q);
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: isDark
+          ? AppColors.backgroundDark
+          : AppColors.backgroundLight,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header matching TanStack: p.uppercase tracking-[0.18em] + h1 text-3xl font-bold
+              Text(
+                'INBOX',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.8,
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Messages',
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                  color: isDark
+                      ? AppColors.foregroundDark
+                      : AppColors.foregroundLight,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Search bar: rounded-2xl border border-border/60 bg-card px-4 py-3
+              Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: border.withValues(alpha: 0.6)),
+                ),
+                child: TextField(
+                  onChanged: (val) => setState(() => _query = val),
+                  decoration: const InputDecoration(
+                    hintText: 'Search chats',
+                    prefixIcon: Icon(
+                      LucideIcons.search,
+                      size: 18,
+                      color: AppColors.mutedForegroundLight,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Chat List: flat list with border-b separator as in TanStack
+              Expanded(
+                child: myChats.isEmpty
+                    ? Center(
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: cardBg.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(
+                              color: border.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.messageCircle,
+                                size: 36,
+                                color: isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'No chats yet.\nJoin or host a plan to start a squad chat.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? AppColors.mutedForegroundDark
+                                      : AppColors.mutedForegroundLight,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: myChats.length,
+                        separatorBuilder: (_, _) => Divider(
+                          height: 1,
+                          color: border.withValues(alpha: 0.5),
+                        ),
+                        itemBuilder: (ctx, idx) {
+                          final chat = myChats[idx];
+                          return InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatScreen(activity: chat),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? AppColors.mutedDark
+                                          : AppColors.mutedLight,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      AppCategories.emojiFor(chat.category),
+                                      style: const TextStyle(fontSize: 22),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                chat.title,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark
+                                                      ? AppColors.foregroundDark
+                                                      : AppColors
+                                                            .foregroundLight,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            Text(
+                                              DateFormatter.formatChatDate(
+                                                chat.dateTime,
+                                              ),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark
+                                                    ? AppColors
+                                                          .mutedForegroundDark
+                                                    : AppColors
+                                                          .mutedForegroundLight,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          chat.location,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isDark
+                                                ? AppColors.mutedForegroundDark
+                                                : AppColors
+                                                      .mutedForegroundLight,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
