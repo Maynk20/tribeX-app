@@ -13,7 +13,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { BottomNav } from "../components/bottom-nav";
 import { Toaster } from "../components/ui/sonner";
 import { GlobalProgressBar, PageLoader } from "../components/ui/loader";
@@ -47,7 +46,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  reportLovableError(error, { boundary: "tanstack_root_error_component" });
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
