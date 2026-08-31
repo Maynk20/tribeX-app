@@ -186,13 +186,21 @@ class ChatState extends ChangeNotifier {
 
       final expId = expRes['id'] as String;
 
-      for (final m in members) {
-        await client.from('expense_shares').insert({
-          'expense_id': expId,
-          'user_id': m.userId,
-          'share_amount': m.amount,
-          'is_paid': m.isPaid,
-        });
+      if (members.isNotEmpty) {
+        await client
+            .from('expense_shares')
+            .insert(
+              members
+                  .map(
+                    (m) => {
+                      'expense_id': expId,
+                      'user_id': m.userId,
+                      'share_amount': m.amount,
+                      'is_paid': m.isPaid,
+                    },
+                  )
+                  .toList(),
+            );
       }
 
       await fetchExpense(expId);

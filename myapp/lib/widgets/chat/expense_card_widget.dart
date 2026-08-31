@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../state/chat_state.dart';
 
 class ExpenseCardWidget extends StatelessWidget {
@@ -301,12 +302,9 @@ class ExpenseCardWidget extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Opening UPI payment to ${expense.upiId} for ₹${expense.perHead.toStringAsFixed(0)}',
-                        ),
-                      ),
+                    AppToast.show(
+                      context,
+                      'Opening UPI payment to ${expense.upiId} for ₹${expense.perHead.toStringAsFixed(0)}',
                     );
                   },
                   icon: const Icon(Icons.payment, size: 16),

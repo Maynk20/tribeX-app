@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
 import '../../state/activities_state.dart';
 
@@ -65,11 +66,7 @@ class MemoryBannerWidget extends StatelessWidget {
                       activity.id,
                       "https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=600&auto=format&fit=crop&q=80",
                     );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Photo added to squad memories!'),
-                      ),
-                    );
+                    AppToast.show(context, 'Photo added to squad memories!');
                   },
                   child: const Row(
                     children: [

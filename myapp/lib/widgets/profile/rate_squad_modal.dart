@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
 import '../../models/rating_item.dart';
 import '../../models/user_profile.dart';
@@ -389,14 +390,9 @@ class _RateSquadModalState extends State<RateSquadModal> {
                                                 createdAt: DateTime.now(),
                                               ),
                                             );
-                                            ScaffoldMessenger.of(
+                                            AppToast.show(
                                               context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  'Rating saved for ${person.fullName}!',
-                                                ),
-                                              ),
+                                              'Rating saved for ${person.fullName}!',
                                             );
                                           }
                                         }

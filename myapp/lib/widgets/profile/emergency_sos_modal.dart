@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 
 class EmergencySosModal extends StatelessWidget {
   const EmergencySosModal({super.key});
@@ -28,11 +29,7 @@ class EmergencySosModal extends StatelessWidget {
       await launchUrl(waUri, mode: LaunchMode.externalApplication);
     } else {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Live location message copied to clipboard'),
-          ),
-        );
+        AppToast.show(context, 'Live location message copied to clipboard');
       }
     }
   }

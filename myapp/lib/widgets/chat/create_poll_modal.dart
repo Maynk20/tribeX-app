@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../state/auth_state.dart';
 import '../../state/chat_state.dart';
 
@@ -187,14 +188,18 @@ class _CreatePollModalState extends State<CreatePollModal> {
                       .toList();
 
                   if (q.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter a question')),
+                    AppToast.show(
+                      context,
+                      'Please enter a question',
+                      isError: true,
                     );
                     return;
                   }
                   if (opts.length < 2) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Add at least 2 options')),
+                    AppToast.show(
+                      context,
+                      'Add at least 2 options',
+                      isError: true,
                     );
                     return;
                   }

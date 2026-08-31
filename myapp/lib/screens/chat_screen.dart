@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/utils/app_toast.dart';
 import '../core/utils/date_formatter.dart';
 import '../models/activity.dart';
 import '../state/activities_state.dart';
@@ -162,9 +163,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           authState.blockUser(host.id);
                           Navigator.of(ctx).pop();
                           Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Host blocked')),
-                          );
+                          AppToast.show(context, 'Host blocked');
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.destructive,

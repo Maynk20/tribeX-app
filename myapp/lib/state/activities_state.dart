@@ -179,6 +179,15 @@ class ActivitiesState extends ChangeNotifier {
     }
   }
 
+  Timer? _debounceTimer;
+
+  void _onRealtimeChange() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      fetchActivities();
+    });
+  }
+
   void _subscribeRealtime() {
     final client = SupabaseService.client;
     if (client == null) return;
@@ -189,9 +198,7 @@ class ActivitiesState extends ChangeNotifier {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'activities',
-          callback: (payload) {
-            fetchActivities();
-          },
+          callback: (payload) => _onRealtimeChange(),
         )
         .subscribe();
 
@@ -201,9 +208,7 @@ class ActivitiesState extends ChangeNotifier {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'join_requests',
-          callback: (payload) {
-            fetchActivities();
-          },
+          callback: (payload) => _onRealtimeChange(),
         )
         .subscribe();
   }
@@ -461,6 +466,7 @@ class ActivitiesState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _activitiesChannel?.unsubscribe();
     _joinRequestsChannel?.unsubscribe();
     super.dispose();
