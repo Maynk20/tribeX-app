@@ -110,8 +110,12 @@ class _AuthScreenState extends State<AuthScreen> {
     if (_isBusy) return;
 
     final trimmedEmail = _emailCtrl.text.trim().toLowerCase();
+    if (trimmedEmail.isEmpty) {
+      _showToast('Please enter your email address');
+      return;
+    }
     if (!_emailRegex.hasMatch(trimmedEmail)) {
-      _showToast('Enter a valid email address');
+      _showToast('Please enter a valid email address (e.g. name@example.com)');
       return;
     }
 
@@ -119,8 +123,16 @@ class _AuthScreenState extends State<AuthScreen> {
     final trimmedUsername = _unameCtrl.text.trim().toLowerCase();
 
     if (_mode == AuthMode.signup) {
+      if (trimmedName.isEmpty) {
+        _showToast('Please enter your full name');
+        return;
+      }
       if (trimmedName.length < 2) {
         _showToast('Enter your full name (at least 2 characters)');
+        return;
+      }
+      if (trimmedUsername.isEmpty) {
+        _showToast('Please choose a username');
         return;
       }
       if (!_usernameRegex.hasMatch(trimmedUsername)) {
@@ -210,8 +222,12 @@ class _AuthScreenState extends State<AuthScreen> {
     if (_isBusy) return;
 
     final code = _otpCtrl.text.trim();
+    if (code.isEmpty) {
+      _showToast('Please enter the 6-digit code sent to your email.');
+      return;
+    }
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-      _showToast('Enter the 6-digit code sent to your email.');
+      _showToast('Code must be exactly 6 digits.');
       return;
     }
 
@@ -258,19 +274,6 @@ class _AuthScreenState extends State<AuthScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
-  }
-
-  bool get _canSubmitEmail {
-    final trimmedEmail = _emailCtrl.text.trim().toLowerCase();
-    final emailValid = _emailRegex.hasMatch(trimmedEmail);
-    if (_mode == AuthMode.login) {
-      return emailValid && !_isBusy;
-    }
-    final nameValid = _nameCtrl.text.trim().length >= 2;
-    final usernameValid = _usernameRegex.hasMatch(
-      _unameCtrl.text.trim().toLowerCase(),
-    );
-    return emailValid && nameValid && usernameValid && !_isBusy;
   }
 
   @override
@@ -630,7 +633,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _canSubmitEmail ? () => _sendCode() : null,
+                    onPressed: _isBusy ? null : () => _sendCode(),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -805,9 +808,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: (_isBusy || _otpCtrl.text.trim().length != 6)
-                        ? null
-                        : _verifyCode,
+                    onPressed: _isBusy ? null : _verifyCode,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
