@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/utils/app_toast.dart';
 import '../models/activity.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
@@ -99,29 +100,31 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     final meetingLink = _isOnline ? _meetingLinkCtrl.text.trim() : null;
 
     if (title.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Title must be at least 4 characters')),
+      AppToast.show(
+        context,
+        'Title must be at least 4 characters',
+        isError: true,
       );
       return;
     }
     if (desc.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add a bit more description (10+ chars)'),
-        ),
+      AppToast.show(
+        context,
+        'Please add a bit more description (10+ chars)',
+        isError: true,
       );
       return;
     }
     if (!_isOnline && loc.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please specify a location or venue')),
+      AppToast.show(
+        context,
+        'Please specify a location or venue',
+        isError: true,
       );
       return;
     }
     if (_isOnline && (meetingLink == null || meetingLink.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add a valid meeting URL')),
-      );
+      AppToast.show(context, 'Please add a valid meeting URL', isError: true);
       return;
     }
 
@@ -169,11 +172,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     context.read<ActivitiesState>().createActivity(newAct);
 
     setState(() => _isPublishing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Plan published — your squad will find you!'),
-      ),
-    );
+    AppToast.show(context, 'Plan published — your squad will find you!');
 
     widget.onPlanCreated?.call();
   }

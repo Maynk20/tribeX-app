@@ -12,7 +12,7 @@ class AuthState extends ChangeNotifier {
   bool _isLoading = true;
   bool _pushEnabled = true;
   final Set<String> _blockedUserIds = {};
-  StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<dynamic>? _authSubscription;
   RealtimeChannel? _blocksChannel;
 
   AuthState() {
@@ -49,7 +49,7 @@ class AuthState extends ChangeNotifier {
       notifyListeners();
     }
 
-    client.auth.onAuthStateChange.listen((data) async {
+    _authSubscription = client.auth.onAuthStateChange.listen((data) async {
       final session = data.session;
       if (session != null) {
         await _loadProfile(session.user.id, session.user.email);

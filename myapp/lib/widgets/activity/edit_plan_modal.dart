@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
 import '../../state/activities_state.dart';
 
@@ -77,8 +78,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
         .toList();
 
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Title cannot be empty')));
+      AppToast.show(context, 'Title cannot be empty', isError: true);
       return;
     }
 
@@ -95,9 +95,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
     context.read<ActivitiesState>().updateActivity(updated);
     Navigator.of(context).pop();
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Plan updated successfully')));
+    AppToast.show(context, 'Plan updated successfully');
   }
 
   Future<void> _pickDate() async {

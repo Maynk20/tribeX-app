@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../models/expense.dart';
 import '../../state/activities_state.dart';
 import '../../state/auth_state.dart';
@@ -287,26 +288,26 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
                 onPressed: () {
                   final desc = _descCtrl.text.trim();
                   if (desc.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter a description'),
-                      ),
+                    AppToast.show(
+                      context,
+                      'Please enter a description',
+                      isError: true,
                     );
                     return;
                   }
                   if (total <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter a valid amount'),
-                      ),
+                    AppToast.show(
+                      context,
+                      'Please enter a valid amount',
+                      isError: true,
                     );
                     return;
                   }
                   if (effectiveMembers.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please select at least one member'),
-                      ),
+                    AppToast.show(
+                      context,
+                      'Please select at least one member',
+                      isError: true,
                     );
                     return;
                   }

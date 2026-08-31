@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/utils/app_toast.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../widgets/activity/activity_card.dart';
@@ -11,6 +12,7 @@ import '../widgets/activity/delete_plan_dialog.dart';
 import '../widgets/activity/edit_plan_modal.dart';
 import '../widgets/activity/manage_requests_modal.dart';
 import '../widgets/activity/safety_disclaimer_modal.dart';
+import '../widgets/common/loaders.dart';
 import '../widgets/common/notifications_bell_dialog.dart';
 import '../widgets/common/place_search_dialog.dart';
 import '../widgets/common/search_filter_sheet.dart';
@@ -117,14 +119,10 @@ class ExploreScreen extends StatelessWidget {
                                         actState.setLocation(
                                           "Indiranagar, Bengaluru",
                                         );
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'GPS Location updated',
-                                                ),
-                                              ),
-                                            );
+                                        AppToast.show(
+                                          context,
+                                          'GPS Location updated',
+                                        );
                                       },
                                       child: Icon(
                                         LucideIcons.navigation,
@@ -188,24 +186,40 @@ class ExploreScreen extends StatelessWidget {
                                     NotificationsBellDialog.show(
                                       context,
                                       onOpenActivity: (actId) {
-                                        final act = actState.activities
-                                            .firstWhere((a) => a.id == actId);
-                                        ManageRequestsModal.show(
-                                          context,
-                                          activityId: act.id,
-                                          activityTitle: act.title,
-                                        );
+                                        try {
+                                          final act = actState.activities
+                                              .firstWhere((a) => a.id == actId);
+                                          ManageRequestsModal.show(
+                                            context,
+                                            activityId: act.id,
+                                            activityTitle: act.title,
+                                          );
+                                        } catch (_) {
+                                          AppToast.show(
+                                            context,
+                                            'Activity no longer available',
+                                            isError: true,
+                                          );
+                                        }
                                       },
                                       onOpenChat: (actId) {
-                                        final act = actState.activities
-                                            .firstWhere((a) => a.id == actId);
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                ChatScreen(activity: act),
-                                          ),
-                                        );
+                                        try {
+                                          final act = actState.activities
+                                              .firstWhere((a) => a.id == actId);
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  ChatScreen(activity: act),
+                                            ),
+                                          );
+                                        } catch (_) {
+                                          AppToast.show(
+                                            context,
+                                            'Activity no longer available',
+                                            isError: true,
+                                          );
+                                        }
                                       },
                                     );
                                   },
@@ -498,7 +512,60 @@ class ExploreScreen extends StatelessWidget {
               ),
 
               // Activity Cards List
-              if (filteredActivities.isEmpty)
+              if (actState.isLoading && filteredActivities.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: ListSkeleton(count: 3),
+                  ),
+                )
+              else if (actState.error != null && filteredActivities.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 30,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(28),
+                      decoration: BoxDecoration(
+                        color: cardBg.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
+                          color: border.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.alertTriangle,
+                            size: 36,
+                            color: AppColors.destructive,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            "Couldn't load plans right now.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            onPressed: () => actState.fetchActivities(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else if (filteredActivities.isEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -590,11 +657,7 @@ class ExploreScreen extends StatelessWidget {
                               context,
                               onAgree: () {
                                 actState.requestToJoin(act.id, user);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Request sent to host!'),
-                                  ),
-                                );
+                                AppToast.show(context, 'Request sent to host!');
                               },
                             );
                           },
@@ -624,14 +687,11 @@ class ExploreScreen extends StatelessWidget {
                           },
                           onToggleUrgent: () {
                             actState.toggleUrgent(act.id);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  act.isUrgentActive
-                                      ? 'Urgent mode cleared'
-                                      : '⚡ Urgent alert sent to nearby players',
-                                ),
-                              ),
+                            AppToast.show(
+                              context,
+                              act.isUrgentActive
+                                  ? 'Urgent mode cleared'
+                                  : '⚡ Urgent alert sent to nearby players',
                             );
                           },
                           onEdit: () {
@@ -643,9 +703,7 @@ class ExploreScreen extends StatelessWidget {
                               activity: act,
                               onConfirmDelete: () {
                                 actState.deleteActivity(act.id);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Plan deleted')),
-                                );
+                                AppToast.show(context, 'Plan deleted');
                               },
                             );
                           },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
 import '../../models/join_request.dart';
 import '../../state/activities_state.dart';
@@ -89,12 +90,9 @@ class CheckInPanel extends StatelessWidget {
                 ElevatedButton.icon(
                   onPressed: () {
                     state.markAttendeeCheckIn(activity.id, myRequest!.userId);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          '✅ Checked in · Verified present at venue',
-                        ),
-                      ),
+                    AppToast.show(
+                      context,
+                      '✅ Checked in · Verified present at venue',
                     );
                   },
                   icon: const Icon(Icons.pin_drop, size: 14),
