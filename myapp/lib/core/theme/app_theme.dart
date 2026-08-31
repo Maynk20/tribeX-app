@@ -10,10 +10,86 @@ class AppTheme {
 
   static ThemeData get lightTheme {
     final base = ThemeData.light(useMaterial3: true);
-    final textTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
-      bodyColor: AppColors.foregroundLight,
-      displayColor: AppColors.foregroundLight,
-    );
+    final lightInter = GoogleFonts.interTextTheme(base.textTheme);
+    final textTheme = lightInter
+        .copyWith(
+          displayLarge: lightInter.displayLarge?.copyWith(
+            fontSize: 32,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.8,
+            height: 1.15,
+          ),
+          displayMedium: lightInter.displayMedium?.copyWith(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            height: 1.2,
+          ),
+          headlineLarge: lightInter.headlineLarge?.copyWith(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+            height: 1.2,
+          ),
+          headlineMedium: lightInter.headlineMedium?.copyWith(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            height: 1.25,
+          ),
+          titleLarge: lightInter.titleLarge?.copyWith(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+            height: 1.3,
+          ),
+          titleMedium: lightInter.titleMedium?.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.1,
+            height: 1.35,
+          ),
+          titleSmall: lightInter.titleSmall?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.0,
+            height: 1.4,
+          ),
+          bodyLarge: lightInter.bodyLarge?.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            height: 1.45,
+          ),
+          bodyMedium: lightInter.bodyMedium?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            height: 1.45,
+          ),
+          bodySmall: lightInter.bodySmall?.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            height: 1.4,
+          ),
+          labelLarge: lightInter.labelLarge?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.1,
+          ),
+          labelMedium: lightInter.labelMedium?.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          ),
+          labelSmall: lightInter.labelSmall?.copyWith(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.5,
+          ),
+        )
+        .apply(
+          bodyColor: AppColors.foregroundLight,
+          displayColor: AppColors.foregroundLight,
+        );
 
     return ThemeData(
       useMaterial3: true,
@@ -119,10 +195,86 @@ class AppTheme {
 
   static ThemeData get darkTheme {
     final base = ThemeData.dark(useMaterial3: true);
-    final textTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
-      bodyColor: AppColors.foregroundDark,
-      displayColor: AppColors.foregroundDark,
-    );
+    final darkInter = GoogleFonts.interTextTheme(base.textTheme);
+    final textTheme = darkInter
+        .copyWith(
+          displayLarge: darkInter.displayLarge?.copyWith(
+            fontSize: 32,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.8,
+            height: 1.15,
+          ),
+          displayMedium: darkInter.displayMedium?.copyWith(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            height: 1.2,
+          ),
+          headlineLarge: darkInter.headlineLarge?.copyWith(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+            height: 1.2,
+          ),
+          headlineMedium: darkInter.headlineMedium?.copyWith(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            height: 1.25,
+          ),
+          titleLarge: darkInter.titleLarge?.copyWith(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+            height: 1.3,
+          ),
+          titleMedium: darkInter.titleMedium?.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.1,
+            height: 1.35,
+          ),
+          titleSmall: darkInter.titleSmall?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.0,
+            height: 1.4,
+          ),
+          bodyLarge: darkInter.bodyLarge?.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            height: 1.45,
+          ),
+          bodyMedium: darkInter.bodyMedium?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            height: 1.45,
+          ),
+          bodySmall: darkInter.bodySmall?.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            height: 1.4,
+          ),
+          labelLarge: darkInter.labelLarge?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.1,
+          ),
+          labelMedium: darkInter.labelMedium?.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          ),
+          labelSmall: darkInter.labelSmall?.copyWith(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.5,
+          ),
+        )
+        .apply(
+          bodyColor: AppColors.foregroundDark,
+          displayColor: AppColors.foregroundDark,
+        );
 
     return ThemeData(
       useMaterial3: true,
