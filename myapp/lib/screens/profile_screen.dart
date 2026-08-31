@@ -62,13 +62,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Your profile',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Your profile',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(LucideIcons.settings, size: 22),
+                      tooltip: 'Settings',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -161,55 +178,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          title: const Text('Sign out?'),
-                          content: const Text(
-                            'Are you sure you want to sign out of tribeX?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(),
-                              child: const Text('Cancel'),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
                             ),
-                            ElevatedButton(
-                              onPressed: () {
-                                authState.signOut();
-                                Navigator.of(ctx).pop();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.destructive,
+                          );
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: border.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Icon(
+                            LucideIcons.settings,
+                            size: 18,
+                            color: isDark
+                                ? AppColors.foregroundDark
+                                : AppColors.foregroundLight,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              child: const Text('Sign out'),
+                              title: const Text('Sign out?'),
+                              content: const Text(
+                                'Are you sure you want to sign out of tribeX?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    authState.signOut();
+                                    Navigator.of(ctx).pop();
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.destructive,
+                                  ),
+                                  child: const Text('Sign out'),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: border.withValues(alpha: 0.6),
+                          );
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: border.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Icon(
+                            LucideIcons.logOut,
+                            size: 16,
+                            color: isDark
+                                ? AppColors.foregroundDark
+                                : AppColors.foregroundLight,
+                          ),
                         ),
                       ),
-                      child: Icon(
-                        LucideIcons.logOut,
-                        size: 16,
-                        color: isDark
-                            ? AppColors.foregroundDark
-                            : AppColors.foregroundLight,
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
