@@ -10,6 +10,7 @@ import '../models/join_request.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../widgets/activity/delete_plan_dialog.dart';
+import '../widgets/activity/edit_plan_modal.dart';
 import '../widgets/activity/manage_requests_modal.dart';
 import '../widgets/profile/emergency_sos_modal.dart';
 import '../widgets/profile/rate_squad_modal.dart';
@@ -878,6 +879,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ? Colors.white
                                       : AppColors.primary,
                                 ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              EditPlanModal.show(context, activity: p);
+                            },
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.backgroundDark
+                                    : AppColors.backgroundLight,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: border.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: const Icon(
+                                LucideIcons.pencil,
+                                size: 14,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatScreen(activity: p),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.backgroundDark
+                                    : AppColors.backgroundLight,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: border.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: const Icon(
+                                LucideIcons.messageSquare,
+                                size: 14,
+                                color: AppColors.secondary,
                               ),
                             ),
                           ),

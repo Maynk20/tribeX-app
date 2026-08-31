@@ -369,10 +369,17 @@ class ActivitiesState extends ChangeNotifier {
 
     try {
       if (status == JoinStatus.accepted) {
-        await SupabaseService.client?.rpc(
-          'accept_join_request',
-          params: {'_request_id': requestId},
-        );
+        try {
+          await SupabaseService.client?.rpc(
+            'accept_join_request',
+            params: {'_request_id': requestId},
+          );
+        } catch (_) {
+          await SupabaseService.client
+              ?.from('join_requests')
+              .update({'status': 'accepted'})
+              .eq('id', requestId);
+        }
       } else {
         await SupabaseService.client
             ?.from('join_requests')
@@ -385,10 +392,17 @@ class ActivitiesState extends ChangeNotifier {
 
   Future<void> removeAttendee(String requestId) async {
     try {
-      await SupabaseService.client?.rpc(
-        'remove_join_request',
-        params: {'_request_id': requestId},
-      );
+      try {
+        await SupabaseService.client?.rpc(
+          'remove_join_request',
+          params: {'_request_id': requestId},
+        );
+      } catch (_) {
+        await SupabaseService.client
+            ?.from('join_requests')
+            .update({'status': 'rejected'})
+            .eq('id', requestId);
+      }
       await fetchActivities();
     } catch (_) {}
   }
