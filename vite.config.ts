@@ -9,6 +9,9 @@ export default defineConfig({
   },
   vite: {
     base: isCapacitorBuild ? "./" : "/",
+    server: {
+      open: false,
+    },
     define: {
       "import.meta.env.VITE_ONESIGNAL_APP_ID": JSON.stringify(
         process.env.ONESIGNAL_APP_ID ?? process.env.VITE_ONESIGNAL_APP_ID ?? "",
@@ -16,3 +19,4 @@ export default defineConfig({
     },
   },
 });
+
