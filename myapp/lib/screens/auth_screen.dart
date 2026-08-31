@@ -214,6 +214,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
     setState(() {
       _step = AuthStep.code;
+      _otpCtrl.clear();
     });
     _startCooldown(60);
   }
@@ -231,6 +232,7 @@ class _AuthScreenState extends State<AuthScreen> {
       return;
     }
 
+    FocusScope.of(context).unfocus();
     setState(() => _isBusy = true);
 
     final trimmedEmail = _emailCtrl.text.trim().toLowerCase();
@@ -255,7 +257,12 @@ class _AuthScreenState extends State<AuthScreen> {
       );
       Navigator.of(context).pushReplacementNamed('/');
     } else {
-      _showToast(res.message ?? "Couldn't verify code. Please try again.");
+      final msg = res.message ?? "Couldn't verify code. Please try again.";
+      if (res.code == 'OTP_EXPIRED') {
+        _showToast('Code expired or invalid. Please tap Resend code.');
+      } else {
+        _showToast(msg);
+      }
     }
   }
 
@@ -765,7 +772,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // 6-Digit OTP Text Input with letter spacing & large font
+                // 6-Digit OTP Text Input with letter spacing, auto-focus & auto-submit
                 TextField(
                   controller: _otpCtrl,
                   autofocus: true,
@@ -799,6 +806,10 @@ class _AuthScreenState extends State<AuthScreen> {
                           offset: formatted.length,
                         ),
                       );
+                    }
+                    if (formatted.length == 6 && !_isBusy) {
+                      FocusScope.of(context).unfocus();
+                      _verifyCode();
                     }
                     setState(() {});
                   },
