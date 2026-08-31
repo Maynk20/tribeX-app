@@ -48,7 +48,7 @@ class ExploreScreen extends StatelessWidget {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await Future.delayed(const Duration(milliseconds: 400));
+            await actState.fetchActivities();
           },
           color: AppColors.primary,
           child: CustomScrollView(
