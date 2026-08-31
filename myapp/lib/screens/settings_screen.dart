@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/utils/app_toast.dart';
 import '../models/user_profile.dart';
 import '../state/auth_state.dart';
 import 'terms_and_policies_screen.dart';
@@ -101,7 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: nameCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Full name',
-                        prefixIcon: Icon(Icons.person_outline, size: 20),
+                        prefixIcon: Icon(LucideIcons.user, size: 18),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -109,7 +111,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: unameCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Username',
-                        prefixIcon: Icon(Icons.alternate_email, size: 20),
+                        prefixIcon: Icon(LucideIcons.atSign, size: 18),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -118,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
                         labelText: 'Phone number',
-                        prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                        prefixIcon: Icon(LucideIcons.phone, size: 18),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -134,7 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           : "Prefer not to say",
                       decoration: const InputDecoration(
                         labelText: 'Gender',
-                        prefixIcon: Icon(Icons.transgender, size: 20),
+                        prefixIcon: Icon(LucideIcons.users, size: 18),
                       ),
                       items: const [
                         DropdownMenuItem(value: "Male", child: Text("Male")),
@@ -157,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: cityCtrl,
                       decoration: const InputDecoration(
                         labelText: 'City / Neighborhood',
-                        prefixIcon: Icon(Icons.location_on_outlined, size: 20),
+                        prefixIcon: Icon(LucideIcons.mapPin, size: 18),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -190,11 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 : null,
                           );
                           Navigator.of(ctx).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Profile details updated'),
-                            ),
-                          );
+                          AppToast.show(context, 'Profile details updated');
                         },
                         child: const Text('Save Details'),
                       ),
@@ -204,6 +202,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showBlockedUsersModal(BuildContext context, AuthState authState) {
+    final blockedIds = authState.blockedUserIds.toList();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
+        final border = isDark ? AppColors.borderDark : AppColors.borderLight;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: border),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: border.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Blocked Users',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    '${blockedIds.length} active',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (blockedIds.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      'You haven\'t blocked anyone yet.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: blockedIds.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, idx) {
+                    final bId = blockedIds[idx];
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.backgroundDark
+                            : AppColors.mutedLight,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: border),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            LucideIcons.userX,
+                            size: 18,
+                            color: AppColors.destructive,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Blocked User ID: ${bId.substring(0, bId.length > 8 ? 8 : bId.length)}…',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          OutlinedButton(
+                            onPressed: () {
+                              authState.unblockUser(bId);
+                              Navigator.of(ctx).pop();
+                              AppToast.show(context, 'User unblocked');
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                            ),
+                            child: const Text(
+                              'Unblock',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         );
       },
     );
@@ -285,12 +413,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.of(ctx).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Report submitted. Our safety team will review it.',
-                            ),
-                          ),
+                        AppToast.show(
+                          context,
+                          'Report submitted. Safety team will review it.',
                         );
                       },
                       child: const Text('Submit Report'),
@@ -348,8 +473,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       final val = idx + 1;
                       return IconButton(
                         icon: Icon(
-                          Icons.star,
-                          size: 32,
+                          LucideIcons.star,
+                          size: 28,
                           color: val <= rating
                               ? AppColors.warning
                               : AppColors.mutedForegroundLight,
@@ -372,11 +497,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.of(ctx).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Thank you for your feedback!'),
-                          ),
-                        );
+                        AppToast.show(context, 'Thank you for your feedback!');
                       },
                       child: const Text('Send Feedback'),
                     ),
@@ -434,14 +555,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context.read<AuthState>().signOut();
                 Navigator.of(ctx).pop();
                 Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Account deleted')),
-                );
+                AppToast.show(context, 'Account deleted');
               } else {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please type DELETE to confirm'),
-                  ),
+                AppToast.show(
+                  ctx,
+                  'Please type DELETE to confirm',
+                  isError: true,
                 );
               }
             },
@@ -470,7 +589,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(LucideIcons.arrowLeft),
           onPressed: () => Navigator.of(context).pop(),
         ),
         bottom: PreferredSize(
@@ -488,9 +607,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text(
                 'ACCOUNT & PROFILE',
                 style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
                   color: isDark
                       ? AppColors.mutedForegroundDark
                       : AppColors.mutedForegroundLight,
@@ -499,7 +618,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Material(
                 color: cardBg,
-                borderRadius: BorderRadius.circular(20),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(color: border),
@@ -516,7 +634,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             : null,
                         child: user.avatarUrl == null
                             ? Text(
-                                user.fullName[0].toUpperCase(),
+                                user.fullName.isNotEmpty
+                                    ? user.fullName[0].toUpperCase()
+                                    : 'U',
                                 style: const TextStyle(color: Colors.white),
                               )
                             : null,
@@ -541,8 +661,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPressed: () => _openEditProfileModal(context, user),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
+                            horizontal: 12,
+                            vertical: 6,
                           ),
                           minimumSize: Size.zero,
                         ),
@@ -562,9 +682,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text(
               'PREFERENCES',
               style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
                 color: isDark
                     ? AppColors.mutedForegroundDark
                     : AppColors.mutedForegroundLight,
@@ -573,40 +693,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
             Material(
               color: cardBg,
-              borderRadius: BorderRadius.circular(20),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(color: border),
               ),
               clipBehavior: Clip.antiAlias,
-              child: SwitchListTile.adaptive(
-                value: authState.pushEnabled,
-                activeTrackColor: AppColors.primary,
-                title: const Text(
-                  'Push Notifications',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  'Get alerted for join requests and squad messages.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
-                  ),
-                ),
-                onChanged: (val) {
-                  authState.togglePush(val);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
+              child: Column(
+                children: [
+                  SwitchListTile.adaptive(
+                    value: authState.pushEnabled,
+                    activeTrackColor: AppColors.primary,
+                    title: const Text(
+                      'Push Notifications',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Get alerted for join requests and squad messages.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                    onChanged: (val) {
+                      authState.togglePush(val);
+                      AppToast.show(
+                        context,
                         val
                             ? 'Push notifications enabled'
                             : 'Push notifications disabled',
+                      );
+                    },
+                  ),
+                  Divider(height: 1, color: border),
+                  ListTile(
+                    leading: const Icon(
+                      LucideIcons.userX,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text(
+                      'Blocked Users',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  );
-                },
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${authState.blockedUserIds.length} active',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.mutedForegroundLight,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(LucideIcons.chevronRight, size: 14),
+                      ],
+                    ),
+                    onTap: () => _showBlockedUsersModal(context, authState),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
@@ -615,9 +768,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text(
               'HELP & SUPPORT',
               style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
                 color: isDark
                     ? AppColors.mutedForegroundDark
                     : AppColors.mutedForegroundLight,
@@ -626,7 +779,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
             Material(
               color: cardBg,
-              borderRadius: BorderRadius.circular(20),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(color: border),
@@ -650,8 +802,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                           trailing: Icon(
-                            isOpen ? Icons.expand_less : Icons.expand_more,
-                            size: 20,
+                            isOpen
+                                ? LucideIcons.chevronUp
+                                : LucideIcons.chevronDown,
+                            size: 18,
                           ),
                           onTap: () {
                             setState(() {
@@ -681,8 +835,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Divider(height: 1, color: border),
                   ListTile(
                     leading: const Icon(
-                      Icons.report_problem_outlined,
-                      size: 20,
+                      LucideIcons.alertTriangle,
+                      size: 18,
                       color: AppColors.primary,
                     ),
                     title: const Text(
@@ -692,14 +846,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 12),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 14),
                     onTap: () => _showReportIssueModal(context),
                   ),
                   Divider(height: 1, color: border),
                   ListTile(
                     leading: const Icon(
-                      Icons.chat_outlined,
-                      size: 20,
+                      LucideIcons.messageSquare,
+                      size: 18,
                       color: AppColors.primary,
                     ),
                     title: const Text(
@@ -709,14 +863,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 12),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 14),
                     onTap: () => _showFeedbackModal(context),
                   ),
                   Divider(height: 1, color: border),
                   ListTile(
                     leading: const Icon(
-                      Icons.description_outlined,
-                      size: 20,
+                      LucideIcons.fileText,
+                      size: 18,
                       color: AppColors.primary,
                     ),
                     title: const Text(
@@ -726,7 +880,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 12),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 14),
                     onTap: () {
                       Navigator.push(
                         context,
@@ -745,9 +899,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text(
               'DANGER ZONE',
               style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
                 color: isDark
                     ? AppColors.mutedForegroundDark
                     : AppColors.mutedForegroundLight,
@@ -756,7 +910,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
             Material(
               color: cardBg,
-              borderRadius: BorderRadius.circular(20),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
@@ -766,7 +919,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               clipBehavior: Clip.antiAlias,
               child: ListTile(
                 leading: const Icon(
-                  Icons.delete_forever,
+                  LucideIcons.trash2,
                   color: AppColors.destructive,
                 ),
                 title: const Text(
