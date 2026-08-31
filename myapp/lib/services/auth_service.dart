@@ -40,6 +40,17 @@ class AuthService {
       );
     }
 
+    if (str.contains('otp_expired') ||
+        str.contains('Token has expired') ||
+        str.contains('invalid') ||
+        str.contains('403')) {
+      return OtpResult(
+        success: false,
+        code: 'OTP_EXPIRED',
+        message: 'Security code has expired or is invalid. Please tap Resend code to get a new code.',
+      );
+    }
+
     if (body is Map<String, dynamic>) {
       final code = body['code'] as String?;
       final msg = body['message'] as String? ?? fallback;
@@ -246,20 +257,47 @@ class AuthService {
         final body = jsonDecode(response.body);
         if (response.statusCode == 200) {
           final tokenHash = body['token_hash'] as String?;
-          if (tokenHash != null && client != null) {
-            final authRes = await client.auth.verifyOTP(
-              email: normalized,
-              token: tokenHash,
-              type: OtpType.magiclink,
-            );
-            if (authRes.session != null) {
-              return OtpResult(success: true, tokenHash: tokenHash);
+          final emailOtp = body['email_otp'] as String?;
+
+          if (client != null) {
+            if (tokenHash != null) {
+              try {
+                final authRes = await client.auth.verifyOTP(
+                  email: normalized,
+                  token: tokenHash,
+                  type: OtpType.magiclink,
+                );
+                if (authRes.session != null) {
+                  return OtpResult(success: true, tokenHash: tokenHash);
+                }
+              } catch (_) {}
             }
+
+            if (emailOtp != null) {
+              try {
+                final authRes2 = await client.auth.verifyOTP(
+                  email: normalized,
+                  token: emailOtp,
+                  type: OtpType.email,
+                );
+                if (authRes2.session != null) {
+                  return OtpResult(success: true, tokenHash: emailOtp);
+                }
+              } catch (_) {}
+            }
+
+            return OtpResult(
+              success: false,
+              code: 'OTP_EXPIRED',
+              message: 'Security code expired or session failed. Please request a new code.',
+            );
           }
         } else {
           return _parseError(body, "Invalid code. Please try again.");
         }
-      } catch (_) {}
+      } catch (err) {
+        return _parseError(err, "Verification failed. Please try again.");
+      }
     }
 
     // Fallback to Supabase Auth
@@ -287,7 +325,11 @@ class AuthService {
       if (res2.session != null) {
         return OtpResult(success: true);
       }
-      return OtpResult(success: false, message: 'Invalid OTP code');
+      return OtpResult(
+        success: false,
+        code: 'OTP_EXPIRED',
+        message: 'Invalid or expired OTP code',
+      );
     } catch (e) {
       return _parseError(e.toString(), 'Invalid code. Please try again.');
     }
@@ -318,20 +360,47 @@ class AuthService {
         final body = jsonDecode(response.body);
         if (response.statusCode == 200) {
           final tokenHash = body['token_hash'] as String?;
-          if (tokenHash != null && client != null) {
-            final authRes = await client.auth.verifyOTP(
-              email: normalizedEmail,
-              token: tokenHash,
-              type: OtpType.magiclink,
-            );
-            if (authRes.session != null) {
-              return OtpResult(success: true, tokenHash: tokenHash);
+          final emailOtp = body['email_otp'] as String?;
+
+          if (client != null) {
+            if (tokenHash != null) {
+              try {
+                final authRes = await client.auth.verifyOTP(
+                  email: normalizedEmail,
+                  token: tokenHash,
+                  type: OtpType.magiclink,
+                );
+                if (authRes.session != null) {
+                  return OtpResult(success: true, tokenHash: tokenHash);
+                }
+              } catch (_) {}
             }
+
+            if (emailOtp != null) {
+              try {
+                final authRes2 = await client.auth.verifyOTP(
+                  email: normalizedEmail,
+                  token: emailOtp,
+                  type: OtpType.email,
+                );
+                if (authRes2.session != null) {
+                  return OtpResult(success: true, tokenHash: emailOtp);
+                }
+              } catch (_) {}
+            }
+
+            return OtpResult(
+              success: false,
+              code: 'OTP_EXPIRED',
+              message: 'Security code expired or session failed. Please request a new code.',
+            );
           }
         } else {
           return _parseError(body, "Invalid code. Please try again.");
         }
-      } catch (_) {}
+      } catch (err) {
+        return _parseError(err, "Verification failed. Please try again.");
+      }
     }
 
     return verifySignInOtp(email: normalizedEmail, code: code);
