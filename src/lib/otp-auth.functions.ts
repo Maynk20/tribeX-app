@@ -306,7 +306,11 @@ export async function handleVerifySignInOtp(inputData: { email: string; code: st
     .update({ used_at: new Date().toISOString() })
     .eq("id", row.id);
 
-  return { token_hash: link.properties.hashed_token as string, email };
+  return {
+    token_hash: link.properties.hashed_token as string,
+    email_otp: link.properties.email_otp as string | undefined,
+    email,
+  };
 }
 
 export async function handleVerifySignUpOtp(inputData: { email: string; code: string; full_name: string; username: string }) {
@@ -403,7 +407,11 @@ export async function handleVerifySignUpOtp(inputData: { email: string; code: st
     .update({ used_at: new Date().toISOString() })
     .eq("id", row.id);
 
-  return { token_hash: link.properties.hashed_token as string, email };
+  return {
+    token_hash: link.properties.hashed_token as string,
+    email_otp: link.properties.email_otp as string | undefined,
+    email,
+  };
 }
 
 // TanStack Start createServerFn exports for Web client
