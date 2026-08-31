@@ -30,6 +30,10 @@ class AppTheme {
         onError: Colors.white,
       ),
       textTheme: textTheme,
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
       cardTheme: const CardThemeData(
         color: AppColors.cardLight,
         elevation: 0,
@@ -129,6 +133,10 @@ class AppTheme {
         onError: Colors.white,
       ),
       textTheme: textTheme,
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
       cardTheme: const CardThemeData(
         color: AppColors.cardDark,
         elevation: 0,

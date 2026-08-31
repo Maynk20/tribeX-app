@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/utils/app_toast.dart';
 import '../services/auth_service.dart';
 import 'terms_and_policies_screen.dart';
 
@@ -277,9 +278,12 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  void _showToast(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+  void _showToast(String msg, {bool isError = false}) {
+    AppToast.show(
+      context,
+      msg,
+      isError: isError,
+      duration: const Duration(seconds: 2),
     );
   }
 
