@@ -5,7 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
 import '../../state/chat_state.dart';
 
-class ExpenseCardWidget extends StatelessWidget {
+class ExpenseCardWidget extends StatefulWidget {
   final String expenseId;
   final String? currentUserId;
 
@@ -16,9 +16,32 @@ class ExpenseCardWidget extends StatelessWidget {
   });
 
   @override
+  State<ExpenseCardWidget> createState() => _ExpenseCardWidgetState();
+}
+
+class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ChatState>().fetchExpenseIfNeeded(widget.expenseId);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ExpenseCardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.expenseId != oldWidget.expenseId) {
+      context.read<ChatState>().fetchExpenseIfNeeded(widget.expenseId);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final chatState = context.watch<ChatState>();
-    final expense = chatState.getExpense(expenseId);
+    final expense = chatState.getExpense(widget.expenseId);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
@@ -200,7 +223,7 @@ class ExpenseCardWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 ...expense.members.map((m) {
-                  final isMe = m.userId == currentUserId;
+                  final isMe = m.userId == widget.currentUserId;
                   return InkWell(
                     onTap: () {
                       chatState.toggleMemberPaid(expense.id, m.userId);

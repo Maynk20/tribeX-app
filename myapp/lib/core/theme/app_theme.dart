@@ -8,7 +8,10 @@ import 'app_colors.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get lightTheme {
+  static final ThemeData lightTheme = _buildLightTheme();
+  static final ThemeData darkTheme = _buildDarkTheme();
+
+  static ThemeData _buildLightTheme() {
     final base = ThemeData.light(useMaterial3: true);
     final lightInter = GoogleFonts.interTextTheme(base.textTheme);
     final textTheme = lightInter
@@ -193,7 +196,7 @@ class AppTheme {
     );
   }
 
-  static ThemeData get darkTheme {
+  static ThemeData _buildDarkTheme() {
     final base = ThemeData.dark(useMaterial3: true);
     final darkInter = GoogleFonts.interTextTheme(base.textTheme);
     final textTheme = darkInter

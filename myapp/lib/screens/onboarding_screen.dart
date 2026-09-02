@@ -34,7 +34,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (!mounted) return;
     setState(() => _isSaving = false);
-    Navigator.of(context).pop();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushReplacementNamed('/');
+    }
   }
 
   @override

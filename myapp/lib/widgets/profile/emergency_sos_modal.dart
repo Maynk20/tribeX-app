@@ -21,8 +21,8 @@ class EmergencySosModal extends StatelessWidget {
   Future<void> _shareLocation(BuildContext context) async {
     const lat = 12.9784;
     const lon = 77.6408;
-    final mapsUrl = 'https://maps.google.com/?q=$lat,$lon';
-    final text = '🚨 tribeX SOS — I need help. My live location: $mapsUrl';
+    const mapsUrl = 'https://maps.google.com/?q=$lat,$lon';
+    const text = '🚨 tribeX SOS — I need help. My live location: $mapsUrl';
     final waUri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
 
     if (await canLaunchUrl(waUri)) {

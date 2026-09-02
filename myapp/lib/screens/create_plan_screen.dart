@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
@@ -147,7 +148,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
         .toList();
 
     final newAct = Activity(
-      id: "act_${DateTime.now().millisecondsSinceEpoch}",
+      id: const Uuid().v4(),
       hostId: user.id,
       title: title,
       description: desc,

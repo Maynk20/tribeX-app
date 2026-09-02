@@ -251,7 +251,11 @@ class _AuthScreenState extends State<AuthScreen> {
       _showToast(
         _mode == AuthMode.signup ? 'Welcome to tribeX!' : "You're signed in!",
       );
-      Navigator.of(context).pushReplacementNamed('/');
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        Navigator.of(context).pushReplacementNamed('/');
+      }
     } else {
       final msg = res.message ?? "Couldn't verify code. Please try again.";
       if (res.code == 'OTP_EXPIRED') {
@@ -269,7 +273,14 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!mounted) return;
     setState(() => _isBusy = false);
 
-    if (!success) {
+    if (success) {
+      _showToast("You're signed in!");
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        Navigator.of(context).pushReplacementNamed('/');
+      }
+    } else {
       _showToast('Google Sign-In failed or cancelled.');
     }
   }
@@ -737,7 +748,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         LucideIcons.shieldCheck,
                         size: 18,
                         color: AppColors.primary,

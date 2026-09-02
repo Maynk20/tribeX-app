@@ -32,6 +32,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollCtrl = ScrollController();
   bool _attachMenuOpen = false;
 
+  late ChatState _chatState;
+
   @override
   void initState() {
     super.initState();
@@ -43,7 +45,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chatState = context.read<ChatState>();
+  }
+
+  @override
   void dispose() {
+    _chatState.unsubscribeFromActivityChat(widget.activity.id);
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -197,56 +206,57 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           // Messages and Panels List
           Expanded(
-            child: ListView(
+            child: ListView.builder(
               controller: _scrollCtrl,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              children: [
-                // Venue Check In Panel
-                CheckInPanel(
-                  activity: widget.activity,
-                  isHost: isHost,
-                  myRequest: myReq,
-                ),
-
-                // Memory Banner
-                MemoryBannerWidget(
-                  activity: widget.activity,
-                  canUpload: isHost || myReq?.status.name == 'accepted',
-                ),
-
-                // Messages Stream
-                ...messages.map((m) {
-                  final expId = m.expenseId;
-                  if (expId != null) {
-                    return ExpenseCardWidget(
-                      expenseId: expId,
-                      currentUserId: me?.id,
-                    );
-                  }
-
-                  final pollId = m.pollId;
-                  if (pollId != null) {
-                    return PollCardWidget(
-                      pollId: pollId,
-                      currentUserId: me?.id,
-                    );
-                  }
-
-                  final isMine = me != null && m.senderId == me.id;
-                  return MessageBubbleWidget(
-                    message: m,
-                    isMine: isMine,
-                    onReport: () {
-                      ReportModal.show(
-                        context,
-                        targetType: 'chat_message',
-                        targetId: m.id,
-                        targetTitle: 'Message from ${m.sender?.fullName ?? "user"}',
-                      );
-                    },
+              itemCount: messages.length + 2,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return CheckInPanel(
+                    activity: widget.activity,
+                    isHost: isHost,
+                    myRequest: myReq,
                   );
-                }),
-              ],
+                }
+                if (index == 1) {
+                  return MemoryBannerWidget(
+                    activity: widget.activity,
+                    canUpload: isHost || myReq?.status.name == 'accepted',
+                  );
+                }
+
+                final m = messages[index - 2];
+                final expId = m.expenseId;
+                if (expId != null) {
+                  return ExpenseCardWidget(
+                    expenseId: expId,
+                    currentUserId: me?.id,
+                  );
+                }
+
+                final pollId = m.pollId;
+                if (pollId != null) {
+                  return PollCardWidget(
+                    pollId: pollId,
+                    currentUserId: me?.id,
+                  );
+                }
+
+                final isMine = me != null && m.senderId == me.id;
+                return MessageBubbleWidget(
+                  message: m,
+                  isMine: isMine,
+                  onReport: () {
+                    ReportModal.show(
+                      context,
+                      targetType: 'chat_message',
+                      targetId: m.id,
+                      targetTitle:
+                          'Message from ${m.sender?.fullName ?? "user"}',
+                    );
+                  },
+                );
+              },
             ),
           ),
 
