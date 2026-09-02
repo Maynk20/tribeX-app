@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../services/auth_service.dart';
+import '../widgets/common/google_g_logo.dart';
 import 'terms_and_policies_screen.dart';
 
 enum AuthMode { signup, login }
@@ -237,17 +238,11 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isBusy = true);
 
     final trimmedEmail = _emailCtrl.text.trim().toLowerCase();
-    final trimmedName = _nameCtrl.text.trim();
-    final trimmedUsername = _unameCtrl.text.trim().toLowerCase();
 
-    final res = _mode == AuthMode.signup
-        ? await AuthService.verifySignUpOtp(
-            email: trimmedEmail,
-            code: code,
-            fullName: trimmedName,
-            username: trimmedUsername,
-          )
-        : await AuthService.verifySignInOtp(email: trimmedEmail, code: code);
+    final res = await AuthService.verifyOtp(
+      email: trimmedEmail,
+      code: code,
+    );
 
     if (!mounted) return;
     setState(() => _isBusy = false);
@@ -268,6 +263,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _googleAuth() async {
+    if (_isBusy) return;
     setState(() => _isBusy = true);
     final success = await AuthService.signInWithGoogle();
     if (!mounted) return;
@@ -366,19 +362,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        alignment: Alignment.center,
-                        child: const Text(
-                          'G',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
+                      const GoogleGLogo(size: 20),
                       const SizedBox(width: 10),
                       Text(
                         'Continue with Google',

@@ -19,11 +19,15 @@ class ChatState extends ChangeNotifier {
   final Map<String, RealtimeChannel> _activeChannels = {};
 
   List<Message> getMessagesForActivity(String activityId) {
-    if (!_messagesByActivity.containsKey(activityId)) {
-      fetchMessagesForActivity(activityId);
-    }
     final list = _messagesByActivity[activityId] ?? [];
     return List.from(list)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  void unsubscribeFromActivityChat(String activityId) {
+    if (_activeChannels.containsKey(activityId)) {
+      _activeChannels[activityId]?.unsubscribe();
+      _activeChannels.remove(activityId);
+    }
   }
 
   Expense? getExpense(String expenseId) {

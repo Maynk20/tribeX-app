@@ -16,6 +16,7 @@ import '../widgets/chat/memory_banner_widget.dart';
 import '../widgets/chat/message_bubble_widget.dart';
 import '../widgets/chat/poll_card_widget.dart';
 import '../widgets/chat/split_expense_modal.dart';
+import '../widgets/common/report_modal.dart';
 
 class ChatScreen extends StatefulWidget {
   final Activity activity;
@@ -30,6 +31,16 @@ class _ChatScreenState extends State<ChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _attachMenuOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ChatState>().fetchMessagesForActivity(widget.activity.id);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -222,7 +233,18 @@ class _ChatScreenState extends State<ChatScreen> {
                   }
 
                   final isMine = me != null && m.senderId == me.id;
-                  return MessageBubbleWidget(message: m, isMine: isMine);
+                  return MessageBubbleWidget(
+                    message: m,
+                    isMine: isMine,
+                    onReport: () {
+                      ReportModal.show(
+                        context,
+                        targetType: 'chat_message',
+                        targetId: m.id,
+                        targetTitle: 'Message from ${m.sender?.fullName ?? "user"}',
+                      );
+                    },
+                  );
                 }),
               ],
             ),

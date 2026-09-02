@@ -14,6 +14,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final Set<String> _selected = {"cricket", "badminton", "board_games"};
+  bool _isSaving = false;
 
   void _toggle(String key) {
     setState(() {
@@ -23,6 +24,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _selected.add(key);
       }
     });
+  }
+
+  void _submit() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    await context.read<AuthState>().completeOnboarding(_selected.toList());
+
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -150,15 +162,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: isValid
-                      ? () {
-                          context.read<AuthState>().completeOnboarding(
-                            _selected.toList(),
-                          );
-                          Navigator.of(context).pop();
-                        }
-                      : null,
-                  child: const Text('Continue to tribeX'),
+                  onPressed: (isValid && !_isSaving) ? _submit : null,
+                  child: _isSaving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.black,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text('Saving…'),
+                          ],
+                        )
+                      : const Text('Continue to tribeX'),
                 ),
               ),
             ],

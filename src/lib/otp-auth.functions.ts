@@ -98,7 +98,7 @@ async function sendOtpEmail(to: string, code: string): Promise<{ ok: boolean; er
           <span style="font-size: 36px; font-weight: 800; letter-spacing: 12px; color: #ffffff;">${code}</span>
         </div>
         
-        <p style="font-size: 13px; color: #64748b; text-align: center;">This code will expire in 5 minutes. If you did not request this, please ignore this email.</p>
+        <p style="font-size: 13px; color: #64748b; text-align: center;">This code will expire in 1 hour (60 minutes). If you did not request this, please ignore this email.</p>
         <hr style="border: none; border-top: 1px solid #334155; margin: 24px 0;" />
         <p style="font-size: 12px; color: #475569; text-align: center;">tribeX — Find Local Fun & Connect with People Nearby</p>
       </div>
@@ -162,7 +162,7 @@ export async function handleRequestSignInOtp(inputData: { email: string }) {
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const codeHash = await sha256Hex(`${email}:${code}`);
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
   const { error: insertErr } = await supabaseAdmin
     .from("auth_otps")
@@ -232,7 +232,7 @@ export async function handleRequestSignUpOtp(inputData: { email: string; full_na
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const codeHash = await sha256Hex(`${email}:${code}`);
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
   const { error: insertErr } = await supabaseAdmin
     .from("auth_otps")

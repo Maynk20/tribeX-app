@@ -176,8 +176,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          context.read<AuthState>().updateProfile(
+                        onPressed: () async {
+                          await context.read<AuthState>().updateProfile(
                             fullName: nameCtrl.text.trim(),
                             username: unameCtrl.text.trim(),
                             phone: phoneCtrl.text.trim().isNotEmpty
@@ -191,6 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ? bioCtrl.text.trim()
                                 : null,
                           );
+                          if (!ctx.mounted) return;
                           Navigator.of(ctx).pop();
                           AppToast.show(context, 'Profile details updated');
                         },
@@ -550,12 +551,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (confirmCtrl.text.trim() == "DELETE") {
-                context.read<AuthState>().signOut();
+                final success = await context.read<AuthState>().deleteAccount();
+                if (!ctx.mounted) return;
                 Navigator.of(ctx).pop();
                 Navigator.of(context).pop();
-                AppToast.show(context, 'Account deleted');
+                if (success) {
+                  AppToast.show(context, 'Account deleted');
+                } else {
+                  AppToast.show(context, 'Account signed out');
+                }
               } else {
                 AppToast.show(
                   ctx,

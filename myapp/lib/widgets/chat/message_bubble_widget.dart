@@ -7,11 +7,13 @@ import '../../models/message.dart';
 class MessageBubbleWidget extends StatelessWidget {
   final Message message;
   final bool isMine;
+  final VoidCallback? onReport;
 
   const MessageBubbleWidget({
     super.key,
     required this.message,
     required this.isMine,
+    this.onReport,
   });
 
   @override
@@ -22,7 +24,9 @@ class MessageBubbleWidget extends StatelessWidget {
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+      child: GestureDetector(
+        onLongPress: !isMine ? onReport : null,
+        child: Container(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
@@ -88,6 +92,7 @@ class MessageBubbleWidget extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

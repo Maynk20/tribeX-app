@@ -32,6 +32,7 @@ class ActivityCard extends StatelessWidget {
   final VoidCallback? onToggleUrgent;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onReport;
   final bool isFemale;
   final bool isVerified;
 
@@ -47,6 +48,7 @@ class ActivityCard extends StatelessWidget {
     this.onToggleUrgent,
     this.onEdit,
     this.onDelete,
+    this.onReport,
     this.isFemale = true,
     this.isVerified = true,
   });
@@ -563,6 +565,20 @@ class ActivityCard extends StatelessWidget {
                             : AppColors.mutedForegroundLight,
                         borderColor: border.withValues(alpha: 0.6),
                       ),
+
+                      // Report flag button (guest)
+                      if (onReport != null)
+                        _CircleIconButton(
+                          icon: LucideIcons.flag,
+                          size: 14,
+                          onTap: onReport!,
+                          backgroundColor: isDark
+                              ? AppColors.backgroundDark
+                              : AppColors.backgroundLight,
+                          iconColor: AppColors.destructive,
+                          borderColor: border.withValues(alpha: 0.6),
+                          tooltip: 'Report concern',
+                        ),
 
                       // Join / status button
                       if (myStatus == JoinStatus.pending)
