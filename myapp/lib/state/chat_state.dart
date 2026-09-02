@@ -12,15 +12,16 @@ import '../services/supabase_service.dart';
 
 class ChatState extends ChangeNotifier {
   final Map<String, List<Message>> _messagesByActivity = {};
-  final List<Expense> _expenses = [];
-  final List<Poll> _polls = [];
+  final Map<String, Expense> _expenses = {};
+  final Map<String, Poll> _polls = {};
   final List<RatingItem> _ratings = [];
+  final Set<String> _pendingExpenseFetches = {};
+  final Set<String> _pendingPollFetches = {};
 
   final Map<String, RealtimeChannel> _activeChannels = {};
 
   List<Message> getMessagesForActivity(String activityId) {
-    final list = _messagesByActivity[activityId] ?? [];
-    return List.from(list)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return _messagesByActivity[activityId] ?? const [];
   }
 
   void unsubscribeFromActivityChat(String activityId) {
@@ -30,21 +31,32 @@ class ChatState extends ChangeNotifier {
     }
   }
 
-  Expense? getExpense(String expenseId) {
+  Expense? getExpense(String expenseId) => _expenses[expenseId];
+
+  Poll? getPoll(String pollId) => _polls[pollId];
+
+  Future<void> fetchExpenseIfNeeded(String expenseId) async {
+    if (_expenses.containsKey(expenseId) ||
+        _pendingExpenseFetches.contains(expenseId)) {
+      return;
+    }
+    _pendingExpenseFetches.add(expenseId);
     try {
-      return _expenses.firstWhere((e) => e.id == expenseId);
-    } catch (_) {
-      fetchExpense(expenseId);
-      return null;
+      await fetchExpense(expenseId);
+    } finally {
+      _pendingExpenseFetches.remove(expenseId);
     }
   }
 
-  Poll? getPoll(String pollId) {
+  Future<void> fetchPollIfNeeded(String pollId) async {
+    if (_polls.containsKey(pollId) || _pendingPollFetches.contains(pollId)) {
+      return;
+    }
+    _pendingPollFetches.add(pollId);
     try {
-      return _polls.firstWhere((p) => p.id == pollId);
-    } catch (_) {
-      fetchPoll(pollId);
-      return null;
+      await fetchPoll(pollId);
+    } finally {
+      _pendingPollFetches.remove(pollId);
     }
   }
 
@@ -59,9 +71,11 @@ class ChatState extends ChangeNotifier {
           .eq('activity_id', activityId)
           .order('created_at', ascending: true);
 
-      _messagesByActivity[activityId] = (res as List<dynamic>)
+      final msgs = (res as List<dynamic>)
           .map((json) => Message.fromJson(json as Map<String, dynamic>))
           .toList();
+      msgs.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      _messagesByActivity[activityId] = msgs;
 
       notifyListeners();
       _subscribeActivityChat(activityId);
@@ -83,12 +97,7 @@ class ChatState extends ChangeNotifier {
 
       if (res != null) {
         final exp = Expense.fromJson(res);
-        final idx = _expenses.indexWhere((e) => e.id == exp.id);
-        if (idx != -1) {
-          _expenses[idx] = exp;
-        } else {
-          _expenses.add(exp);
-        }
+        _expenses[exp.id] = exp;
         notifyListeners();
       }
     } catch (_) {}
@@ -107,12 +116,7 @@ class ChatState extends ChangeNotifier {
 
       if (res != null) {
         final poll = Poll.fromJson(res);
-        final idx = _polls.indexWhere((p) => p.id == poll.id);
-        if (idx != -1) {
-          _polls[idx] = poll;
-        } else {
-          _polls.add(poll);
-        }
+        _polls[poll.id] = poll;
         notifyListeners();
       }
     } catch (_) {}
@@ -222,10 +226,10 @@ class ChatState extends ChangeNotifier {
     final client = SupabaseService.client;
     if (client == null) return;
 
-    final idx = _expenses.indexWhere((e) => e.id == expenseId);
-    if (idx != -1) {
-      final exp = _expenses[idx];
-      final member = exp.members.firstWhere((m) => m.userId == userId);
+    final exp = _expenses[expenseId];
+    if (exp != null) {
+      final member = exp.members.where((m) => m.userId == userId).firstOrNull;
+      if (member == null) return;
       final nextPaid = !member.isPaid;
 
       try {

@@ -14,10 +14,11 @@ import 'state/activities_state.dart';
 import 'state/auth_state.dart';
 import 'state/chat_state.dart';
 import 'state/notifications_state.dart';
+import 'state/theme_state.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
@@ -34,24 +35,30 @@ class TribeXApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeState()),
         ChangeNotifierProvider(create: (_) => AuthState()),
         ChangeNotifierProvider(create: (_) => ActivitiesState()),
         ChangeNotifierProvider(create: (_) => ChatState()),
         ChangeNotifierProvider(create: (_) => NotificationsState()),
       ],
-      child: MaterialApp(
-        title: 'tribeX - Find Local Fun',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.light,
-        home: const MainShell(),
-        routes: {
-          '/auth': (_) => const AuthScreen(),
-          '/settings': (_) => const SettingsScreen(),
-          '/onboarding': (_) => const OnboardingScreen(),
-          '/complete-profile': (_) => const CompleteProfileScreen(),
-          '/terms-and-policies': (_) => const TermsAndPoliciesScreen(),
+      child: Consumer<ThemeState>(
+        builder: (context, themeState, _) {
+          return MaterialApp(
+            title: 'tribeX - Find Local Fun',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeState.themeMode,
+            home: const MainShell(),
+            routes: {
+              '/': (_) => const MainShell(),
+              '/auth': (_) => const AuthScreen(),
+              '/settings': (_) => const SettingsScreen(),
+              '/onboarding': (_) => const OnboardingScreen(),
+              '/complete-profile': (_) => const CompleteProfileScreen(),
+              '/terms-and-policies': (_) => const TermsAndPoliciesScreen(),
+            },
+          );
         },
       ),
     );

@@ -17,11 +17,33 @@ enum FeedScope { discover, joined, hosting }
 class ActivitiesState extends ChangeNotifier {
   List<Activity> _activities = [];
   List<JoinRequest> _joinRequests = [];
+  Map<String, List<JoinRequest>> _requestsByActivity = const {};
+  Map<String, JoinRequest> _userRequestIndex = const {};
+  Map<String, int> _pendingCountByActivity = const {};
   bool _isLoading = false;
   String? _error;
 
   RealtimeChannel? _activitiesChannel;
   RealtimeChannel? _joinRequestsChannel;
+
+  void _rebuildJoinRequestIndices() {
+    final byActivity = <String, List<JoinRequest>>{};
+    final userIdx = <String, JoinRequest>{};
+    final pendingCounts = <String, int>{};
+
+    for (final req in _joinRequests) {
+      byActivity.putIfAbsent(req.activityId, () => []).add(req);
+      userIdx['${req.activityId}:${req.userId}'] = req;
+      if (req.status == JoinStatus.pending) {
+        pendingCounts[req.activityId] =
+            (pendingCounts[req.activityId] ?? 0) + 1;
+      }
+    }
+
+    _requestsByActivity = byActivity;
+    _userRequestIndex = userIdx;
+    _pendingCountByActivity = pendingCounts;
+  }
 
   // Search & Filter State
   String _selectedGroup = "All";
@@ -207,6 +229,7 @@ class ActivitiesState extends ChangeNotifier {
           _joinRequests = reqsRes
               .map((json) => JoinRequest.fromJson(json as Map<String, dynamic>))
               .toList();
+          _rebuildJoinRequestIndices();
         }
       } catch (_) {
         // join_requests error should not fail activities loading
@@ -276,16 +299,7 @@ class ActivitiesState extends ChangeNotifier {
 
       final isHostedByMe = currentUserId != null && a.hostId == currentUserId;
       final myReq = currentUserId != null
-          ? _joinRequests.firstWhere(
-              (r) => r.activityId == a.id && r.userId == currentUserId,
-              orElse: () => JoinRequest(
-                id: '',
-                activityId: '',
-                userId: '',
-                status: JoinStatus.rejected,
-                requestedAt: DateTime.now(),
-              ),
-            )
+          ? _userRequestIndex['${a.id}:$currentUserId']
           : null;
 
       final isJoined = myReq != null && myReq.status == JoinStatus.accepted;
@@ -520,25 +534,15 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   List<JoinRequest> getRequestsForActivity(String activityId) {
-    return _joinRequests.where((r) => r.activityId == activityId).toList();
+    return _requestsByActivity[activityId] ?? const [];
   }
 
   int getPendingCountForActivity(String activityId) {
-    return _joinRequests
-        .where(
-          (r) => r.activityId == activityId && r.status == JoinStatus.pending,
-        )
-        .length;
+    return _pendingCountByActivity[activityId] ?? 0;
   }
 
   JoinRequest? getMyRequest(String activityId, String userId) {
-    try {
-      return _joinRequests.firstWhere(
-        (r) => r.activityId == activityId && r.userId == userId,
-      );
-    } catch (_) {
-      return null;
-    }
+    return _userRequestIndex['$activityId:$userId'];
   }
 
   @override

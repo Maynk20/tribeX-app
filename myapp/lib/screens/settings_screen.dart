@@ -6,6 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../models/user_profile.dart';
 import '../state/auth_state.dart';
+import '../state/theme_state.dart';
 import 'terms_and_policies_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -583,6 +584,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthState>();
+    final themeState = context.watch<ThemeState>();
     final user = authState.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
@@ -706,6 +708,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
               clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
+                  ListTile(
+                    leading: Icon(
+                      themeState.themeMode == ThemeMode.dark
+                          ? LucideIcons.moon
+                          : (themeState.themeMode == ThemeMode.light
+                              ? LucideIcons.sun
+                              : LucideIcons.laptop),
+                      size: 20,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text(
+                      'Appearance',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      themeState.themeMode == ThemeMode.system
+                          ? 'System Theme'
+                          : (themeState.themeMode == ThemeMode.dark
+                              ? 'Dark Theme'
+                              : 'Light Theme'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                    trailing: SegmentedButton<ThemeMode>(
+                      segments: const [
+                        ButtonSegment(
+                          value: ThemeMode.system,
+                          icon: Icon(LucideIcons.laptop, size: 14),
+                          tooltip: 'System',
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.light,
+                          icon: Icon(LucideIcons.sun, size: 14),
+                          tooltip: 'Light',
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.dark,
+                          icon: Icon(LucideIcons.moon, size: 14),
+                          tooltip: 'Dark',
+                        ),
+                      ],
+                      selected: {themeState.themeMode},
+                      onSelectionChanged: (selected) {
+                        themeState.setThemeMode(selected.first);
+                      },
+                      style: SegmentedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Divider(height: 1, color: border),
                   SwitchListTile.adaptive(
                     value: authState.pushEnabled,
                     activeTrackColor: AppColors.primary,

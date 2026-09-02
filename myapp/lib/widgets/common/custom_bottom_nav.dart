@@ -91,7 +91,7 @@ class _NavItem extends StatelessWidget {
     final inactiveColor = isDark
         ? AppColors.mutedForegroundDark
         : AppColors.mutedForegroundLight;
-    final activeColor = AppColors.primary;
+    const activeColor = AppColors.primary;
 
     return Expanded(
       child: GestureDetector(

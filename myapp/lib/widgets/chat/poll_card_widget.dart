@@ -4,16 +4,39 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../state/chat_state.dart';
 
-class PollCardWidget extends StatelessWidget {
+class PollCardWidget extends StatefulWidget {
   final String pollId;
   final String? currentUserId;
 
   const PollCardWidget({super.key, required this.pollId, this.currentUserId});
 
   @override
+  State<PollCardWidget> createState() => _PollCardWidgetState();
+}
+
+class _PollCardWidgetState extends State<PollCardWidget> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ChatState>().fetchPollIfNeeded(widget.pollId);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant PollCardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pollId != oldWidget.pollId) {
+      context.read<ChatState>().fetchPollIfNeeded(widget.pollId);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final chatState = context.watch<ChatState>();
-    final poll = chatState.getPoll(pollId);
+    final poll = chatState.getPoll(widget.pollId);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
@@ -21,8 +44,8 @@ class PollCardWidget extends StatelessWidget {
     if (poll == null) return const SizedBox.shrink();
 
     final totalVotes = poll.totalVotes;
-    final userVotedOptId = currentUserId != null
-        ? poll.userVotedOptionId(currentUserId!)
+    final userVotedOptId = widget.currentUserId != null
+        ? poll.userVotedOptionId(widget.currentUserId!)
         : null;
 
     return Container(
@@ -97,8 +120,8 @@ class PollCardWidget extends StatelessWidget {
 
             return GestureDetector(
               onTap: () {
-                if (currentUserId != null) {
-                  chatState.votePoll(poll.id, opt.id, currentUserId!);
+                if (widget.currentUserId != null) {
+                  chatState.votePoll(poll.id, opt.id, widget.currentUserId!);
                 }
               },
               child: Container(

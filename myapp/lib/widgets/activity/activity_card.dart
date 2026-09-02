@@ -190,7 +190,7 @@ class ActivityCard extends StatelessWidget {
                                       : const Color(0xFFD97706),
                                 ),
                               if (isHost)
-                                _Badge(
+                                const _Badge(
                                   text: 'HOSTING',
                                   bgColor: AppColors.primaryMuted,
                                   textColor: AppColors.primary,
@@ -467,7 +467,7 @@ class ActivityCard extends StatelessWidget {
                       ),
                     ),
                     if (host?.isVerified ?? false)
-                      Icon(
+                      const Icon(
                         LucideIcons.badgeCheck,
                         size: 12,
                         color: AppColors.primary,
@@ -700,25 +700,29 @@ class _CoverImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Simulate the -mx-4 -mt-4 bleed by using a negative-margin transform
-    return Transform.translate(
-      offset: const Offset(-16, -16),
-      child: SizedBox(
-        height: 144, // h-36
-        width: MediaQuery.of(context).size.width, // full width
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
-                color: AppColors.primaryMuted,
-                child: const Center(
-                  child: Icon(LucideIcons.image, color: AppColors.primary),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bleedWidth = constraints.maxWidth + 32;
+        return Transform.translate(
+          offset: const Offset(-16, -16),
+          child: SizedBox(
+            height: 144, // h-36
+            width: bleedWidth,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  cacheWidth: 800,
+                  cacheHeight: 400,
+                  errorBuilder: (_, _, _) => Container(
+                    color: AppColors.primaryMuted,
+                    child: const Center(
+                      child: Icon(LucideIcons.image, color: AppColors.primary),
+                    ),
+                  ),
                 ),
-              ),
-            ),
             // Urgent overlay badge on cover image
             if (urgentActive)
               Positioned(
@@ -761,6 +765,8 @@ class _CoverImage extends StatelessWidget {
         ),
       ),
     );
+  },
+);
   }
 }
 
@@ -870,7 +876,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget child = Padding(
+    final Widget child = Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 8,

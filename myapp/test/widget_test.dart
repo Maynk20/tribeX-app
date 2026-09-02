@@ -8,6 +8,7 @@ import 'package:myapp/models/user_profile.dart';
 import 'package:myapp/services/report_service.dart';
 import 'package:myapp/state/activities_state.dart';
 import 'package:myapp/state/chat_state.dart';
+import 'package:myapp/state/theme_state.dart';
 import 'package:myapp/widgets/common/welcome_splash.dart';
 
 void main() {
@@ -129,11 +130,28 @@ void main() {
       expect(filtered, isEmpty);
     });
 
-    test('ChatState messages initialization', () {
+    test('ChatState messages initialization and safe cached lookup', () {
       final chat = ChatState();
-      final actId = "act_cricket";
+      const actId = "act_cricket";
       final initialMsgs = chat.getMessagesForActivity(actId);
       expect(initialMsgs, isEmpty);
+
+      // Safe cache lookups don't trigger infinite fetch loops
+      expect(chat.getExpense('non_existent_exp'), isNull);
+      expect(chat.getPoll('non_existent_poll'), isNull);
+    });
+
+    test('ThemeState default and mode switching', () async {
+      final themeState = ThemeState();
+      expect(themeState.themeMode, ThemeMode.system);
+
+      await themeState.setThemeMode(ThemeMode.dark);
+      expect(themeState.themeMode, ThemeMode.dark);
+      expect(themeState.isDarkMode, isTrue);
+
+      await themeState.setThemeMode(ThemeMode.light);
+      expect(themeState.themeMode, ThemeMode.light);
+      expect(themeState.isDarkMode, isFalse);
     });
   });
 

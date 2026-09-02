@@ -21,6 +21,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _showSplash = true;
+  String? _lastUserId;
 
   @override
   void initState() {
@@ -59,10 +60,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         return;
       }
 
-      final notifs = context.read<NotificationsState>();
-      notifs.initUser(auth.currentUser?.id);
+      final currentId = auth.currentUser?.id;
+      _lastUserId = currentId;
+      context.read<NotificationsState>().initUser(currentId);
     }
   }
+
+  void _goToCreate() => setState(() => _currentIndex = 1);
+  void _goToProfile() => setState(() => _currentIndex = 3);
+  void _goToExplore() => setState(() => _currentIndex = 0);
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +92,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       return const Scaffold(body: SizedBox.shrink());
     }
 
+    // Reactively ensure notifications are initialized whenever auth state updates
+    final currentUserId = auth.currentUser?.id;
+    if (_lastUserId != currentUserId) {
+      _lastUserId = currentUserId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.read<NotificationsState>().initUser(currentUserId);
+        }
+      });
+    }
+
     return Stack(
       children: [
         Scaffold(
@@ -93,11 +110,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             index: _currentIndex,
             children: [
               ExploreScreen(
-                onNavigateToCreate: () => setState(() => _currentIndex = 1),
-                onNavigateToProfile: () => setState(() => _currentIndex = 3),
+                onNavigateToCreate: _goToCreate,
+                onNavigateToProfile: _goToProfile,
               ),
               CreatePlanScreen(
-                onPlanCreated: () => setState(() => _currentIndex = 0),
+                onPlanCreated: _goToExplore,
               ),
               const MessagesScreen(),
               const ProfileScreen(),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -20,7 +22,7 @@ import '../widgets/common/search_filter_sheet.dart';
 import 'auth_screen.dart';
 import 'chat_screen.dart';
 
-class ExploreScreen extends StatelessWidget {
+class ExploreScreen extends StatefulWidget {
   final VoidCallback? onNavigateToCreate;
   final VoidCallback? onNavigateToProfile;
 
@@ -29,6 +31,36 @@ class ExploreScreen extends StatelessWidget {
     this.onNavigateToCreate,
     this.onNavigateToProfile,
   });
+
+  @override
+  State<ExploreScreen> createState() => _ExploreScreenState();
+}
+
+class _ExploreScreenState extends State<ExploreScreen> {
+  late final TextEditingController _searchCtrl;
+  Timer? _searchDebounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounceTimer?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String val) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        context.read<ActivitiesState>().setSearchQuery(val);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +118,7 @@ class ExploreScreen extends StatelessWidget {
                                       },
                                       child: Row(
                                         children: [
-                                          Icon(
+                                          const Icon(
                                             LucideIcons.mapPin,
                                             size: 13,
                                             color: AppColors.primary,
@@ -227,7 +259,7 @@ class ExploreScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
-                                  onTap: onNavigateToProfile,
+                                  onTap: widget.onNavigateToProfile,
                                   child: CircleAvatar(
                                     radius: 20,
                                     backgroundColor: AppColors.primary,
@@ -289,7 +321,8 @@ class ExploreScreen extends StatelessWidget {
                                 ),
                               ),
                               child: TextField(
-                                onChanged: actState.setSearchQuery,
+                                controller: _searchCtrl,
+                                onChanged: _onSearchChanged,
                                 decoration: const InputDecoration(
                                   hintText: 'Search plans, sports, spots…',
                                   prefixIcon: Icon(
@@ -633,6 +666,7 @@ class ExploreScreen extends StatelessWidget {
                               onPressed: () {
                                 actState.resetFilters();
                                 actState.setSearchQuery('');
+                                _searchCtrl.clear();
                               },
                               icon: const Icon(LucideIcons.rotateCcw, size: 14),
                               label: const Text('Reset All Filters'),

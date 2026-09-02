@@ -505,7 +505,7 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
                           leading: Container(
                             width: 34,
                             height: 34,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: AppColors.primaryMuted,
                               shape: BoxShape.circle,
                             ),
