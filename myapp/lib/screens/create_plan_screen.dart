@@ -81,6 +81,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
   }
 
   void _publish() async {
+    if (_isPublishing) return;
+
     final authState = context.read<AuthState>();
     final user = authState.currentUser;
 
@@ -129,7 +131,6 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     }
 
     setState(() => _isPublishing = true);
-    await Future.delayed(const Duration(milliseconds: 400));
 
     final combinedDateTime = DateTime(
       _date.year,
@@ -169,12 +170,21 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     );
 
     if (!mounted) return;
-    context.read<ActivitiesState>().createActivity(newAct);
+    final success = await context.read<ActivitiesState>().createActivity(newAct);
 
+    if (!mounted) return;
     setState(() => _isPublishing = false);
-    AppToast.show(context, 'Plan published — your squad will find you!');
 
-    widget.onPlanCreated?.call();
+    if (success) {
+      AppToast.show(context, 'Plan published — your squad will find you!');
+      widget.onPlanCreated?.call();
+    } else {
+      AppToast.show(
+        context,
+        "Couldn't publish plan. Please try again.",
+        isError: true,
+      );
+    }
   }
 
   @override

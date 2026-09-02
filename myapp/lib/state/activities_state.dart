@@ -154,23 +154,65 @@ class ActivitiesState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final res = await client
-          .from('activities')
-          .select('*, profiles_public(*)')
-          .filter('deleted_at', 'is', null)
-          .order('date_time', ascending: true);
+      dynamic res;
+      // 1. Try with profiles_public relation
+      try {
+        res = await client
+            .from('activities')
+            .select('*, profiles_public(*)')
+            .filter('deleted_at', 'is', null)
+            .order('date_time', ascending: true);
+      } catch (_) {
+        // 2. Fallback to profiles relation
+        try {
+          res = await client
+              .from('activities')
+              .select('*, profiles(*)')
+              .filter('deleted_at', 'is', null)
+              .order('date_time', ascending: true);
+        } catch (_) {
+          // 3. Fallback to flat activities table
+          res = await client
+              .from('activities')
+              .select('*')
+              .filter('deleted_at', 'is', null)
+              .order('date_time', ascending: true);
+        }
+      }
 
-      _activities = (res as List<dynamic>)
-          .map((json) => Activity.fromJson(json as Map<String, dynamic>))
-          .toList();
+      if (res is List<dynamic>) {
+        _activities = res
+            .map((json) => Activity.fromJson(json as Map<String, dynamic>))
+            .toList();
+      }
 
-      final reqsRes = await client
-          .from('join_requests')
-          .select('*, profiles_public(*)');
+      // Safe join_requests fetch (does not break activities if unauthenticated or empty)
+      try {
+        dynamic reqsRes;
+        try {
+          reqsRes = await client
+              .from('join_requests')
+              .select('*, profiles_public(*)');
+        } catch (_) {
+          try {
+            reqsRes = await client
+                .from('join_requests')
+                .select('*, profiles(*)');
+          } catch (_) {
+            reqsRes = await client.from('join_requests').select('*');
+          }
+        }
 
-      _joinRequests = (reqsRes as List<dynamic>)
-          .map((json) => JoinRequest.fromJson(json as Map<String, dynamic>))
-          .toList();
+        if (reqsRes is List<dynamic>) {
+          _joinRequests = reqsRes
+              .map((json) => JoinRequest.fromJson(json as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {
+        // join_requests error should not fail activities loading
+      }
+
+      _error = null;
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -186,6 +228,15 @@ class ActivitiesState extends ChangeNotifier {
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
       fetchActivities();
     });
+  }
+
+  void reconnectRealtime() {
+    _activitiesChannel?.unsubscribe();
+    _joinRequestsChannel?.unsubscribe();
+    _activitiesChannel = null;
+    _joinRequestsChannel = null;
+    fetchActivities();
+    _subscribeRealtime();
   }
 
   void _subscribeRealtime() {
@@ -238,14 +289,10 @@ class ActivitiesState extends ChangeNotifier {
           : null;
 
       final isJoined = myReq != null && myReq.status == JoinStatus.accepted;
-      final isPending = myReq != null && myReq.status == JoinStatus.pending;
 
       if (currentUserId != null) {
         if (_scope == FeedScope.hosting && !isHostedByMe) return false;
         if (_scope == FeedScope.joined && !isJoined) return false;
-        if (_scope == FeedScope.discover) {
-          if (isHostedByMe || isJoined || isPending) return false;
-        }
       }
 
       if (_selectedCategory != "All" && a.category != _selectedCategory) {
@@ -301,62 +348,74 @@ class ActivitiesState extends ChangeNotifier {
     return result;
   }
 
-  // Real Database Actions
-  Future<void> createActivity(Activity activity) async {
+  // Database Actions
+  Future<bool> createActivity(Activity activity) async {
     try {
       await SupabaseService.client
           ?.from('activities')
           .insert(activity.toJson());
       await fetchActivities();
+      return true;
     } catch (e) {
-      // ignore
+      _error = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<void> updateActivity(Activity activity) async {
+  Future<bool> updateActivity(Activity activity) async {
     try {
       await SupabaseService.client
           ?.from('activities')
           .update(activity.toJson())
           .eq('id', activity.id);
       await fetchActivities();
+      return true;
     } catch (e) {
-      // ignore
+      _error = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<void> deleteActivity(String id) async {
+  Future<bool> deleteActivity(String id) async {
     try {
       await SupabaseService.client
           ?.from('activities')
           .update({'deleted_at': DateTime.now().toIso8601String()})
           .eq('id', id);
       await fetchActivities();
+      return true;
     } catch (e) {
-      // ignore
+      _error = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<void> toggleUrgent(String activityId) async {
+  Future<bool> toggleUrgent(String activityId) async {
     final idx = _activities.indexWhere((a) => a.id == activityId);
-    if (idx != -1) {
-      final act = _activities[idx];
-      final nextUrgent = !act.isUrgentActive;
-      final urgentUntil = nextUrgent
-          ? DateTime.now().add(const Duration(minutes: 30)).toIso8601String()
-          : null;
+    if (idx == -1) return false;
 
-      try {
-        await SupabaseService.client
-            ?.from('activities')
-            .update({'is_urgent': nextUrgent, 'urgent_until': urgentUntil})
-            .eq('id', activityId);
-        await fetchActivities();
-      } catch (_) {}
+    final act = _activities[idx];
+    final nextUrgent = !act.isUrgentActive;
+    final urgentUntil = nextUrgent
+        ? DateTime.now().add(const Duration(minutes: 30)).toIso8601String()
+        : null;
+
+    try {
+      await SupabaseService.client
+          ?.from('activities')
+          .update({'is_urgent': nextUrgent, 'urgent_until': urgentUntil})
+          .eq('id', activityId);
+      await fetchActivities();
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
-  Future<void> requestToJoin(String activityId, UserProfile user) async {
+  Future<bool> requestToJoin(String activityId, UserProfile user) async {
     try {
       await SupabaseService.client?.from('join_requests').insert({
         'activity_id': activityId,
@@ -364,10 +423,13 @@ class ActivitiesState extends ChangeNotifier {
         'status': 'pending',
       });
       await fetchActivities();
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> respondToRequest(String requestId, JoinStatus status) async {
+  Future<bool> respondToRequest(String requestId, JoinStatus status) async {
     final statusStr = status == JoinStatus.accepted
         ? 'accepted'
         : (status == JoinStatus.rejected ? 'rejected' : 'pending');
@@ -392,10 +454,13 @@ class ActivitiesState extends ChangeNotifier {
             .eq('id', requestId);
       }
       await fetchActivities();
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> removeAttendee(String requestId) async {
+  Future<bool> removeAttendee(String requestId) async {
     try {
       try {
         await SupabaseService.client?.rpc(
@@ -409,37 +474,49 @@ class ActivitiesState extends ChangeNotifier {
             .eq('id', requestId);
       }
       await fetchActivities();
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> markAttendeeCheckIn(String activityId, String userId) async {
+  Future<bool> markAttendeeCheckIn(String activityId, String userId) async {
     try {
       await SupabaseService.client?.rpc(
         'check_in_activity',
         params: {'_activity_id': activityId, '_user_id': userId},
       );
       await fetchActivities();
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> markAttendeeNoShow(String requestId) async {
+  Future<bool> markAttendeeNoShow(String requestId) async {
     try {
       await SupabaseService.client?.rpc(
         'mark_no_show',
         params: {'_request_id': requestId},
       );
       await fetchActivities();
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> addMemoryPhoto(String activityId, String photoUrl) async {
+  Future<bool> addMemoryPhoto(String activityId, String photoUrl) async {
     try {
       await SupabaseService.client?.from('event_memories').insert({
         'activity_id': activityId,
         'image_url': photoUrl,
       });
       await fetchActivities();
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   List<JoinRequest> getRequestsForActivity(String activityId) {

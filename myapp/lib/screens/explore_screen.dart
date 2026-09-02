@@ -15,6 +15,7 @@ import '../widgets/activity/safety_disclaimer_modal.dart';
 import '../widgets/common/loaders.dart';
 import '../widgets/common/notifications_bell_dialog.dart';
 import '../widgets/common/place_search_dialog.dart';
+import '../widgets/common/report_modal.dart';
 import '../widgets/common/search_filter_sheet.dart';
 import 'auth_screen.dart';
 import 'chat_screen.dart';
@@ -597,26 +598,50 @@ class ExploreScreen extends StatelessWidget {
                                 ? "You haven't hosted any plans yet."
                                 : actState.scope == FeedScope.joined
                                 ? "You haven't joined any plans yet."
-                                : "No plans match your filters right now.",
+                                : (actState.activeFilterCount > 0 || actState.searchQuery.isNotEmpty)
+                                ? "No plans match your active filters."
+                                : "No plans happening nearby right now.",
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                               color: isDark
-                                  ? AppColors.mutedForegroundDark
-                                  : AppColors.mutedForegroundLight,
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
                             ),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Tap the Create tab below to post one.',
+                            actState.scope == FeedScope.hosting
+                                ? 'Tap Create below to host a hangout or game.'
+                                : actState.scope == FeedScope.joined
+                                ? 'Explore local plans and request to join.'
+                                : (actState.activeFilterCount > 0 || actState.searchQuery.isNotEmpty)
+                                ? 'Try clearing filters or search terms.'
+                                : 'Be the first to post a box cricket, trek, or hangout!',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: isDark
                                   ? AppColors.mutedForegroundDark
                                   : AppColors.mutedForegroundLight,
                             ),
                           ),
+                          if (actState.activeFilterCount > 0 || actState.searchQuery.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            TextButton.icon(
+                              onPressed: () {
+                                actState.resetFilters();
+                                actState.setSearchQuery('');
+                              },
+                              icon: const Icon(LucideIcons.rotateCcw, size: 14),
+                              label: const Text('Reset All Filters'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -705,6 +730,14 @@ class ExploreScreen extends StatelessWidget {
                                 actState.deleteActivity(act.id);
                                 AppToast.show(context, 'Plan deleted');
                               },
+                            );
+                          },
+                          onReport: () {
+                            ReportModal.show(
+                              context,
+                              targetType: 'activity',
+                              targetId: act.id,
+                              targetTitle: act.title,
                             );
                           },
                         ),

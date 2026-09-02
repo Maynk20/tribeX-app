@@ -16,6 +16,8 @@ class UserProfile {
   final List<String> interests;
   final double? latitude;
   final double? longitude;
+  final DateTime? termsAcceptedAt;
+  final String? termsVersion;
 
   UserProfile({
     required this.id,
@@ -35,6 +37,8 @@ class UserProfile {
     this.interests = const [],
     this.latitude,
     this.longitude,
+    this.termsAcceptedAt,
+    this.termsVersion = 'v1.0',
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -72,6 +76,10 @@ class UserProfile {
           const [],
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      termsAcceptedAt: json['terms_accepted_at'] != null
+          ? DateTime.tryParse(json['terms_accepted_at'].toString())
+          : null,
+      termsVersion: json['terms_version'] as String? ?? 'v1.0',
     );
   }
 
@@ -94,6 +102,8 @@ class UserProfile {
       'interests': interests,
       'latitude': latitude,
       'longitude': longitude,
+      'terms_accepted_at': termsAcceptedAt?.toIso8601String(),
+      'terms_version': termsVersion,
     };
   }
 
@@ -115,6 +125,8 @@ class UserProfile {
     List<String>? interests,
     double? latitude,
     double? longitude,
+    DateTime? termsAcceptedAt,
+    String? termsVersion,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -135,6 +147,8 @@ class UserProfile {
       interests: interests ?? this.interests,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      termsAcceptedAt: termsAcceptedAt ?? this.termsAcceptedAt,
+      termsVersion: termsVersion ?? this.termsVersion,
     );
   }
 

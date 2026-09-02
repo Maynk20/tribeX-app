@@ -17,6 +17,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _cityCtrl = TextEditingController(text: "Bengaluru, Karnataka");
   final _bioCtrl = TextEditingController();
   String _gender = "Prefer not to say";
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -26,14 +27,20 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
     final auth = context.read<AuthState>();
-    auth.updateProfile(
+    await auth.updateProfile(
       phone: _phoneCtrl.text.trim().isNotEmpty ? _phoneCtrl.text.trim() : null,
       city: _cityCtrl.text.trim().isNotEmpty ? _cityCtrl.text.trim() : null,
       bio: _bioCtrl.text.trim().isNotEmpty ? _bioCtrl.text.trim() : null,
       gender: _gender,
     );
+
+    if (!mounted) return;
+    setState(() => _isSaving = false);
 
     Navigator.pushReplacement(
       context,
@@ -146,8 +153,24 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _save,
-                  child: const Text('Continue to Interests'),
+                  onPressed: _isSaving ? null : _save,
+                  child: _isSaving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.black,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text('Saving…'),
+                          ],
+                        )
+                      : const Text('Continue to Interests'),
                 ),
               ),
             ],

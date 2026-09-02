@@ -155,6 +155,26 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> deleteAccount() async {
+    if (_currentUser == null) return false;
+    final userId = _currentUser!.id;
+
+    try {
+      final client = SupabaseService.client;
+      if (client != null) {
+        try {
+          await client.rpc('delete_user_account', params: {'_user_id': userId});
+        } catch (_) {
+          await client.from('profiles').delete().eq('id', userId);
+        }
+      }
+      await signOut();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> updateProfile({
     String? fullName,
     String? username,
@@ -170,9 +190,14 @@ class AuthState extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
+    final now = DateTime.now();
+    final termsAcceptedAt = _currentUser!.termsAcceptedAt ?? now;
+
     final updates = <String, dynamic>{
       'id': _currentUser!.id,
       'has_completed_profile': true,
+      'terms_accepted_at': termsAcceptedAt.toIso8601String(),
+      'terms_version': 'v1.0',
       if (fullName != null) ...{'full_name': fullName},
       if (username != null) ...{'username': username},
       if (phone != null) ...{'phone': phone},
@@ -197,6 +222,8 @@ class AuthState extends ChangeNotifier {
         latitude: latitude,
         longitude: longitude,
         hasCompletedProfile: true,
+        termsAcceptedAt: termsAcceptedAt,
+        termsVersion: 'v1.0',
       );
     } catch (_) {
       // ignore error
