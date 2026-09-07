@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Flutter Web",
+      "type": "shell",
+      "command": "flutter run -d web-server --web-port 8080",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1,
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": ".*http://.*:8080.*"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Open Default Browser",
+      "type": "shell",
+      "command": "start http://localhost:8080",
+      "dependsOn": "Run Flutter Web",
+      "dependsOrder": "sequence"
+    }
+  ]
+}

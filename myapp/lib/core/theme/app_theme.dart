@@ -1,104 +1,122 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 
 class AppTheme {
   AppTheme._();
 
+  static const String fontFamily = 'Plus Jakarta Sans';
+
   static final ThemeData lightTheme = _buildLightTheme();
   static final ThemeData darkTheme = _buildDarkTheme();
 
-  static ThemeData _buildLightTheme() {
-    final base = ThemeData.light(useMaterial3: true);
-    final lightInter = GoogleFonts.interTextTheme(base.textTheme);
-    final textTheme = lightInter
+  static TextTheme _createTextTheme(TextTheme base) {
+    return base
         .copyWith(
-          displayLarge: lightInter.displayLarge?.copyWith(
+          displayLarge: base.displayLarge?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 32,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.8,
             height: 1.15,
           ),
-          displayMedium: lightInter.displayMedium?.copyWith(
+          displayMedium: base.displayMedium?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 28,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
             height: 1.2,
           ),
-          headlineLarge: lightInter.headlineLarge?.copyWith(
+          headlineLarge: base.headlineLarge?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 24,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.4,
             height: 1.2,
           ),
-          headlineMedium: lightInter.headlineMedium?.copyWith(
+          headlineMedium: base.headlineMedium?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 20,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.3,
             height: 1.25,
           ),
-          titleLarge: lightInter.titleLarge?.copyWith(
+          titleLarge: base.titleLarge?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 18,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2,
             height: 1.3,
           ),
-          titleMedium: lightInter.titleMedium?.copyWith(
+          titleMedium: base.titleMedium?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 16,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.1,
             height: 1.35,
           ),
-          titleSmall: lightInter.titleSmall?.copyWith(
+          titleSmall: base.titleSmall?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 14,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.0,
             height: 1.4,
           ),
-          bodyLarge: lightInter.bodyLarge?.copyWith(
+          bodyLarge: base.bodyLarge?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 15,
             fontWeight: FontWeight.w400,
             height: 1.45,
           ),
-          bodyMedium: lightInter.bodyMedium?.copyWith(
+          bodyMedium: base.bodyMedium?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 14,
             fontWeight: FontWeight.w400,
             height: 1.45,
           ),
-          bodySmall: lightInter.bodySmall?.copyWith(
+          bodySmall: base.bodySmall?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 12,
             fontWeight: FontWeight.w400,
             height: 1.4,
           ),
-          labelLarge: lightInter.labelLarge?.copyWith(
+          labelLarge: base.labelLarge?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 14,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.1,
           ),
-          labelMedium: lightInter.labelMedium?.copyWith(
+          labelMedium: base.labelMedium?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.8,
           ),
-          labelSmall: lightInter.labelSmall?.copyWith(
+          labelSmall: base.labelSmall?.copyWith(
+            fontFamily: fontFamily,
             fontSize: 11,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.5,
           ),
-        )
-        .apply(
-          bodyColor: AppColors.foregroundLight,
-          displayColor: AppColors.foregroundLight,
         );
+  }
+
+  static ThemeData _buildLightTheme() {
+    final base = ThemeData.light(useMaterial3: true);
+    final textTheme = _createTextTheme(base.textTheme).apply(
+      bodyColor: AppColors.foregroundLight,
+      displayColor: AppColors.foregroundLight,
+      fontFamily: fontFamily,
+    );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       primaryColor: AppColors.primary,
       scaffoldBackgroundColor: AppColors.backgroundLight,
+      fontFamily: fontFamily,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         onPrimary: Colors.white,
@@ -148,6 +166,7 @@ class AppTheme {
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         hintStyle: const TextStyle(
+          fontFamily: fontFamily,
           color: AppColors.mutedForegroundLight,
           fontSize: 14,
         ),
@@ -161,7 +180,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
+            fontFamily: fontFamily,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -175,7 +195,18 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          textStyle: const TextStyle(
+            fontFamily: fontFamily,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -198,92 +229,18 @@ class AppTheme {
 
   static ThemeData _buildDarkTheme() {
     final base = ThemeData.dark(useMaterial3: true);
-    final darkInter = GoogleFonts.interTextTheme(base.textTheme);
-    final textTheme = darkInter
-        .copyWith(
-          displayLarge: darkInter.displayLarge?.copyWith(
-            fontSize: 32,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.8,
-            height: 1.15,
-          ),
-          displayMedium: darkInter.displayMedium?.copyWith(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.5,
-            height: 1.2,
-          ),
-          headlineLarge: darkInter.headlineLarge?.copyWith(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-            height: 1.2,
-          ),
-          headlineMedium: darkInter.headlineMedium?.copyWith(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.3,
-            height: 1.25,
-          ),
-          titleLarge: darkInter.titleLarge?.copyWith(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.2,
-            height: 1.3,
-          ),
-          titleMedium: darkInter.titleMedium?.copyWith(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.1,
-            height: 1.35,
-          ),
-          titleSmall: darkInter.titleSmall?.copyWith(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.0,
-            height: 1.4,
-          ),
-          bodyLarge: darkInter.bodyLarge?.copyWith(
-            fontSize: 15,
-            fontWeight: FontWeight.w400,
-            height: 1.45,
-          ),
-          bodyMedium: darkInter.bodyMedium?.copyWith(
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            height: 1.45,
-          ),
-          bodySmall: darkInter.bodySmall?.copyWith(
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-            height: 1.4,
-          ),
-          labelLarge: darkInter.labelLarge?.copyWith(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.1,
-          ),
-          labelMedium: darkInter.labelMedium?.copyWith(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          ),
-          labelSmall: darkInter.labelSmall?.copyWith(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
-          ),
-        )
-        .apply(
-          bodyColor: AppColors.foregroundDark,
-          displayColor: AppColors.foregroundDark,
-        );
+    final textTheme = _createTextTheme(base.textTheme).apply(
+      bodyColor: AppColors.foregroundDark,
+      displayColor: AppColors.foregroundDark,
+      fontFamily: fontFamily,
+    );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       primaryColor: AppColors.primary,
       scaffoldBackgroundColor: AppColors.backgroundDark,
+      fontFamily: fontFamily,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primary,
         onPrimary: Colors.white,
@@ -333,6 +290,7 @@ class AppTheme {
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         hintStyle: const TextStyle(
+          fontFamily: fontFamily,
           color: AppColors.mutedForegroundDark,
           fontSize: 14,
         ),
@@ -346,7 +304,33 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.foregroundDark,
+          side: const BorderSide(color: AppColors.borderDark),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: const TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          textStyle: const TextStyle(
+            fontFamily: fontFamily,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -367,3 +351,4 @@ class AppTheme {
     );
   }
 }
+

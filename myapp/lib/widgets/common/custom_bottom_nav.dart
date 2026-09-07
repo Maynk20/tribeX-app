@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -18,6 +19,13 @@ class CustomBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
   });
+
+  void _handleTap(int index) {
+    if (index != currentIndex) {
+      HapticFeedback.lightImpact();
+    }
+    onTap(index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,25 +52,25 @@ class CustomBottomNav extends StatelessWidget {
                 icon: LucideIcons.compass,
                 label: 'Explore',
                 isActive: currentIndex == 0,
-                onTap: () => onTap(0),
+                onTap: () => _handleTap(0),
               ),
               _NavItem(
                 icon: LucideIcons.plusCircle,
                 label: 'Create',
                 isActive: currentIndex == 1,
-                onTap: () => onTap(1),
+                onTap: () => _handleTap(1),
               ),
               _NavItem(
                 icon: LucideIcons.messageCircle,
                 label: 'Messages',
                 isActive: currentIndex == 2,
-                onTap: () => onTap(2),
+                onTap: () => _handleTap(2),
               ),
               _NavItem(
                 icon: LucideIcons.user,
                 label: 'Profile',
                 isActive: currentIndex == 3,
-                onTap: () => onTap(3),
+                onTap: () => _handleTap(3),
               ),
             ],
           ),
@@ -100,10 +108,12 @@ class _NavItem extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Top active pill indicator: h-1 w-8 at -top-[9px], rounded-full, bg-primary
-            if (isActive)
-              Positioned(
-                top: 0,
+            // Top active pill indicator: h-1 w-8 at top, rounded-full, bg-primary
+            Positioned(
+              top: 0,
+              child: AnimatedOpacity(
+                opacity: isActive ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
                 child: Container(
                   width: 32,
                   height: 4,
@@ -113,6 +123,7 @@ class _NavItem extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
 
             // Tab content: icon + label
             Padding(
@@ -123,26 +134,25 @@ class _NavItem extends StatelessWidget {
                 children: [
                   // Icon with scale-110 when active
                   AnimatedScale(
-                    scale: isActive ? 1.1 : 1.0,
-                    duration: const Duration(milliseconds: 150),
+                    scale: isActive ? 1.12 : 1.0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutBack,
                     child: Icon(
                       icon,
                       size: 20,
                       color: isActive ? activeColor : inactiveColor,
-                      // strokeWidth 2.2 is used in TanStack (Lucide default is 2)
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    label,
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 180),
                     style: TextStyle(
                       fontSize: 11,
-                      // font-medium = w500 for both active and inactive
-                      fontWeight: FontWeight.w500,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
                       color: isActive ? activeColor : inactiveColor,
-                      // tracking-wide ~ letterSpacing 0.05em on 11px = 0.55
                       letterSpacing: 0.3,
                     ),
+                    child: Text(label),
                   ),
                 ],
               ),

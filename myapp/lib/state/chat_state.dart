@@ -17,11 +17,13 @@ class ChatState extends ChangeNotifier {
   final List<RatingItem> _ratings = [];
   final Set<String> _pendingExpenseFetches = {};
   final Set<String> _pendingPollFetches = {};
-
   final Map<String, RealtimeChannel> _activeChannels = {};
+  bool _isDisposed = false;
 
   List<Message> getMessagesForActivity(String activityId) {
-    return _messagesByActivity[activityId] ?? const [];
+    final list = _messagesByActivity[activityId];
+    if (list == null) return const [];
+    return List.unmodifiable(list);
   }
 
   void unsubscribeFromActivityChat(String activityId) {
@@ -37,7 +39,8 @@ class ChatState extends ChangeNotifier {
 
   Future<void> fetchExpenseIfNeeded(String expenseId) async {
     if (_expenses.containsKey(expenseId) ||
-        _pendingExpenseFetches.contains(expenseId)) {
+        _pendingExpenseFetches.contains(expenseId) ||
+        _isDisposed) {
       return;
     }
     _pendingExpenseFetches.add(expenseId);
@@ -49,7 +52,9 @@ class ChatState extends ChangeNotifier {
   }
 
   Future<void> fetchPollIfNeeded(String pollId) async {
-    if (_polls.containsKey(pollId) || _pendingPollFetches.contains(pollId)) {
+    if (_polls.containsKey(pollId) ||
+        _pendingPollFetches.contains(pollId) ||
+        _isDisposed) {
       return;
     }
     _pendingPollFetches.add(pollId);
@@ -62,7 +67,7 @@ class ChatState extends ChangeNotifier {
 
   Future<void> fetchMessagesForActivity(String activityId) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     try {
       final res = await client
@@ -71,20 +76,24 @@ class ChatState extends ChangeNotifier {
           .eq('activity_id', activityId)
           .order('created_at', ascending: true);
 
+      if (_isDisposed) return;
+
       final msgs = (res as List<dynamic>)
           .map((json) => Message.fromJson(json as Map<String, dynamic>))
           .toList();
       msgs.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       _messagesByActivity[activityId] = msgs;
 
-      notifyListeners();
-      _subscribeActivityChat(activityId);
+      if (!_isDisposed) {
+        notifyListeners();
+        _subscribeActivityChat(activityId);
+      }
     } catch (_) {}
   }
 
   Future<void> fetchExpense(String expenseId) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     try {
       final res = await client
@@ -95,7 +104,7 @@ class ChatState extends ChangeNotifier {
           .eq('id', expenseId)
           .maybeSingle();
 
-      if (res != null) {
+      if (res != null && !_isDisposed) {
         final exp = Expense.fromJson(res);
         _expenses[exp.id] = exp;
         notifyListeners();
@@ -105,7 +114,7 @@ class ChatState extends ChangeNotifier {
 
   Future<void> fetchPoll(String pollId) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     try {
       final res = await client
@@ -114,7 +123,7 @@ class ChatState extends ChangeNotifier {
           .eq('id', pollId)
           .maybeSingle();
 
-      if (res != null) {
+      if (res != null && !_isDisposed) {
         final poll = Poll.fromJson(res);
         _polls[poll.id] = poll;
         notifyListeners();
@@ -123,7 +132,7 @@ class ChatState extends ChangeNotifier {
   }
 
   void _subscribeActivityChat(String activityId) {
-    if (_activeChannels.containsKey(activityId)) return;
+    if (_activeChannels.containsKey(activityId) || _isDisposed) return;
     final client = SupabaseService.client;
     if (client == null) return;
 
@@ -139,7 +148,9 @@ class ChatState extends ChangeNotifier {
             value: activityId,
           ),
           callback: (payload) {
-            fetchMessagesForActivity(activityId);
+            if (!_isDisposed) {
+              fetchMessagesForActivity(activityId);
+            }
           },
         )
         .subscribe();
@@ -154,7 +165,21 @@ class ChatState extends ChangeNotifier {
     UserProfile? sender,
   }) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
+
+    // Optimistic local update
+    final optimisticMsg = Message(
+      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      activityId: activityId,
+      senderId: senderId,
+      text: text,
+      createdAt: DateTime.now(),
+      sender: sender,
+    );
+
+    final currentList = _messagesByActivity.putIfAbsent(activityId, () => []);
+    currentList.add(optimisticMsg);
+    if (!_isDisposed) notifyListeners();
 
     try {
       await client.from('messages').insert({
@@ -162,8 +187,16 @@ class ChatState extends ChangeNotifier {
         'sender_id': senderId,
         'text': text,
       });
-      await fetchMessagesForActivity(activityId);
-    } catch (_) {}
+      // Note: If realtime subscription is active, it will auto-refresh.
+      // In case realtime is not connected or delayed, fetch once after slight delay if needed.
+      if (!_activeChannels.containsKey(activityId)) {
+        await fetchMessagesForActivity(activityId);
+      }
+    } catch (_) {
+      // Revert optimistic message on error
+      currentList.remove(optimisticMsg);
+      if (!_isDisposed) notifyListeners();
+    }
   }
 
   Future<void> createExpense({
@@ -177,7 +210,7 @@ class ChatState extends ChangeNotifier {
     UserProfile? creator,
   }) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     try {
       final expRes = await client
@@ -224,7 +257,7 @@ class ChatState extends ChangeNotifier {
 
   Future<void> toggleMemberPaid(String expenseId, String userId) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     final exp = _expenses[expenseId];
     if (exp != null) {
@@ -252,7 +285,7 @@ class ChatState extends ChangeNotifier {
     UserProfile? creator,
   }) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     try {
       final pollRes = await client
@@ -281,7 +314,7 @@ class ChatState extends ChangeNotifier {
 
   Future<void> votePoll(String pollId, String optionId, String userId) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     try {
       await client.from('poll_votes').upsert({
@@ -296,7 +329,7 @@ class ChatState extends ChangeNotifier {
 
   Future<void> submitRating(RatingItem rating) async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     try {
       await client.from('ratings').insert({
@@ -319,7 +352,7 @@ class ChatState extends ChangeNotifier {
       } else {
         _ratings.add(rating);
       }
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     } catch (_) {}
   }
 
@@ -338,6 +371,7 @@ class ChatState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     for (final channel in _activeChannels.values) {
       channel.unsubscribe();
     }

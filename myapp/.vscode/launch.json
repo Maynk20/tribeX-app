@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter Web - Default Browser",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "web-server",
+      "args": [
+        "--web-port",
+        "8080"
+      ]
+    }
+  ]
+}

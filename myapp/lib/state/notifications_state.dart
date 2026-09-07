@@ -11,8 +11,9 @@ class NotificationsState extends ChangeNotifier {
   bool _isLoading = false;
   RealtimeChannel? _notificationsChannel;
   String? _userId;
+  bool _isDisposed = false;
 
-  List<NotificationItem> get notifications => _notifications;
+  List<NotificationItem> get notifications => List.unmodifiable(_notifications);
   bool get isLoading => _isLoading;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
 
@@ -25,17 +26,17 @@ class NotificationsState extends ChangeNotifier {
     } else {
       _notifications.clear();
       _notificationsChannel?.unsubscribe();
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     }
   }
 
   Future<void> fetchNotifications() async {
-    if (_userId == null) return;
+    if (_userId == null || _isDisposed) return;
     final client = SupabaseService.client;
     if (client == null) return;
 
     _isLoading = true;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       final res = await client
@@ -43,6 +44,8 @@ class NotificationsState extends ChangeNotifier {
           .select()
           .eq('user_id', _userId!)
           .order('created_at', ascending: false);
+
+      if (_isDisposed) return;
 
       _notifications = (res as List<dynamic>)
           .map(
@@ -52,14 +55,16 @@ class NotificationsState extends ChangeNotifier {
     } catch (_) {
       // ignore
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   void _subscribeRealtime() {
     _notificationsChannel?.unsubscribe();
-    if (_userId == null) return;
+    if (_userId == null || _isDisposed) return;
     final client = SupabaseService.client;
     if (client == null) return;
 
@@ -75,21 +80,23 @@ class NotificationsState extends ChangeNotifier {
             value: _userId!,
           ),
           callback: (payload) {
-            fetchNotifications();
+            if (!_isDisposed) {
+              fetchNotifications();
+            }
           },
         )
         .subscribe();
   }
 
   Future<void> markAllAsRead() async {
-    if (_userId == null) return;
+    if (_userId == null || _isDisposed) return;
     final client = SupabaseService.client;
     if (client == null) return;
 
     for (int i = 0; i < _notifications.length; i++) {
       _notifications[i] = _notifications[i].copyWith(isRead: true);
     }
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       await client
@@ -101,13 +108,14 @@ class NotificationsState extends ChangeNotifier {
   }
 
   Future<void> markAsRead(String id) async {
+    if (_userId == null || _isDisposed) return;
     final client = SupabaseService.client;
     if (client == null) return;
 
     final idx = _notifications.indexWhere((n) => n.id == id);
     if (idx != -1) {
       _notifications[idx] = _notifications[idx].copyWith(isRead: true);
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
 
       try {
         await client
@@ -120,6 +128,7 @@ class NotificationsState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _notificationsChannel?.unsubscribe();
     super.dispose();
   }

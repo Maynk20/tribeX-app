@@ -16,10 +16,12 @@ class WelcomeSplash extends StatefulWidget {
 }
 
 class _WelcomeSplashState extends State<WelcomeSplash>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _controller;
+  late AnimationController _pulseController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
+  late Animation<double> _pulseAnimation;
   Timer? _timer;
 
   @override
@@ -27,8 +29,13 @@ class _WelcomeSplashState extends State<WelcomeSplash>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 700),
     );
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
 
     _scaleAnimation = CurvedAnimation(
       parent: _controller,
@@ -36,6 +43,10 @@ class _WelcomeSplashState extends State<WelcomeSplash>
     );
 
     _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
+
+    _pulseAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
 
     _controller.forward();
 
@@ -47,6 +58,7 @@ class _WelcomeSplashState extends State<WelcomeSplash>
   @override
   void dispose() {
     _timer?.cancel();
+    _pulseController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -65,15 +77,22 @@ class _WelcomeSplashState extends State<WelcomeSplash>
             : AppColors.backgroundLight,
         body: Stack(
           children: [
-            // Background Radial Glow
+            // Background Radial Animated Glow
             Center(
-              child: Container(
-                width: 320,
-                height: 320,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                ),
+              child: AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, _) {
+                  return Container(
+                    width: 300 * _pulseAnimation.value,
+                    height: 300 * _pulseAnimation.value,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.primary.withValues(
+                        alpha: 0.14 / _pulseAnimation.value,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
 
@@ -87,36 +106,44 @@ class _WelcomeSplashState extends State<WelcomeSplash>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Floating Animated Logo Container
-                      Container(
-                        width: 104,
-                        height: 104,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.cardDark
-                              : AppColors.cardLight,
-                          borderRadius: BorderRadius.circular(28),
-                          border: Border.all(
-                            color:
-                                (isDark
+                      AnimatedBuilder(
+                        animation: _pulseAnimation,
+                        builder: (context, child) {
+                          return Container(
+                            width: 104,
+                            height: 104,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.cardDark
+                                  : AppColors.cardLight,
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: (isDark
                                         ? AppColors.borderDark
                                         : AppColors.borderLight)
                                     .withValues(alpha: 0.8),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.25),
-                              blurRadius: 30,
-                              offset: const Offset(0, 10),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.28 * _pulseAnimation.value,
+                                  ),
+                                  blurRadius: 28 * _pulseAnimation.value,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        clipBehavior: Clip.antiAlias,
+                            clipBehavior: Clip.antiAlias,
+                            child: child,
+                          );
+                        },
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Image.asset(
                             'assets/images/logo.png',
                             fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const Icon(
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(
                               Icons.explore,
                               size: 54,
                               color: AppColors.primary,
@@ -223,18 +250,25 @@ class _WelcomeSplashState extends State<WelcomeSplash>
               left: 0,
               right: 0,
               child: Center(
-                child: Text(
-                  'TAP ANYWHERE TO ENTER',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2,
-                    color:
-                        (isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight)
-                            .withValues(alpha: 0.6),
-                  ),
+                child: AnimatedBuilder(
+                  animation: _pulseAnimation,
+                  builder: (context, _) {
+                    return Opacity(
+                      opacity: (0.4 + 0.5 * (_pulseAnimation.value - 0.85) / 0.3)
+                          .clamp(0.2, 1.0),
+                      child: Text(
+                        'TAP ANYWHERE TO ENTER',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

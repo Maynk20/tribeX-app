@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -8,6 +10,7 @@ import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../models/activity.dart';
+import '../services/storage_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../widgets/common/place_search_dialog.dart';
@@ -304,12 +307,16 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
               // Cover photo picker: h-36 w-full rounded-3xl border border-dashed border-border
               GestureDetector(
                 onTap: () {
-                  setState(() {
-                    _imageUrl = "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800&auto=format&fit=crop&q=80";
-                  });
+                  StorageService.showCoverPickerModal(
+                    context,
+                    category: _selectedCategory,
+                    onImageSelected: (url) {
+                      setState(() => _imageUrl = url);
+                    },
+                  );
                 },
                 child: Container(
-                  height: 144,
+                  height: 148,
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: _imageUrl == null
@@ -317,33 +324,46 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                         : null,
                     borderRadius: BorderRadius.circular(28),
                     border: Border.all(
-                      color: border.withValues(alpha: 0.6),
-                      style: BorderStyle.solid,
+                      color: _imageUrl != null
+                          ? AppColors.primary.withValues(alpha: 0.5)
+                          : border.withValues(alpha: 0.8),
+                      width: _imageUrl != null ? 1.5 : 1,
                     ),
-                    image: _imageUrl != null
-                        ? DecorationImage(
-                            image: NetworkImage(_imageUrl!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
                   ),
+                  clipBehavior: Clip.antiAlias,
                   child: _imageUrl == null
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              LucideIcons.image,
-                              size: 28,
-                              color: isDark
-                                  ? AppColors.mutedForegroundDark
-                                  : AppColors.mutedForegroundLight,
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primaryMuted,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                LucideIcons.imagePlus,
+                                size: 22,
+                                color: AppColors.primary,
+                              ),
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8),
                             Text(
-                              'Add a cover photo (tap for demo photo)',
+                              'Add a cover photo',
                               style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? AppColors.foregroundDark
+                                    : AppColors.foregroundLight,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Camera · Gallery · Curated Templates',
+                              style: TextStyle(
+                                fontSize: 11,
                                 color: isDark
                                     ? AppColors.mutedForegroundDark
                                     : AppColors.mutedForegroundLight,
@@ -351,27 +371,95 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                             ),
                           ],
                         )
-                      : Align(
-                          alignment: Alignment.topRight,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: GestureDetector(
-                              onTap: () => setState(() => _imageUrl = null),
-                              child: Container(
-                                width: 28,
-                                height: 28,
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  LucideIcons.x,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
+                      : Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _imageUrl!.startsWith('data:image')
+                                ? Image.memory(
+                                    base64Decode(_imageUrl!.split(',').last),
+                                    fit: BoxFit.cover,
+                                  )
+                                : Image.network(
+                                    _imageUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => Container(
+                                      color: AppColors.primaryMuted,
+                                      child: const Center(
+                                        child: Icon(
+                                          LucideIcons.image,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                            // Top overlay with Change & Remove buttons
+                            Positioned(
+                              top: 10,
+                              right: 10,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () {
+                                      StorageService.showCoverPickerModal(
+                                        context,
+                                        category: _selectedCategory,
+                                        onImageSelected: (url) {
+                                          setState(() => _imageUrl = url);
+                                        },
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.7),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            LucideIcons.pencil,
+                                            color: Colors.white,
+                                            size: 12,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Change',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () => setState(() => _imageUrl = null),
+                                    child: Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.7),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        LucideIcons.x,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
+                          ],
                         ),
                 ),
               ),

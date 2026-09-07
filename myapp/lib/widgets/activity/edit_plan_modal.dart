@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
+import '../../services/storage_service.dart';
 import '../../state/activities_state.dart';
 
 class EditPlanModal extends StatefulWidget {
@@ -33,6 +37,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
   late TextEditingController _costCtrl;
   late TextEditingController _tagsCtrl;
   late DateTime _dateTime;
+  String? _imageUrl;
 
   @override
   void initState() {
@@ -50,6 +55,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
       text: widget.activity.topicTags.join(", "),
     );
     _dateTime = widget.activity.dateTime;
+    _imageUrl = widget.activity.imageUrl;
   }
 
   @override
@@ -74,7 +80,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
     final tags = _tagsCtrl.text
         .split(',')
         .map((t) => t.trim())
-        .filter((t) => t.isNotEmpty)
+        .where((t) => t.isNotEmpty)
         .toList();
 
     if (title.isEmpty) {
@@ -90,6 +96,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
       totalSlots: slots,
       costPerHead: cost,
       topicTags: tags,
+      imageUrl: _imageUrl,
     );
 
     context.read<ActivitiesState>().updateActivity(updated);
@@ -175,7 +182,168 @@ class _EditPlanModalState extends State<EditPlanModal> {
               'Edit Plan',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+
+            // Cover photo picker
+            GestureDetector(
+              onTap: () {
+                StorageService.showCoverPickerModal(
+                  context,
+                  category: widget.activity.category,
+                  onImageSelected: (url) {
+                    setState(() => _imageUrl = url);
+                  },
+                );
+              },
+              child: Container(
+                height: 130,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: _imageUrl == null
+                      ? cardBg.withValues(alpha: 0.5)
+                      : null,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _imageUrl != null
+                        ? AppColors.primary.withValues(alpha: 0.5)
+                        : border.withValues(alpha: 0.8),
+                    width: _imageUrl != null ? 1.5 : 1,
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _imageUrl == null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primaryMuted,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              LucideIcons.imagePlus,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Add a cover photo',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Camera · Gallery · Curated Templates',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _imageUrl!.startsWith('data:image')
+                              ? Image.memory(
+                                  base64Decode(_imageUrl!.split(',').last),
+                                  fit: BoxFit.cover,
+                                )
+                              : Image.network(
+                                  _imageUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => Container(
+                                    color: AppColors.primaryMuted,
+                                    child: const Center(
+                                      child: Icon(
+                                        LucideIcons.image,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                          // Top overlay with Change & Remove buttons
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    StorageService.showCoverPickerModal(
+                                      context,
+                                      category: widget.activity.category,
+                                      onImageSelected: (url) {
+                                        setState(() => _imageUrl = url);
+                                      },
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.7),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          LucideIcons.pencil,
+                                          color: Colors.white,
+                                          size: 11,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Change',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () => setState(() => _imageUrl = null),
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.7),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      LucideIcons.x,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(height: 14),
 
             // Title
             TextField(
