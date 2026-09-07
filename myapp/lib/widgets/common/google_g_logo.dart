@@ -13,7 +13,7 @@ class GoogleGLogo extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(
+      child: const CustomPaint(
         painter: _GoogleGLogoPainter(),
       ),
     );
@@ -21,13 +21,35 @@ class GoogleGLogo extends StatelessWidget {
 }
 
 class _GoogleGLogoPainter extends CustomPainter {
+  const _GoogleGLogoPainter();
+
+  // Angular sweep for each color, expressed as a fraction of pi.
+  // These four sweeps sum to exactly 2.0 (i.e. 360deg) so the ring closes
+  // with no gaps and no overlaps.
+  static const double _redStart = -0.81;
+  static const double _redSweep = 0.73;
+
+  static const double _yellowStart = -1.22;
+  static const double _yellowSweep = 0.41;
+
+  static const double _greenStart = 0.18;
+  static const double _greenSweep = 0.60;
+
+  static const double _blueStart = -0.08;
+  static const double _blueSweep = 0.26;
+
   @override
   void paint(Canvas canvas, Size size) {
     final double w = size.width;
     final double h = size.height;
     final double cx = w / 2;
     final double cy = h / 2;
-    final double r = w / 2;
+
+    // Small inset so the stroke never touches the exact edge of the
+    // widget's bounding box — prevents 1px clipping/anti-alias artifacts
+    // when this is placed inside a button, circular avatar, etc.
+    final double r = (math.min(w, h) / 2) * 0.96;
+
     final double thickness = w * 0.20;
     final double midR = r - thickness / 2;
 
@@ -35,62 +57,43 @@ class _GoogleGLogoPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = thickness
-      ..strokeCap = StrokeCap.butt;
+      ..strokeCap = StrokeCap.butt
+      ..isAntiAlias = true;
 
-    // 1. Red Segment (Top: -145° to -15°)
+    // 1. Red segment (top)
     paint.color = const Color(0xFFEA4335);
-    canvas.drawArc(
-      rect,
-      -math.pi * 0.81,
-      math.pi * 0.73,
-      false,
-      paint,
-    );
+    canvas.drawArc(rect, math.pi * _redStart, math.pi * _redSweep, false, paint);
 
-    // 2. Yellow Segment (Left: -220° to -145°)
+    // 2. Yellow segment (left)
     paint.color = const Color(0xFFFBBC05);
-    canvas.drawArc(
-      rect,
-      -math.pi * 1.22,
-      math.pi * 0.41,
-      false,
-      paint,
-    );
+    canvas.drawArc(rect, math.pi * _yellowStart, math.pi * _yellowSweep, false, paint);
 
-    // 3. Green Segment (Bottom: 32° to 140°)
+    // 3. Green segment (bottom)
     paint.color = const Color(0xFF34A853);
-    canvas.drawArc(
-      rect,
-      math.pi * 0.18,
-      math.pi * 0.60,
-      false,
-      paint,
-    );
+    canvas.drawArc(rect, math.pi * _greenStart, math.pi * _greenSweep, false, paint);
 
-    // 4. Blue Segment (Right: -15° to 32°)
+    // 4. Blue segment (right)
     paint.color = const Color(0xFF4285F4);
-    canvas.drawArc(
-      rect,
-      -math.pi * 0.08,
-      math.pi * 0.26,
-      false,
-      paint,
-    );
+    canvas.drawArc(rect, math.pi * _blueStart, math.pi * _blueSweep, false, paint);
 
-    // 5. Blue Horizontal Crossbar extending to center
+    // 5. Blue crossbar — fills the transparent interior on the right side,
+    // from just past center out to the outer edge of the ring, giving the
+    // logo its "G" tail. Only overlaps the already-blue arc region, so no
+    // other color gets covered.
     final barPaint = Paint()
       ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.fill;
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
 
-    final barRect = Rect.fromLTWH(
-      cx - thickness * 0.05,
+    final barRect = Rect.fromLTRB(
+      cx - thickness * 0.05, // starts just past center
       cy - thickness / 2,
-      r + thickness * 0.05,
-      thickness,
+      cx + r,               // ends exactly at the ring's outer radius
+      cy + thickness / 2,
     );
     canvas.drawRect(barRect, barPaint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _GoogleGLogoPainter oldDelegate) => false;
 }

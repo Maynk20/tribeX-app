@@ -36,21 +36,54 @@ class ExploreScreen extends StatefulWidget {
   State<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-class _ExploreScreenState extends State<ExploreScreen> {
+class _ExploreScreenState extends State<ExploreScreen>
+    with AutomaticKeepAliveClientMixin {
   late final TextEditingController _searchCtrl;
+  late final ScrollController _scrollCtrl;
   Timer? _searchDebounceTimer;
+  bool _showScrollToTop = false;
+  bool _hasSearchText = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _searchCtrl = TextEditingController();
+    _scrollCtrl = ScrollController();
+
+    _searchCtrl.addListener(() {
+      final hasText = _searchCtrl.text.isNotEmpty;
+      if (hasText != _hasSearchText) {
+        setState(() => _hasSearchText = hasText);
+      }
+    });
+
+    _scrollCtrl.addListener(() {
+      final shouldShow = _scrollCtrl.hasClients && _scrollCtrl.offset > 240;
+      if (shouldShow != _showScrollToTop) {
+        setState(() => _showScrollToTop = shouldShow);
+      }
+    });
   }
 
   @override
   void dispose() {
     _searchDebounceTimer?.cancel();
     _searchCtrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (_scrollCtrl.hasClients) {
+      _scrollCtrl.animateTo(
+        0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _onSearchChanged(String val) {
@@ -64,6 +97,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final actState = context.watch<ActivitiesState>();
     final authState = context.watch<AuthState>();
     final user = authState.currentUser;
@@ -80,6 +114,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
       backgroundColor: isDark
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
+      floatingActionButton: _showScrollToTop
+          ? FloatingActionButton.small(
+              onPressed: _scrollToTop,
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              child: const Icon(LucideIcons.arrowUp, size: 18),
+            )
+          : null,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
@@ -87,6 +130,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
           },
           color: AppColors.primary,
           child: CustomScrollView(
+            controller: _scrollCtrl,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
             slivers: [
               // Header
               SliverToBoxAdapter(
@@ -323,17 +370,31 @@ class _ExploreScreenState extends State<ExploreScreen> {
                               child: TextField(
                                 controller: _searchCtrl,
                                 onChanged: _onSearchChanged,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   hintText: 'Search plans, sports, spots…',
-                                  prefixIcon: Icon(
+                                  prefixIcon: const Icon(
                                     LucideIcons.search,
                                     size: 18,
                                     color: AppColors.mutedForegroundLight,
                                   ),
+                                  suffixIcon: _hasSearchText
+                                      ? IconButton(
+                                          icon: const Icon(
+                                            LucideIcons.x,
+                                            size: 16,
+                                          ),
+                                          onPressed: () {
+                                            _searchCtrl.clear();
+                                            context
+                                                .read<ActivitiesState>()
+                                                .setSearchQuery('');
+                                          },
+                                        )
+                                      : null,
                                   border: InputBorder.none,
                                   enabledBorder: InputBorder.none,
                                   focusedBorder: InputBorder.none,
-                                  contentPadding: EdgeInsets.symmetric(
+                                  contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                   ),
                                 ),
@@ -572,14 +633,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
-                            LucideIcons.alertTriangle,
-                            size: 36,
-                            color: AppColors.destructive,
-                          ),
+                          // const Icon(
+                          //   LucideIcons.circleAlert,
+                          //   size: 36,
+                          //   color: Color.fromARGB(255, 164, 165, 216),
+                          // ),
                           const SizedBox(height: 10),
                           Text(
-                            "Couldn't load plans right now.",
+                            "Sign In to Discover Local Fun!",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 13,
@@ -592,7 +653,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           const SizedBox(height: 12),
                           ElevatedButton(
                             onPressed: () => actState.fetchActivities(),
-                            child: const Text('Retry'),
+                            child: const Text('Login'),
                           ),
                         ],
                       ),
@@ -631,7 +692,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                 ? "You haven't hosted any plans yet."
                                 : actState.scope == FeedScope.joined
                                 ? "You haven't joined any plans yet."
-                                : (actState.activeFilterCount > 0 || actState.searchQuery.isNotEmpty)
+                                : (actState.activeFilterCount > 0 ||
+                                      actState.searchQuery.isNotEmpty)
                                 ? "No plans match your active filters."
                                 : "No plans happening nearby right now.",
                             textAlign: TextAlign.center,
@@ -649,7 +711,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                 ? 'Tap Create below to host a hangout or game.'
                                 : actState.scope == FeedScope.joined
                                 ? 'Explore local plans and request to join.'
-                                : (actState.activeFilterCount > 0 || actState.searchQuery.isNotEmpty)
+                                : (actState.activeFilterCount > 0 ||
+                                      actState.searchQuery.isNotEmpty)
                                 ? 'Try clearing filters or search terms.'
                                 : 'Be the first to post a box cricket, trek, or hangout!',
                             textAlign: TextAlign.center,
@@ -660,7 +723,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                   : AppColors.mutedForegroundLight,
                             ),
                           ),
-                          if (actState.activeFilterCount > 0 || actState.searchQuery.isNotEmpty) ...[
+                          if (actState.activeFilterCount > 0 ||
+                              actState.searchQuery.isNotEmpty) ...[
                             const SizedBox(height: 14),
                             TextButton.icon(
                               onPressed: () {
@@ -672,7 +736,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                               label: const Text('Reset All Filters'),
                               style: TextButton.styleFrom(
                                 foregroundColor: AppColors.primary,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                               ),
                             ),
                           ],

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -440,6 +442,9 @@ class ActivityCard extends StatelessWidget {
                       backgroundImage: host?.avatarUrl != null
                           ? NetworkImage(host!.avatarUrl!)
                           : null,
+                      onBackgroundImageError: host?.avatarUrl != null
+                          ? (exception, stackTrace) {}
+                          : null,
                       child: host?.avatarUrl == null
                           ? Text(
                               (hostName.isNotEmpty ? hostName[0] : 'H')
@@ -703,70 +708,99 @@ class _CoverImage extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final bleedWidth = constraints.maxWidth + 32;
-        return Transform.translate(
-          offset: const Offset(-16, -16),
-          child: SizedBox(
-            height: 144, // h-36
-            width: bleedWidth,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  cacheWidth: 800,
-                  cacheHeight: 400,
-                  errorBuilder: (_, _, _) => Container(
-                    color: AppColors.primaryMuted,
-                    child: const Center(
-                      child: Icon(LucideIcons.image, color: AppColors.primary),
-                    ),
-                  ),
-                ),
-            // Urgent overlay badge on cover image
-            if (urgentActive)
-              Positioned(
-                top: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444),
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(LucideIcons.zap, size: 12, color: Colors.white),
-                      SizedBox(width: 3),
-                      Text(
-                        'URGENT · SPOT NEEDED',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: Colors.white,
+        return RepaintBoundary(
+          child: Transform.translate(
+            offset: const Offset(-16, -16),
+            child: SizedBox(
+              height: 144, // h-36
+              width: bleedWidth,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  imageUrl.startsWith('data:image')
+                      ? Image.memory(
+                          base64Decode(imageUrl.split(',').last),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            color: AppColors.primaryMuted,
+                            child: const Center(
+                              child: Icon(LucideIcons.image, color: AppColors.primary),
+                            ),
+                          ),
+                        )
+                      : Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          cacheWidth: 800,
+                          cacheHeight: 400,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: AppColors.primaryMuted,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            color: AppColors.primaryMuted,
+                            child: const Center(
+                              child: Icon(LucideIcons.image, color: AppColors.primary),
+                            ),
+                          ),
+                        ),
+                  // Urgent overlay badge on cover image
+                  if (urgentActive)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444),
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.zap, size: 12, color: Colors.white),
+                            SizedBox(width: 3),
+                            Text(
+                              'URGENT · SPOT NEEDED',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                ],
               ),
-          ],
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
-  },
-);
   }
 }
 

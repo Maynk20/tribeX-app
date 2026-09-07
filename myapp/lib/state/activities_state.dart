@@ -22,9 +22,21 @@ class ActivitiesState extends ChangeNotifier {
   Map<String, int> _pendingCountByActivity = const {};
   bool _isLoading = false;
   String? _error;
+  bool _isDisposed = false;
+
+  // Memoization Cache for Filtered Activities
+  List<Activity>? _cachedFilteredActivities;
+  String? _cachedCurrentUserId;
+  Set<String>? _cachedBlockedIds;
+  bool _filterCacheValid = false;
 
   RealtimeChannel? _activitiesChannel;
   RealtimeChannel? _joinRequestsChannel;
+
+  void _invalidateFilterCache() {
+    _filterCacheValid = false;
+    _cachedFilteredActivities = null;
+  }
 
   void _rebuildJoinRequestIndices() {
     final byActivity = <String, List<JoinRequest>>{};
@@ -43,6 +55,7 @@ class ActivitiesState extends ChangeNotifier {
     _requestsByActivity = byActivity;
     _userRequestIndex = userIdx;
     _pendingCountByActivity = pendingCounts;
+    _invalidateFilterCache();
   }
 
   // Search & Filter State
@@ -53,6 +66,8 @@ class ActivitiesState extends ChangeNotifier {
   SortKey _sortKey = SortKey.date;
   FeedScope _scope = FeedScope.discover;
   String _location = "Indiranagar, Bengaluru";
+  double _userLat = 12.9784; // Indiranagar, Bengaluru default lat
+  double _userLng = 77.6408; // Indiranagar, Bengaluru default lng
 
   // Quick Filters
   bool _freeOnly = false;
@@ -67,8 +82,8 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   // Getters
-  List<Activity> get activities => _activities;
-  List<JoinRequest> get joinRequests => _joinRequests;
+  List<Activity> get activities => List.unmodifiable(_activities);
+  List<JoinRequest> get joinRequests => List.unmodifiable(_joinRequests);
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -96,65 +111,87 @@ class ActivitiesState extends ChangeNotifier {
     return count;
   }
 
-  void setLocation(String loc) {
+  void setLocation(String loc, {double? lat, double? lng}) {
     _location = loc;
-    notifyListeners();
+    if (lat != null && lng != null) {
+      _userLat = lat;
+      _userLng = lng;
+    }
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void setGroup(String group) {
+    if (_selectedGroup == group && _selectedCategory == "All") return;
     _selectedGroup = group;
     _selectedCategory = "All";
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void setCategory(String category) {
+    if (_selectedCategory == category) return;
     _selectedCategory = category;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void setModeFilter(ModeFilter mode) {
+    if (_modeFilter == mode) return;
     _modeFilter = mode;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void setSearchQuery(String q) {
+    if (_searchQuery == q) return;
     _searchQuery = q;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void setSortKey(SortKey sort) {
+    if (_sortKey == sort) return;
     _sortKey = sort;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void setScope(FeedScope scope) {
+    if (_scope == scope) return;
     _scope = scope;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void toggleFreeOnly() {
     _freeOnly = !_freeOnly;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void toggleSpotsOnly() {
     _spotsOnly = !_spotsOnly;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void toggleTodayOnly() {
     _todayOnly = !_todayOnly;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void toggleWeekendOnly() {
     _weekendOnly = !_weekendOnly;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void toggleVerifiedHostsOnly() {
     _verifiedHostsOnly = !_verifiedHostsOnly;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   void resetFilters() {
@@ -164,16 +201,17 @@ class ActivitiesState extends ChangeNotifier {
     _todayOnly = false;
     _weekendOnly = false;
     _verifiedHostsOnly = false;
-    notifyListeners();
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   Future<void> fetchActivities() async {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       dynamic res;
@@ -201,6 +239,8 @@ class ActivitiesState extends ChangeNotifier {
               .order('date_time', ascending: true);
         }
       }
+
+      if (_isDisposed) return;
 
       if (res is List<dynamic>) {
         _activities = res
@@ -235,21 +275,27 @@ class ActivitiesState extends ChangeNotifier {
         // join_requests error should not fail activities loading
       }
 
+      _invalidateFilterCache();
       _error = null;
     } catch (e) {
       _error = e.toString();
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Timer? _debounceTimer;
 
   void _onRealtimeChange() {
+    if (_isDisposed) return;
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      fetchActivities();
+      if (!_isDisposed) {
+        fetchActivities();
+      }
     });
   }
 
@@ -264,7 +310,7 @@ class ActivitiesState extends ChangeNotifier {
 
   void _subscribeRealtime() {
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     _activitiesChannel = client
         .channel('public:activities')
@@ -287,12 +333,22 @@ class ActivitiesState extends ChangeNotifier {
         .subscribe();
   }
 
-  // Filtered Activities
+  // Filtered Activities with Memoization
   List<Activity> getFilteredActivities(
     String? currentUserId,
     Set<String> blockedIds,
   ) {
+    if (_filterCacheValid &&
+        _cachedCurrentUserId == currentUserId &&
+        _cachedBlockedIds != null &&
+        _cachedBlockedIds!.length == blockedIds.length &&
+        _cachedBlockedIds!.containsAll(blockedIds) &&
+        _cachedFilteredActivities != null) {
+      return _cachedFilteredActivities!;
+    }
+
     final query = _searchQuery.trim().toLowerCase();
+    final now = DateTime.now();
 
     final result = _activities.where((a) {
       if (blockedIds.contains(a.hostId)) return false;
@@ -320,7 +376,6 @@ class ActivitiesState extends ChangeNotifier {
       if (_spotsOnly && a.slotsLeft <= 0) return false;
 
       if (_todayOnly) {
-        final now = DateTime.now();
         if (a.dateTime.year != now.year ||
             a.dateTime.month != now.month ||
             a.dateTime.day != now.day) {
@@ -356,10 +411,27 @@ class ActivitiesState extends ChangeNotifier {
     } else if (_sortKey == SortKey.popularity) {
       result.sort((a, b) => a.slotsLeft.compareTo(b.slotsLeft));
     } else if (_sortKey == SortKey.distance) {
-      result.sort((a, b) => a.location.compareTo(b.location));
+      result.sort((a, b) {
+        if (a.latitude != null &&
+            a.longitude != null &&
+            b.latitude != null &&
+            b.longitude != null) {
+          final distA = (a.latitude! - _userLat) * (a.latitude! - _userLat) +
+              (a.longitude! - _userLng) * (a.longitude! - _userLng);
+          final distB = (b.latitude! - _userLat) * (b.latitude! - _userLat) +
+              (b.longitude! - _userLng) * (b.longitude! - _userLng);
+          return distA.compareTo(distB);
+        }
+        return a.location.compareTo(b.location);
+      });
     }
 
-    return result;
+    _cachedFilteredActivities = List.unmodifiable(result);
+    _cachedCurrentUserId = currentUserId;
+    _cachedBlockedIds = Set.from(blockedIds);
+    _filterCacheValid = true;
+
+    return _cachedFilteredActivities!;
   }
 
   // Database Actions
@@ -372,7 +444,7 @@ class ActivitiesState extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
       return false;
     }
   }
@@ -387,7 +459,7 @@ class ActivitiesState extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
       return false;
     }
   }
@@ -402,7 +474,7 @@ class ActivitiesState extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
       return false;
     }
   }
@@ -547,6 +619,7 @@ class ActivitiesState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _debounceTimer?.cancel();
     _activitiesChannel?.unsubscribe();
     _joinRequestsChannel?.unsubscribe();

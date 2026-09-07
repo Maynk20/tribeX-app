@@ -6,12 +6,19 @@ import 'package:myapp/models/join_request.dart';
 import 'package:myapp/models/poll.dart';
 import 'package:myapp/models/user_profile.dart';
 import 'package:myapp/services/report_service.dart';
+import 'package:myapp/services/storage_service.dart';
 import 'package:myapp/state/activities_state.dart';
 import 'package:myapp/state/chat_state.dart';
+import 'package:myapp/state/notifications_state.dart';
 import 'package:myapp/state/theme_state.dart';
 import 'package:myapp/widgets/common/welcome_splash.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('tribeX Unit & State Tests', () {
     test('Categories and amenities are properly configured', () {
       expect(AppCategories.groups.length, 5);
@@ -121,24 +128,37 @@ void main() {
       expect(ReportReason.spam.dbValue, 'spam');
     });
 
-    test('ActivitiesState initial state and filtering', () {
+    test('ActivitiesState initial state, filtering, and memoization', () {
       final state = ActivitiesState();
       expect(state.activities, isEmpty);
 
       state.setSearchQuery("Cricket");
-      final filtered = state.getFilteredActivities(null, {});
-      expect(filtered, isEmpty);
+      final filtered1 = state.getFilteredActivities(null, {});
+      final filtered2 = state.getFilteredActivities(null, {});
+      expect(identical(filtered1, filtered2), isTrue); // memoized reference
+
+      state.setSortKey(SortKey.distance);
+      expect(state.sortKey, SortKey.distance);
+      state.dispose();
     });
 
-    test('ChatState messages initialization and safe cached lookup', () {
+    test('ChatState messages initialization, optimistic send and disposal', () {
       final chat = ChatState();
       const actId = "act_cricket";
       final initialMsgs = chat.getMessagesForActivity(actId);
       expect(initialMsgs, isEmpty);
 
-      // Safe cache lookups don't trigger infinite fetch loops
       expect(chat.getExpense('non_existent_exp'), isNull);
       expect(chat.getPoll('non_existent_poll'), isNull);
+
+      chat.dispose();
+    });
+
+    test('NotificationsState initial state and lifecycle', () {
+      final notifs = NotificationsState();
+      expect(notifs.notifications, isEmpty);
+      expect(notifs.unreadCount, 0);
+      notifs.dispose();
     });
 
     test('ThemeState default and mode switching', () async {
@@ -152,6 +172,16 @@ void main() {
       await themeState.setThemeMode(ThemeMode.light);
       expect(themeState.themeMode, ThemeMode.light);
       expect(themeState.isDarkMode, isFalse);
+    });
+
+    test('StorageService provides curated covers for categories', () {
+      final cricketCovers = StorageService.getCuratedCovers('Cricket');
+      expect(cricketCovers, isNotEmpty);
+      expect(cricketCovers.first, startsWith('http'));
+
+      final fallbackCovers = StorageService.getCuratedCovers('UnknownCategory');
+      expect(fallbackCovers, isNotEmpty);
+      expect(fallbackCovers.first, startsWith('http'));
     });
   });
 

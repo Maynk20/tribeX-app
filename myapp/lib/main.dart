@@ -16,12 +16,31 @@ import 'state/chat_state.dart';
 import 'state/notifications_state.dart';
 import 'state/theme_state.dart';
 
+import 'dart:ui';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Production Error Resilience
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    return true; // handled
+  };
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.transparent,
+    ),
+  );
 
   await SupabaseService.initialize();
 
@@ -49,7 +68,7 @@ class TribeXApp extends StatelessWidget {
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeState.themeMode,
-            home: const MainShell(),
+            initialRoute: '/',
             routes: {
               '/': (_) => const MainShell(),
               '/auth': (_) => const AuthScreen(),

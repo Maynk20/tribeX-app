@@ -198,4 +198,4 @@ by the project owner.
 
 ------------------------------------------------------------------------
 
-Made with ❤️ using Flutter.
+Made by Mayank Thakkar using Flutter.

@@ -14,6 +14,7 @@ class AuthState extends ChangeNotifier {
   final Set<String> _blockedUserIds = {};
   StreamSubscription<dynamic>? _authSubscription;
   RealtimeChannel? _blocksChannel;
+  bool _isDisposed = false;
 
   AuthState() {
     _initAuth();
@@ -23,7 +24,7 @@ class AuthState extends ChangeNotifier {
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
   bool get pushEnabled => _pushEnabled;
-  Set<String> get blockedUserIds => _blockedUserIds;
+  Set<String> get blockedUserIds => Set.unmodifiable(_blockedUserIds);
 
   bool get needsProfile =>
       _currentUser != null && !_currentUser!.hasCompletedProfile;
@@ -37,7 +38,7 @@ class AuthState extends ChangeNotifier {
     final client = SupabaseService.client;
     if (client == null) {
       _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
       return;
     }
 
@@ -46,10 +47,11 @@ class AuthState extends ChangeNotifier {
       await _loadProfile(session.user.id, session.user.email);
     } else {
       _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     }
 
     _authSubscription = client.auth.onAuthStateChange.listen((data) async {
+      if (_isDisposed) return;
       final session = data.session;
       if (session != null) {
         await _loadProfile(session.user.id, session.user.email);
@@ -57,17 +59,18 @@ class AuthState extends ChangeNotifier {
         _currentUser = null;
         _isLoading = false;
         _unsubscribeBlocks();
-        notifyListeners();
+        if (!_isDisposed) notifyListeners();
       }
     });
   }
 
   Future<void> _loadProfile(String userId, String? email) async {
     _isLoading = true;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       final profile = await AuthService.fetchUserProfile(userId);
+      if (_isDisposed) return;
       if (profile != null) {
         _currentUser = profile;
       } else {
@@ -82,6 +85,7 @@ class AuthState extends ChangeNotifier {
       }
       _subscribeBlocks(userId);
     } catch (_) {
+      if (_isDisposed) return;
       _currentUser = UserProfile(
         id: userId,
         fullName: '',
@@ -91,15 +95,17 @@ class AuthState extends ChangeNotifier {
         hasCompletedOnboarding: false,
       );
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   void _subscribeBlocks(String userId) {
     _unsubscribeBlocks();
     final client = SupabaseService.client;
-    if (client == null) return;
+    if (client == null || _isDisposed) return;
 
     // Load initial blocked users
     client
@@ -107,13 +113,14 @@ class AuthState extends ChangeNotifier {
         .select('blocked_id')
         .eq('blocker_id', userId)
         .then((rows) {
+          if (_isDisposed) return;
           _blockedUserIds.clear();
           for (final r in (rows as List<dynamic>)) {
             if (r['blocked_id'] != null) {
               _blockedUserIds.add(r['blocked_id'].toString());
             }
           }
-          notifyListeners();
+          if (!_isDisposed) notifyListeners();
         })
         .catchError((_) {});
 
@@ -130,6 +137,7 @@ class AuthState extends ChangeNotifier {
             value: userId,
           ),
           callback: (payload) {
+            if (_isDisposed) return;
             if (payload.eventType == PostgresChangeEvent.insert) {
               final blockedId = payload.newRecord['blocked_id']?.toString();
               if (blockedId != null) _blockedUserIds.add(blockedId);
@@ -137,7 +145,7 @@ class AuthState extends ChangeNotifier {
               final blockedId = payload.oldRecord['blocked_id']?.toString();
               if (blockedId != null) _blockedUserIds.remove(blockedId);
             }
-            notifyListeners();
+            if (!_isDisposed) notifyListeners();
           },
         )
         .subscribe();
@@ -152,7 +160,7 @@ class AuthState extends ChangeNotifier {
     await AuthService.signOut();
     _currentUser = null;
     _unsubscribeBlocks();
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
   }
 
   Future<bool> deleteAccount() async {
@@ -186,15 +194,31 @@ class AuthState extends ChangeNotifier {
     double? latitude,
     double? longitude,
   }) async {
-    if (_currentUser == null) return;
+    if (_currentUser == null || _isDisposed) return;
+
+    final cur = _currentUser!;
+    final hasChanges =
+        (fullName != null && fullName != cur.fullName) ||
+        (username != null && username != cur.username) ||
+        (phone != null && phone != cur.phone) ||
+        (gender != null && gender != cur.gender) ||
+        (city != null && city != cur.city) ||
+        (bio != null && bio != cur.bio) ||
+        (avatarUrl != null && avatarUrl != cur.avatarUrl) ||
+        (latitude != null && latitude != cur.latitude) ||
+        (longitude != null && longitude != cur.longitude) ||
+        !cur.hasCompletedProfile;
+
+    if (!hasChanges) return;
+
     _isLoading = true;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     final now = DateTime.now();
-    final termsAcceptedAt = _currentUser!.termsAcceptedAt ?? now;
+    final termsAcceptedAt = cur.termsAcceptedAt ?? now;
 
     final updates = <String, dynamic>{
-      'id': _currentUser!.id,
+      'id': cur.id,
       'has_completed_profile': true,
       'terms_accepted_at': termsAcceptedAt.toIso8601String(),
       'terms_version': 'v1.0',
@@ -211,7 +235,8 @@ class AuthState extends ChangeNotifier {
 
     try {
       await SupabaseService.client?.from('profiles').upsert(updates);
-      _currentUser = _currentUser!.copyWith(
+      if (_isDisposed) return;
+      _currentUser = cur.copyWith(
         fullName: fullName,
         username: username,
         phone: phone,
@@ -228,15 +253,17 @@ class AuthState extends ChangeNotifier {
     } catch (_) {
       // ignore error
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<void> completeOnboarding(List<String> interests) async {
-    if (_currentUser == null) return;
+    if (_currentUser == null || _isDisposed) return;
     _isLoading = true;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       await SupabaseService.client
@@ -244,6 +271,7 @@ class AuthState extends ChangeNotifier {
           .update({'interests': interests, 'has_completed_onboarding': true})
           .eq('id', _currentUser!.id);
 
+      if (_isDisposed) return;
       _currentUser = _currentUser!.copyWith(
         interests: interests,
         hasCompletedOnboarding: true,
@@ -251,20 +279,22 @@ class AuthState extends ChangeNotifier {
     } catch (_) {
       // ignore
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   void togglePush(bool value) {
     _pushEnabled = value;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
   }
 
   Future<void> blockUser(String targetUserId) async {
     if (_currentUser == null) return;
     _blockedUserIds.add(targetUserId);
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       await SupabaseService.client?.from('blocks').insert({
@@ -279,7 +309,7 @@ class AuthState extends ChangeNotifier {
   Future<void> unblockUser(String targetUserId) async {
     if (_currentUser == null) return;
     _blockedUserIds.remove(targetUserId);
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
 
     try {
       await SupabaseService.client
@@ -296,6 +326,7 @@ class AuthState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _authSubscription?.cancel();
     _unsubscribeBlocks();
     super.dispose();
