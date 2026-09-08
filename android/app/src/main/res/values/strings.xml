@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">tribeX</string>
+    <string name="title_activity_main">tribeX</string>
+    <string name="package_name">com.tribex.app</string>
+    <string name="custom_url_scheme">com.tribex.app</string>
+</resources>
