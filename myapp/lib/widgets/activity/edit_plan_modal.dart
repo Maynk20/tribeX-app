@@ -262,6 +262,8 @@ class _EditPlanModalState extends State<EditPlanModal> {
                               : Image.network(
                                   _imageUrl!,
                                   fit: BoxFit.cover,
+                                  cacheWidth: 800,
+                                  cacheHeight: 400,
                                   errorBuilder: (_, _, _) => Container(
                                     color: AppColors.primaryMuted,
                                     child: const Center(

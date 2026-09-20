@@ -35,13 +35,14 @@ class CustomBottomNav extends StatelessWidget {
         : AppColors.backgroundLight.withValues(alpha: 0.85);
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(
-          top: BorderSide(color: border.withValues(alpha: 0.6), width: 1),
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(
+            top: BorderSide(color: border.withValues(alpha: 0.6), width: 1),
+          ),
         ),
-      ),
       child: SafeArea(
         top: false,
         child: SizedBox(
@@ -76,6 +77,7 @@ class CustomBottomNav extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

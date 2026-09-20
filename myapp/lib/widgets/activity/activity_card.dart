@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -90,23 +91,24 @@ class ActivityCard extends StatelessWidget {
     // accent color: bg-primary/15 text-primary
     const accentBg = AppColors.primaryMuted; // ~15% opacity primary
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cardBg,
-        // rounded-3xl = 28px radius
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: border.withValues(alpha: 0.6)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          color: cardBg,
+          // rounded-3xl = 28px radius
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: border.withValues(alpha: 0.6)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
           // Main content column
           Padding(
             padding: const EdgeInsets.all(16), // p-4
@@ -692,6 +694,7 @@ class ActivityCard extends StatelessWidget {
             ),
         ],
       ),
+    ),
     );
   }
 }
@@ -701,7 +704,22 @@ class _CoverImage extends StatelessWidget {
   final String imageUrl;
   final bool urgentActive;
 
+  static final Map<String, Uint8List> _base64Cache = {};
+
   const _CoverImage({required this.imageUrl, required this.urgentActive});
+
+  static Uint8List _getDecodedBytes(String dataUri) {
+    final cached = _base64Cache[dataUri];
+    if (cached != null) return cached;
+
+    final raw = dataUri.contains(',') ? dataUri.split(',').last : dataUri;
+    final decoded = base64Decode(raw);
+    if (_base64Cache.length > 60) {
+      _base64Cache.remove(_base64Cache.keys.first);
+    }
+    _base64Cache[dataUri] = decoded;
+    return decoded;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -719,7 +737,7 @@ class _CoverImage extends StatelessWidget {
                 children: [
                   imageUrl.startsWith('data:image')
                       ? Image.memory(
-                          base64Decode(imageUrl.split(',').last),
+                          _getDecodedBytes(imageUrl),
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => Container(
                             color: AppColors.primaryMuted,

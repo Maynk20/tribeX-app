@@ -41,10 +41,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _openEditProfileModal(BuildContext context, UserProfile user) {
     final nameCtrl = TextEditingController(text: user.fullName);
     final unameCtrl = TextEditingController(text: user.username);
+    final avatarCtrl = TextEditingController(text: user.avatarUrl ?? "");
     final phoneCtrl = TextEditingController(text: user.phone ?? "");
     final cityCtrl = TextEditingController(text: user.city ?? "");
     final bioCtrl = TextEditingController(text: user.bio ?? "");
     String gender = user.gender ?? "Prefer not to say";
+    bool isSaving = false;
+
+    final presetAvatars = [
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80",
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -57,6 +66,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         return StatefulBuilder(
           builder: (context, setModalState) {
+            final currentAvatar = avatarCtrl.text.trim();
+            final initialChar = user.fullName.isNotEmpty
+                ? user.fullName[0].toUpperCase()
+                : (user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U');
+
             return Container(
               decoration: BoxDecoration(
                 color: cardBg,
@@ -81,25 +95,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         width: 36,
                         height: 4,
                         decoration: BoxDecoration(
-                          color:
-                              (isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight)
-                                  .withValues(alpha: 0.8),
+                          color: (isDark
+                                  ? AppColors.borderDark
+                                  : AppColors.borderLight)
+                              .withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Edit Profile Details',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryMuted,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            LucideIcons.pencil,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Edit Profile',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text(
+                              'Update your details & profile avatar',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.mutedForegroundLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Avatar Preview & Input
+                    Center(
+                      child: Column(
+                        children: [
+                          Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              CircleAvatar(
+                                radius: 36,
+                                backgroundColor: AppColors.primary,
+                                backgroundImage: currentAvatar.isNotEmpty
+                                    ? NetworkImage(currentAvatar)
+                                    : null,
+                                child: currentAvatar.isEmpty
+                                    ? Text(
+                                        initialChar,
+                                        style: const TextStyle(
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  LucideIcons.camera,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: presetAvatars.map((url) {
+                                final isSelected = avatarCtrl.text == url;
+                                return GestureDetector(
+                                  onTap: () {
+                                    setModalState(() {
+                                      avatarCtrl.text = url;
+                                    });
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? AppColors.primary
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 16,
+                                      backgroundImage: NetworkImage(url),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 16),
 
+                    TextField(
+                      controller: avatarCtrl,
+                      onChanged: (_) => setModalState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Avatar Image URL',
+                        prefixIcon: Icon(LucideIcons.image, size: 18),
+                        hintText: 'Paste image link or choose preset above',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: nameCtrl,
                       decoration: const InputDecoration(
@@ -177,26 +305,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () async {
-                          await context.read<AuthState>().updateProfile(
-                            fullName: nameCtrl.text.trim(),
-                            username: unameCtrl.text.trim(),
-                            phone: phoneCtrl.text.trim().isNotEmpty
-                                ? phoneCtrl.text.trim()
-                                : null,
-                            gender: gender,
-                            city: cityCtrl.text.trim().isNotEmpty
-                                ? cityCtrl.text.trim()
-                                : null,
-                            bio: bioCtrl.text.trim().isNotEmpty
-                                ? bioCtrl.text.trim()
-                                : null,
-                          );
-                          if (!ctx.mounted) return;
-                          Navigator.of(ctx).pop();
-                          AppToast.show(context, 'Profile details updated');
-                        },
-                        child: const Text('Save Details'),
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                final name = nameCtrl.text.trim();
+                                final uname = unameCtrl.text.trim();
+
+                                if (name.length < 2) {
+                                  AppToast.show(
+                                    context,
+                                    'Full name must be at least 2 characters',
+                                    isError: true,
+                                  );
+                                  return;
+                                }
+                                if (uname.length < 3) {
+                                  AppToast.show(
+                                    context,
+                                    'Username must be at least 3 characters',
+                                    isError: true,
+                                  );
+                                  return;
+                                }
+
+                                setModalState(() => isSaving = true);
+
+                                await context.read<AuthState>().updateProfile(
+                                  fullName: name,
+                                  username: uname,
+                                  avatarUrl: avatarCtrl.text.trim().isNotEmpty
+                                      ? avatarCtrl.text.trim()
+                                      : null,
+                                  phone: phoneCtrl.text.trim().isNotEmpty
+                                      ? phoneCtrl.text.trim()
+                                      : null,
+                                  gender: gender,
+                                  city: cityCtrl.text.trim().isNotEmpty
+                                      ? cityCtrl.text.trim()
+                                      : null,
+                                  bio: bioCtrl.text.trim().isNotEmpty
+                                      ? bioCtrl.text.trim()
+                                      : null,
+                                );
+
+                                if (!ctx.mounted) return;
+                                Navigator.of(ctx).pop();
+                                nameCtrl.dispose();
+                                unameCtrl.dispose();
+                                avatarCtrl.dispose();
+                                phoneCtrl.dispose();
+                                cityCtrl.dispose();
+                                bioCtrl.dispose();
+                                AppToast.show(
+                                  context,
+                                  'Profile details updated successfully',
+                                );
+                              },
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Save Profile Changes'),
                       ),
                     ),
                   ],
@@ -665,18 +839,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               : AppColors.mutedForegroundLight,
                         ),
                       ),
-                      trailing: OutlinedButton(
+                      trailing: ElevatedButton.icon(
                         onPressed: () => _openEditProfileModal(context, user),
-                        style: OutlinedButton.styleFrom(
+                        icon: const Icon(LucideIcons.pencil, size: 13),
+                        label: const Text('Edit'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryMuted,
+                          foregroundColor: AppColors.primary,
+                          elevation: 0,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
+                            horizontal: 14,
+                            vertical: 8,
                           ),
                           minimumSize: Size.zero,
-                        ),
-                        child: const Text(
-                          'Edit',
-                          style: TextStyle(fontSize: 11),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),

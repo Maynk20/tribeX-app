@@ -765,6 +765,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 14),
                         child: ActivityCard(
+                          key: ValueKey(act.id),
                           activity: act,
                           isHost: isHost,
                           myStatus: myReq?.status,
