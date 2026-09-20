@@ -72,20 +72,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthState>();
+    final isLoading = context.select<AuthState, bool>((a) => a.isLoading);
+    final isAuthenticated = context.select<AuthState, bool>((a) => a.isAuthenticated);
+    final needsProfile = context.select<AuthState, bool>((a) => a.needsProfile);
+    final needsOnboarding = context.select<AuthState, bool>((a) => a.needsOnboarding);
+    final currentUser = context.select<AuthState, dynamic>((a) => a.currentUser);
 
-    if (auth.isLoading) {
+    if (isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (auth.isAuthenticated && auth.needsProfile) {
+    if (isAuthenticated && needsProfile) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushReplacementNamed('/complete-profile');
       });
       return const Scaffold(body: SizedBox.shrink());
     }
 
-    if (auth.isAuthenticated && auth.needsOnboarding) {
+    if (isAuthenticated && needsOnboarding) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushReplacementNamed('/onboarding');
       });
@@ -93,7 +97,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
 
     // Reactively ensure notifications are initialized whenever auth state updates
-    final currentUserId = auth.currentUser?.id;
+    final currentUserId = currentUser?.id;
     if (_lastUserId != currentUserId) {
       _lastUserId = currentUserId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -129,7 +133,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         // Initial animated welcome splash
         if (_showSplash)
           WelcomeSplash(
-            profile: auth.currentUser,
+            profile: currentUser,
             onComplete: () {
               setState(() => _showSplash = false);
             },

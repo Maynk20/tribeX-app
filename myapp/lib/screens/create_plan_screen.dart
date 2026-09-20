@@ -382,6 +382,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                 : Image.network(
                                     _imageUrl!,
                                     fit: BoxFit.cover,
+                                    cacheWidth: 800,
+                                    cacheHeight: 400,
                                     errorBuilder: (_, _, _) => Container(
                                       color: AppColors.primaryMuted,
                                       child: const Center(

@@ -232,33 +232,42 @@ class _ChatScreenState extends State<ChatScreen> {
                 final m = messages[index - 2];
                 final expId = m.expenseId;
                 if (expId != null) {
-                  return ExpenseCardWidget(
-                    expenseId: expId,
-                    currentUserId: me?.id,
+                  return RepaintBoundary(
+                    key: ValueKey('exp_$expId'),
+                    child: ExpenseCardWidget(
+                      expenseId: expId,
+                      currentUserId: me?.id,
+                    ),
                   );
                 }
 
                 final pollId = m.pollId;
                 if (pollId != null) {
-                  return PollCardWidget(
-                    pollId: pollId,
-                    currentUserId: me?.id,
+                  return RepaintBoundary(
+                    key: ValueKey('poll_$pollId'),
+                    child: PollCardWidget(
+                      pollId: pollId,
+                      currentUserId: me?.id,
+                    ),
                   );
                 }
 
                 final isMine = me != null && m.senderId == me.id;
-                return MessageBubbleWidget(
-                  message: m,
-                  isMine: isMine,
-                  onReport: () {
-                    ReportModal.show(
-                      context,
-                      targetType: 'chat_message',
-                      targetId: m.id,
-                      targetTitle:
-                          'Message from ${m.sender?.fullName ?? "user"}',
-                    );
-                  },
+                return RepaintBoundary(
+                  key: ValueKey('msg_${m.id}'),
+                  child: MessageBubbleWidget(
+                    message: m,
+                    isMine: isMine,
+                    onReport: () {
+                      ReportModal.show(
+                        context,
+                        targetType: 'chat_message',
+                        targetId: m.id,
+                        targetTitle:
+                            'Message from ${m.sender?.fullName ?? "user"}',
+                      );
+                    },
+                  ),
                 );
               },
             ),
