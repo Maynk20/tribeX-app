@@ -5,14 +5,22 @@ class SupabaseService {
   static const String supabaseAnonKey =
       'sb_publishable_k8-EYhRp1ixYnTUCkWPaVQ_pbhzebqL';
 
+  static bool _initialized = false;
+
   static Future<void> initialize() async {
-    await Supabase.initialize(
-      url: supabaseUrl,
-      publishableKey: supabaseAnonKey,
-      authOptions: const FlutterAuthClientOptions(
-        authFlowType: AuthFlowType.pkce,
-      ),
-    );
+    if (_initialized) return;
+    try {
+      await Supabase.initialize(
+        url: supabaseUrl,
+        publishableKey: supabaseAnonKey,
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+        ),
+      );
+      _initialized = true;
+    } catch (_) {
+      _initialized = true;
+    }
   }
 
   static SupabaseClient? get client {

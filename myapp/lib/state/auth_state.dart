@@ -34,6 +34,8 @@ class AuthState extends ChangeNotifier {
       _currentUser!.hasCompletedProfile &&
       !_currentUser!.hasCompletedOnboarding;
 
+  bool _isProfileLoading = false;
+
   Future<void> _initAuth() async {
     final client = SupabaseService.client;
     if (client == null) {
@@ -42,42 +44,72 @@ class AuthState extends ChangeNotifier {
       return;
     }
 
-    final session = client.auth.currentSession;
-    if (session != null) {
-      await _loadProfile(session.user.id, session.user.email);
-    } else {
-      _isLoading = false;
-      if (!_isDisposed) notifyListeners();
-    }
-
     _authSubscription = client.auth.onAuthStateChange.listen((data) async {
       if (_isDisposed) return;
       final session = data.session;
-      if (session != null) {
-        await _loadProfile(session.user.id, session.user.email);
+      final event = data.event;
+
+      if (event == AuthChangeEvent.signedOut || session == null) {
+        _handleSignedOut();
       } else {
-        _currentUser = null;
-        _isLoading = false;
-        _unsubscribeBlocks();
-        if (!_isDisposed) notifyListeners();
+        await _loadProfile(
+          session.user.id,
+          session.user.email,
+          userMetadata: session.user.userMetadata,
+        );
       }
     });
+
+    final session = client.auth.currentSession;
+    if (session != null) {
+      await _loadProfile(
+        session.user.id,
+        session.user.email,
+        userMetadata: session.user.userMetadata,
+      );
+    } else {
+      _handleSignedOut();
+    }
   }
 
-  Future<void> _loadProfile(String userId, String? email) async {
+  void _handleSignedOut() {
+    _currentUser = null;
+    _isLoading = false;
+    _isProfileLoading = false;
+    _unsubscribeBlocks();
+    if (!_isDisposed) notifyListeners();
+  }
+
+  Future<void> _loadProfile(
+    String userId,
+    String? email, {
+    Map<String, dynamic>? userMetadata,
+  }) async {
+    if (_isProfileLoading && _currentUser != null && _currentUser!.id == userId) {
+      return;
+    }
+    _isProfileLoading = true;
     _isLoading = true;
     if (!_isDisposed) notifyListeners();
 
     try {
       final profile = await AuthService.fetchUserProfile(userId);
       if (_isDisposed) return;
+
+      final metaName = (userMetadata?['full_name'] as String?)?.trim() ?? '';
+      final metaUname = (userMetadata?['username'] as String?)?.trim() ?? '';
+
       if (profile != null) {
-        _currentUser = profile;
+        _currentUser = profile.copyWith(
+          fullName: profile.fullName.isNotEmpty ? profile.fullName : metaName,
+          username: profile.username.isNotEmpty ? profile.username : metaUname,
+          email: profile.email ?? email,
+        );
       } else {
         _currentUser = UserProfile(
           id: userId,
-          fullName: '',
-          username: '',
+          fullName: metaName,
+          username: metaUname,
           email: email,
           hasCompletedProfile: false,
           hasCompletedOnboarding: false,
@@ -86,15 +118,18 @@ class AuthState extends ChangeNotifier {
       _subscribeBlocks(userId);
     } catch (_) {
       if (_isDisposed) return;
+      final metaName = (userMetadata?['full_name'] as String?)?.trim() ?? '';
+      final metaUname = (userMetadata?['username'] as String?)?.trim() ?? '';
       _currentUser = UserProfile(
         id: userId,
-        fullName: '',
-        username: '',
+        fullName: metaName,
+        username: metaUname,
         email: email,
         hasCompletedProfile: false,
         hasCompletedOnboarding: false,
       );
     } finally {
+      _isProfileLoading = false;
       if (!_isDisposed) {
         _isLoading = false;
         notifyListeners();
@@ -157,10 +192,10 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
-    await AuthService.signOut();
-    _currentUser = null;
-    _unsubscribeBlocks();
-    if (!_isDisposed) notifyListeners();
+    _handleSignedOut();
+    try {
+      await AuthService.signOut();
+    } catch (_) {}
   }
 
   Future<bool> deleteAccount() async {

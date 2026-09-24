@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/theme/app_colors.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/notifications_state.dart';
@@ -84,16 +85,30 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     if (isAuthenticated && needsProfile) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.of(context).pushReplacementNamed('/complete-profile');
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+          Navigator.of(context).pushReplacementNamed('/complete-profile');
+        }
       });
-      return const Scaffold(body: SizedBox.shrink());
+      return Scaffold(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.backgroundDark
+            : AppColors.backgroundLight,
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (isAuthenticated && needsOnboarding) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.of(context).pushReplacementNamed('/onboarding');
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+          Navigator.of(context).pushReplacementNamed('/onboarding');
+        }
       });
-      return const Scaffold(body: SizedBox.shrink());
+      return Scaffold(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.backgroundDark
+            : AppColors.backgroundLight,
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     // Reactively ensure notifications are initialized whenever auth state updates

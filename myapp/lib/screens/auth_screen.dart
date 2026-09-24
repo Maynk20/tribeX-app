@@ -251,17 +251,19 @@ class _AuthScreenState extends State<AuthScreen> {
       _showToast(
         _mode == AuthMode.signup ? 'Welcome to tribeX!' : "You're signed in!",
       );
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      } else {
-        Navigator.of(context).pushReplacementNamed('/');
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          Navigator.of(context).pushReplacementNamed('/');
+        }
       }
     } else {
       final msg = res.message ?? "Couldn't verify code. Please try again.";
       if (res.code == 'OTP_EXPIRED') {
-        _showToast('Code expired or invalid. Please tap Resend code.');
+        _showToast('Code expired or invalid. Please tap Resend code.', isError: true);
       } else {
-        _showToast(msg);
+        _showToast(msg, isError: true);
       }
     }
   }
@@ -275,13 +277,15 @@ class _AuthScreenState extends State<AuthScreen> {
 
     if (success) {
       _showToast("You're signed in!");
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      } else {
-        Navigator.of(context).pushReplacementNamed('/');
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          Navigator.of(context).pushReplacementNamed('/');
+        }
       }
     } else {
-      _showToast('Google Sign-In failed or cancelled.');
+      _showToast('Google Sign-In failed or cancelled.', isError: true);
     }
   }
 
