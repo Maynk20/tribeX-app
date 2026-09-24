@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
@@ -13,6 +14,18 @@ class OtpResult {
 
 class AuthService {
   static SupabaseClient? get _client => SupabaseService.client;
+
+  static String? get _defaultRedirectTo {
+    if (kIsWeb) {
+      try {
+        final origin = Uri.base.origin;
+        if (origin.isNotEmpty && origin != 'null') {
+          return origin;
+        }
+      } catch (_) {}
+    }
+    return 'com.tribex.app://callback';
+  }
 
   /// Parse Supabase errors into user-friendly OtpResult messages
   static OtpResult _parseError(dynamic error, String fallback) {
@@ -35,7 +48,7 @@ class AuthService {
     if (str.contains('otp_expired') ||
         str.contains('token has expired') ||
         str.contains('otp_disabled') ||
-        str.contains('invalid') && str.contains('otp')) {
+        (str.contains('invalid') && str.contains('otp'))) {
       return OtpResult(
         success: false,
         code: 'OTP_EXPIRED',
@@ -111,6 +124,7 @@ class AuthService {
       await client.auth.signInWithOtp(
         email: normalized,
         shouldCreateUser: false,
+        emailRedirectTo: _defaultRedirectTo,
       );
       return OtpResult(
         success: true,
@@ -162,6 +176,7 @@ class AuthService {
       await client.auth.signInWithOtp(
         email: normalizedEmail,
         shouldCreateUser: true,
+        emailRedirectTo: _defaultRedirectTo,
         data: {
           'full_name': trimmedName,
           'username': normalizedUsername,
@@ -232,7 +247,7 @@ class AuthService {
     try {
       return await client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: 'com.tribex.app://callback',
+        redirectTo: _defaultRedirectTo,
       );
     } catch (_) {
       return false;

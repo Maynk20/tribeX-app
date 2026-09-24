@@ -50,7 +50,7 @@ class _WelcomeSplashState extends State<WelcomeSplash>
 
     _controller.forward();
 
-    _timer = Timer(const Duration(milliseconds: 2400), () {
+    _timer = Timer(const Duration(milliseconds: 1200), () {
       if (mounted) widget.onComplete();
     });
   }
