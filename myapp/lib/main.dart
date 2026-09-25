@@ -24,9 +24,26 @@ Future<void> main() async {
   // Production Error Resilience
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exceptionAsString()}');
   };
   PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('PlatformDispatcher error: $error\n$stack');
     return true; // handled
+  };
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: Colors.transparent,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Unable to render: ${details.exception}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+          ),
+        ),
+      ),
+    );
   };
 
   await SystemChrome.setPreferredOrientations([
