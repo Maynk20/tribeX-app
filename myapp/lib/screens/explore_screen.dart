@@ -614,7 +614,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                     child: ListSkeleton(count: 3),
                   ),
                 )
-              else if (actState.error != null && filteredActivities.isEmpty)
+              else if (actState.error != null && filteredActivities.isEmpty && !actState.isLoading)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -633,28 +633,72 @@ class _ExploreScreenState extends State<ExploreScreen>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // const Icon(
-                          //   LucideIcons.circleAlert,
-                          //   size: 36,
-                          //   color: Color.fromARGB(255, 164, 165, 216),
-                          // ),
+                          Icon(
+                            LucideIcons.wifiOff,
+                            size: 36,
+                            color: isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight,
+                          ),
                           const SizedBox(height: 10),
                           Text(
-                            "Sign In to Discover Local Fun!",
+                            user == null
+                                ? 'Sign in to Discover Local Fun!'
+                                : 'Could not load plans',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            user == null
+                                ? 'Log in to browse plans, join activities, and connect with people nearby.'
+                                : 'Check your connection and try again.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
                               color: isDark
                                   ? AppColors.mutedForegroundDark
                                   : AppColors.mutedForegroundLight,
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: () => actState.fetchActivities(),
-                            child: const Text('Login'),
-                          ),
+                          const SizedBox(height: 16),
+                          if (user == null)
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const AuthScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(LucideIcons.logIn, size: 16),
+                              label: const Text('Sign In'),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                              ),
+                            )
+                          else
+                            TextButton.icon(
+                              onPressed: () => actState.fetchActivities(),
+                              icon: const Icon(LucideIcons.rotateCcw, size: 14),
+                              label: const Text('Retry'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                              ),
+                            ),
                         ],
                       ),
                     ),
