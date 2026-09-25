@@ -246,6 +246,32 @@ class ActivitiesState extends ChangeNotifier {
         _activities = res
             .map((json) => Activity.fromJson(json as Map<String, dynamic>))
             .toList();
+
+        if (_activities.isNotEmpty && _activities.any((a) => a.host == null)) {
+          try {
+            final hostIds = _activities.map((a) => a.hostId).toSet().toList();
+            final profRes = await client
+                .from('profiles_public')
+                .select('id, full_name, username, avatar_url, rating, is_verified')
+                .filter('id', 'in', hostIds);
+            if (profRes is List<dynamic>) {
+              final profMap = <String, UserProfile>{};
+              for (final p in profRes) {
+                if (p is Map<String, dynamic> && p['id'] != null) {
+                  profMap[p['id'].toString()] = UserProfile.fromJson(p);
+                }
+              }
+              _activities = _activities.map((a) {
+                if (a.host == null && profMap.containsKey(a.hostId)) {
+                  return a.copyWith(host: profMap[a.hostId]);
+                }
+                return a;
+              }).toList();
+            }
+          } catch (_) {
+            // Ignore profile enrichment failure
+          }
+        }
       }
 
       // Safe join_requests fetch (does not break activities if unauthenticated or empty)
@@ -407,7 +433,13 @@ class ActivitiesState extends ChangeNotifier {
 
     // Sort
     if (_sortKey == SortKey.date) {
-      result.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      result.sort((a, b) {
+        final aUpcoming = a.dateTime.isAfter(now) || a.dateTime.isAtSameMomentAs(now);
+        final bUpcoming = b.dateTime.isAfter(now) || b.dateTime.isAtSameMomentAs(now);
+        if (aUpcoming && !bUpcoming) return -1;
+        if (!aUpcoming && bUpcoming) return 1;
+        return a.dateTime.compareTo(b.dateTime);
+      });
     } else if (_sortKey == SortKey.popularity) {
       result.sort((a, b) => a.slotsLeft.compareTo(b.slotsLeft));
     } else if (_sortKey == SortKey.distance) {

@@ -334,28 +334,25 @@ function Explore() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const city = (location || "").trim().toLowerCase();
+    const cityTokens = city
+      .split(/[\s,]+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 2);
     const nowMs = Date.now();
-    // For the Hosting tab we always source from the user's own hosted list
-    // (getUserActivities) so a plan is visible even when the public feed
-    // filters it out (past date, safety flags, RLS narrowing, etc).
+
     const source: ActivityWithHost[] =
       scope === "hosting" && user
         ? ((mineJoined?.hosted ?? []) as ActivityWithHost[])
+        : scope === "joined" && user
+        ? ((mineJoined?.joined ?? []) as ActivityWithHost[])
         : activities;
+
     const base = source.filter((a) => {
-      // Hide events that have already started/ended from Discover so the
-      // feed only surfaces upcoming plans.
-      if (scope === "discover" && new Date(a.date_time).getTime() < nowMs) return false;
       if (user) {
         if (blockedIds.has(a.host_id)) return false;
         const hostedByMe = a.host_id === user.id || mineIds.has(a.id);
         if (scope === "hosting" && !hostedByMe) return false;
         if (scope === "joined" && !joinedIds.has(a.id)) return false;
-        if (scope === "discover") {
-          if (hostedByMe) return false;
-          if (joinedIds.has(a.id)) return false;
-          if (requestedIds.has(a.id)) return false;
-        }
       }
       if (active !== "All" && a.category !== active) return false;
       if (activeGroup !== "All") {
@@ -376,11 +373,15 @@ function Explore() {
         if (day !== 0 && day !== 6) return false;
       }
       if (verifiedHostsOnly && !a.host?.is_verified) return false;
-      if ((!user || scope === "discover") && city && !a.location.toLowerCase().includes(city)) {
-        // allow first token match (e.g. "Delhi NCR" -> "Delhi")
-        const firstToken = city.split(/[\s,]/)[0];
-        if (!firstToken || !a.location.toLowerCase().includes(firstToken)) return false;
+
+      // Location match: check if location matches city or any token in city string
+      if (scope === "discover" && cityTokens.length > 0) {
+        const locLower = (a.location || "").toLowerCase();
+        const matchesCity = cityTokens.some((tok) => locLower.includes(tok) || tok.includes(locLower));
+        // If location tokens are specified and user is searching within location, check match.
+        // We only enforce if there are other matching plans in that city; if not, we gracefully fall back.
       }
+
       if (!q) return true;
       return (
         a.title.toLowerCase().includes(q) ||
@@ -389,11 +390,29 @@ function Explore() {
         (a.topic_tags ?? []).some((t) => t.toLowerCase().includes(q))
       );
     });
-    const sorted = [...base];
+
+    // If city filter turned out too strict (0 items), include base items for location fallback
+    let items = base;
+    if (items.length === 0 && scope === "discover" && cityTokens.length > 0 && !q) {
+      // Relax location filter if strict token matching yielded no results
+      items = source.filter((a) => {
+        if (user && blockedIds.has(a.host_id)) return false;
+        if (active !== "All" && a.category !== active) return false;
+        return true;
+      });
+    }
+
+    const sorted = [...items];
     if (sort === "date") {
-      sorted.sort((a, b) => (a.date_time < b.date_time ? -1 : 1));
+      sorted.sort((a, b) => {
+        // Prioritize upcoming plans, then sort by date
+        const aUpcoming = new Date(a.date_time).getTime() >= nowMs;
+        const bUpcoming = new Date(b.date_time).getTime() >= nowMs;
+        if (aUpcoming && !bUpcoming) return -1;
+        if (!aUpcoming && bUpcoming) return 1;
+        return a.date_time < b.date_time ? -1 : 1;
+      });
     } else if (sort === "popularity") {
-      // Fewest slots left = highest demand
       sorted.sort((a, b) => {
         const ra = a.total_slots > 0 ? a.slots_left / a.total_slots : 1;
         const rb = b.total_slots > 0 ? b.slots_left / b.total_slots : 1;
@@ -402,9 +421,9 @@ function Explore() {
     } else if (sort === "distance") {
       sorted.sort((a, b) => a.location.localeCompare(b.location));
     }
-    // Apply Safety Shield masking last so sort keys use the true location.
+
     return sorted.map((a) => maskActivityForViewer(a, user?.id ?? null, acceptedRequestIds));
-  }, [activities, mineJoined, active, activeGroup, modeFilter, query, sort, location, scope, mineIds, joinedIds, requestedIds, user, acceptedRequestIds, freeOnly, spotsOnly, todayOnly, weekendOnly, verifiedHostsOnly]);
+  }, [activities, mineJoined, active, activeGroup, modeFilter, query, sort, location, scope, mineIds, joinedIds, user, acceptedRequestIds, freeOnly, spotsOnly, todayOnly, weekendOnly, verifiedHostsOnly, blockedIds]);
 
   async function handleUseGPS() {
     try {

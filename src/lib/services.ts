@@ -99,22 +99,42 @@ function cleanPublicProfile(raw: unknown): PublicProfile | null {
 
 // ---------- Activities ----------
 export async function listActivities(): Promise<ActivityWithHost[]> {
+  try {
+    const { data, error } = await supabase
+      .from("activities")
+      .select(
+        "id, host_id, title, description, category, date_time, location, latitude, longitude, total_slots, slots_left, cost_per_head, image_url, women_only, verified_only, is_urgent, urgent_until, is_online, amenities, topic_tags, created_at, updated_at, deleted_at, host:profiles!activities_host_id_fkey(id, full_name, username, avatar_url, rating, is_verified, reliability_score)",
+      )
+      .is("deleted_at", null)
+      .order("date_time", { ascending: true })
+      .limit(25);
+    if (!error && data) {
+      return data.map((r) => ({
+        ...r,
+        meeting_link: null,
+        host: cleanPublicProfile(r.host),
+      })) as ActivityWithHost[];
+    }
+  } catch (err) {
+    console.warn("[listActivities] join query failed, falling back to flat fetch", err);
+  }
+
+  // Fallback: fetch activities without profile join, then attach hosts via profiles_public view
   const { data, error } = await supabase
     .from("activities")
-    // Explicitly exclude `meeting_link` — that column is private and only
-    // accessible via the get_meeting_link RPC after host approval.
     .select(
-      "id, host_id, title, description, category, date_time, location, latitude, longitude, total_slots, slots_left, cost_per_head, image_url, women_only, verified_only, is_urgent, urgent_until, is_online, amenities, topic_tags, created_at, updated_at, deleted_at, host:profiles!activities_host_id_fkey(id, full_name, username, avatar_url, rating, is_verified, reliability_score)",
+      "id, host_id, title, description, category, date_time, location, latitude, longitude, total_slots, slots_left, cost_per_head, image_url, women_only, verified_only, is_urgent, urgent_until, is_online, amenities, topic_tags, created_at, updated_at, deleted_at",
     )
     .is("deleted_at", null)
     .order("date_time", { ascending: true })
     .limit(25);
-  if (error) throw error;
-  return (data ?? []).map((r) => ({
-    ...r,
-    meeting_link: null,
-    host: cleanPublicProfile(r.host),
-  })) as ActivityWithHost[];
+
+  if (error) {
+    console.error("[listActivities] fallback fetch failed", error);
+    return [];
+  }
+  const rows = (data ?? []) as Activity[];
+  return attachHosts(rows);
 }
 
 export type NewActivity = {
@@ -556,53 +576,92 @@ export async function getUserActivities(userId: string) {
   const uid = userData.user?.id;
   if (!uid || uid !== userId) throw new Error("Sign in to view your plans");
 
-  const [hostedRes, joinedRes] = await Promise.all([
-    supabase
+  let hostedData: ActivityWithHost[] = [];
+  try {
+    const { data: hosted, error: e1 } = await supabase
       .from("activities")
       .select("*, host:profiles!activities_host_id_fkey(id, full_name, username, avatar_url, rating, is_verified, reliability_score)")
       .eq("host_id", userId)
       .is("deleted_at", null)
       .order("date_time", { ascending: false })
-      .limit(25),
-    supabase
+      .limit(25);
+    if (!e1 && hosted) {
+      hostedData = hosted.map((a) => ({ ...a, host: cleanPublicProfile(a.host) })) as ActivityWithHost[];
+    } else {
+      throw e1 || new Error("Failed hosted query");
+    }
+  } catch {
+    // Fallback: fetch hosted without join and attach hosts
+    const { data: plainHosted } = await supabase
+      .from("activities")
+      .select("*")
+      .eq("host_id", userId)
+      .is("deleted_at", null)
+      .order("date_time", { ascending: false })
+      .limit(25);
+    hostedData = await attachHosts((plainHosted ?? []) as Activity[]);
+  }
+
+  let joinedResData: { status: string; checked_in_at: string | null; activity: ActivityWithHost | null }[] = [];
+  try {
+    const { data: joined, error: e2 } = await supabase
       .from("join_requests")
       .select("status, checked_in_at, activity:activities(*, host:profiles!activities_host_id_fkey(id, full_name, username, avatar_url, rating, is_verified, reliability_score))")
       .eq("user_id", userId)
       .eq("status", "accepted")
-      .limit(25),
-  ]);
-
-  const { data: hosted, error: e1 } = hostedRes;
-  const { data: joined, error: e2 } = joinedRes;
-  if (e1) throw e1;
-  if (e2) console.error("[getUserActivities] joined plans unavailable", e2);
+      .limit(25);
+    if (!e2 && joined) {
+      joinedResData = joined.map((r) => {
+        const act = r.activity as (Activity & { host?: unknown }) | null;
+        return {
+          status: r.status,
+          checked_in_at: r.checked_in_at,
+          activity: act ? ({ ...act, host: cleanPublicProfile(act.host) } as ActivityWithHost) : null,
+        };
+      });
+    } else {
+      throw e2 || new Error("Failed joined query");
+    }
+  } catch {
+    // Fallback: query join_requests with flat activity
+    try {
+      const { data: plainJoined } = await supabase
+        .from("join_requests")
+        .select("status, checked_in_at, activity:activities(*)")
+        .eq("user_id", userId)
+        .eq("status", "accepted")
+        .limit(25);
+      if (plainJoined) {
+        const acts = (plainJoined.map((r) => r.activity).filter(Boolean) as unknown) as Activity[];
+        const attached = await attachHosts(acts);
+        const actMap = new Map(attached.map((a) => [a.id, a]));
+        joinedResData = plainJoined.map((r) => {
+          const act = r.activity as unknown as Activity | null;
+          return {
+            status: r.status,
+            checked_in_at: r.checked_in_at,
+            activity: act ? (actMap.get(act.id) ?? null) : null,
+          };
+        });
+      }
+    } catch (err) {
+      console.error("[getUserActivities] joined fallback failed", err);
+    }
+  }
 
   const archiveCutoff = Date.now() - EVENT_ARCHIVE_MS;
-  const hostedRows = ((hosted ?? []) as (Activity & { host?: unknown })[])
-    .filter((a) => new Date(a.date_time).getTime() >= archiveCutoff)
-    .map((a) => ({ ...a, host: cleanPublicProfile(a.host) })) as ActivityWithHost[];
+  const hostedRows = hostedData.filter((a) => new Date(a.date_time).getTime() >= archiveCutoff);
 
-  const joinedPairs = e2
-    ? []
-    : (joined ?? [])
-        .map((r) => {
-          const act = r.activity as (Activity & { host?: unknown }) | null;
-          return {
-            activity: act ? ({ ...act, host: cleanPublicProfile(act.host) } as ActivityWithHost) : null,
-            checked_in_at: (r as { checked_in_at: string | null }).checked_in_at,
-            status: r.status as "accepted",
-          };
-        })
-        .filter(
-          (p) =>
-            p.activity &&
-            p.activity.deleted_at == null &&
-            new Date(p.activity.date_time).getTime() >= archiveCutoff,
-        );
+  const joinedPairs = joinedResData.filter(
+    (p) =>
+      p.activity &&
+      p.activity.deleted_at == null &&
+      new Date(p.activity.date_time).getTime() >= archiveCutoff,
+  );
   const joinedFull: JoinedActivity[] = joinedPairs.map((p) => ({
     ...p.activity!,
     checked_in_at: p.checked_in_at,
-    join_status: p.status,
+    join_status: p.status as "accepted",
   }));
   return {
     hosted: hostedRows,
