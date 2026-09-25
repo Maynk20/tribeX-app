@@ -254,20 +254,18 @@ class ActivitiesState extends ChangeNotifier {
                 .from('profiles_public')
                 .select('id, full_name, username, avatar_url, rating, is_verified')
                 .filter('id', 'in', hostIds);
-            if (profRes is List<dynamic>) {
-              final profMap = <String, UserProfile>{};
-              for (final p in profRes) {
-                if (p is Map<String, dynamic> && p['id'] != null) {
-                  profMap[p['id'].toString()] = UserProfile.fromJson(p);
-                }
+            final profMap = <String, UserProfile>{};
+            for (final p in profRes) {
+              if (p['id'] != null) {
+                profMap[p['id'].toString()] = UserProfile.fromJson(p);
               }
-              _activities = _activities.map((a) {
-                if (a.host == null && profMap.containsKey(a.hostId)) {
-                  return a.copyWith(host: profMap[a.hostId]);
-                }
-                return a;
-              }).toList();
             }
+            _activities = _activities.map((a) {
+              if (a.host == null && profMap.containsKey(a.hostId)) {
+                return a.copyWith(host: profMap[a.hostId]);
+              }
+              return a;
+            }).toList();
           } catch (_) {
             // Ignore profile enrichment failure
           }

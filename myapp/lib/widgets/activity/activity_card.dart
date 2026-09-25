@@ -483,15 +483,12 @@ class ActivityCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // Action buttons row: flex flex-wrap items-center gap-1.5
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                // Action buttons row
+                Row(
                   children: [
                     if (isHost) ...[
                       // Urgent toggle: h-9 w-9 rounded-full
-                      if (activity.slotsLeft > 0)
+                      if (activity.slotsLeft > 0) ...[
                         _CircleIconButton(
                           icon: LucideIcons.zap,
                           size: 14,
@@ -506,16 +503,21 @@ class ActivityCard extends StatelessWidget {
                               ? 'Cancel urgent alert'
                               : 'Send urgent spot alert',
                         ),
+                        const SizedBox(width: 6),
+                      ],
 
                       // Manage button: rounded-full border border-primary/40 bg-primary/10 px-3 py-2
-                      _ActionButton(
-                        label: 'Manage',
-                        onTap: onManage ?? () {},
-                        bgColor: AppColors.primaryMuted,
-                        textColor: AppColors.primary,
-                        borderColor: AppColors.primary.withValues(alpha: 0.4),
-                        flex: true,
+                      Expanded(
+                        child: _ActionButton(
+                          label: 'Manage',
+                          onTap: onManage ?? () {},
+                          bgColor: AppColors.primaryMuted,
+                          textColor: AppColors.primary,
+                          borderColor: AppColors.primary.withValues(alpha: 0.4),
+                          flex: true,
+                        ),
                       ),
+                      const SizedBox(width: 6),
 
                       // Chat icon button: h-9 w-9 rounded-full border
                       _CircleIconButton(
@@ -530,6 +532,7 @@ class ActivityCard extends StatelessWidget {
                             : AppColors.mutedForegroundLight,
                         borderColor: border.withValues(alpha: 0.6),
                       ),
+                      const SizedBox(width: 6),
 
                       // Edit icon button
                       _CircleIconButton(
@@ -544,6 +547,7 @@ class ActivityCard extends StatelessWidget {
                             : AppColors.mutedForegroundLight,
                         borderColor: border.withValues(alpha: 0.6),
                       ),
+                      const SizedBox(width: 6),
 
                       // Delete icon button
                       _CircleIconButton(
@@ -572,9 +576,8 @@ class ActivityCard extends StatelessWidget {
                             : AppColors.mutedForegroundLight,
                         borderColor: border.withValues(alpha: 0.6),
                       ),
-
-                      // Report flag button (guest)
-                      if (onReport != null)
+                      if (onReport != null) ...[
+                        const SizedBox(width: 6),
                         _CircleIconButton(
                           icon: LucideIcons.flag,
                           size: 14,
@@ -586,61 +589,63 @@ class ActivityCard extends StatelessWidget {
                           borderColor: border.withValues(alpha: 0.6),
                           tooltip: 'Report concern',
                         ),
+                      ],
+                      const SizedBox(width: 6),
 
                       // Join / status button
-                      if (myStatus == JoinStatus.pending)
-                        Expanded(
-                          child: _ActionButton(
-                            icon: LucideIcons.hourglass,
-                            label: 'Request Pending',
-                            onTap: null,
-                            bgColor: isDark
-                                ? AppColors.mutedDark
-                                : AppColors.mutedLight,
-                            textColor: isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight,
-                            borderColor: border.withValues(alpha: 0.6),
-                          ),
-                        )
-                      else if (myStatus == JoinStatus.accepted)
-                        Expanded(
-                          child: _ActionButton(
-                            icon: LucideIcons.check,
-                            label: 'Joined',
-                            onTap: onChat,
-                            bgColor: const Color(0x2622C55E),
-                            textColor: isDark
-                                ? const Color(0xFF4ADE80)
-                                : const Color(0xFF16A34A),
-                          ),
-                        )
-                      else if (safetyBlock != null)
-                        Expanded(
-                          child: _ActionButton(
-                            icon: LucideIcons.shield,
-                            label: safetyBlock,
-                            onTap: null,
-                            bgColor: isDark
-                                ? AppColors.mutedDark
-                                : AppColors.mutedLight,
-                            textColor: isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight,
-                            borderColor: border.withValues(alpha: 0.6),
-                          ),
-                        )
-                      else
-                        Expanded(
-                          child: _ActionButton(
-                            label: activity.slotsLeft <= 0
-                                ? 'Full'
-                                : 'Request to Join',
-                            onTap: activity.slotsLeft <= 0 ? null : onJoin,
-                            bgColor: AppColors.primary,
-                            textColor: Colors.white,
-                          ),
-                        ),
+                      Expanded(
+                        child: myStatus == JoinStatus.pending
+                            ? _ActionButton(
+                                icon: LucideIcons.hourglass,
+                                label: 'Request Pending',
+                                onTap: null,
+                                bgColor: isDark
+                                    ? AppColors.mutedDark
+                                    : AppColors.mutedLight,
+                                textColor: isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                                borderColor: border.withValues(alpha: 0.6),
+                                flex: true,
+                              )
+                            : myStatus == JoinStatus.accepted
+                                ? _ActionButton(
+                                    icon: LucideIcons.check,
+                                    label: 'Joined',
+                                    onTap: onChat,
+                                    bgColor: const Color(0x2622C55E),
+                                    textColor: isDark
+                                        ? const Color(0xFF4ADE80)
+                                        : const Color(0xFF16A34A),
+                                    flex: true,
+                                  )
+                                : safetyBlock != null
+                                    ? _ActionButton(
+                                        icon: LucideIcons.shield,
+                                        label: safetyBlock,
+                                        onTap: null,
+                                        bgColor: isDark
+                                            ? AppColors.mutedDark
+                                            : AppColors.mutedLight,
+                                        textColor: isDark
+                                            ? AppColors.mutedForegroundDark
+                                            : AppColors.mutedForegroundLight,
+                                        borderColor:
+                                            border.withValues(alpha: 0.6),
+                                        flex: true,
+                                      )
+                                    : _ActionButton(
+                                        label: activity.slotsLeft <= 0
+                                            ? 'Full'
+                                            : 'Request to Join',
+                                        onTap: activity.slotsLeft <= 0
+                                            ? null
+                                            : onJoin,
+                                        bgColor: AppColors.primary,
+                                        textColor: Colors.white,
+                                        flex: true,
+                                      ),
+                      ),
                     ],
                   ],
                 ),

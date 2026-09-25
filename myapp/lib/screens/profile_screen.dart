@@ -229,6 +229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 ElevatedButton(
                                   onPressed: () {
+                                    actState.setScope(FeedScope.discover);
                                     authState.signOut();
                                     Navigator.of(ctx).pop();
                                   },
