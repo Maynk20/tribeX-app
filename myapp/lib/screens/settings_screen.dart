@@ -330,7 +330,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                                 setModalState(() => isSaving = true);
 
-                                await context.read<AuthState>().updateProfile(
+                                final auth = context.read<AuthState>();
+                                final success = await auth.updateProfile(
                                   fullName: name,
                                   username: uname,
                                   avatarUrl: avatarCtrl.text.trim().isNotEmpty
@@ -349,6 +350,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 );
 
                                 if (!ctx.mounted) return;
+                                if (!success) {
+                                  setModalState(() => isSaving = false);
+                                  AppToast.show(
+                                    ctx,
+                                    auth.error ??
+                                        'Failed to update profile. Please try again.',
+                                    isError: true,
+                                  );
+                                  return;
+                                }
+
                                 Navigator.of(ctx).pop();
                                 nameCtrl.dispose();
                                 unameCtrl.dispose();

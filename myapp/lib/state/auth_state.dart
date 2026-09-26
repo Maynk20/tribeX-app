@@ -10,6 +10,7 @@ import '../services/supabase_service.dart';
 class AuthState extends ChangeNotifier {
   UserProfile? _currentUser;
   bool _isLoading = true;
+  String? _error;
   bool _pushEnabled = true;
   final Set<String> _blockedUserIds = {};
   StreamSubscription<dynamic>? _authSubscription;
@@ -23,6 +24,7 @@ class AuthState extends ChangeNotifier {
   UserProfile? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
+  String? get error => _error;
   bool get pushEnabled => _pushEnabled;
   Set<String> get blockedUserIds => Set.unmodifiable(_blockedUserIds);
 
@@ -216,7 +218,7 @@ class AuthState extends ChangeNotifier {
     }
   }
 
-  Future<void> updateProfile({
+  Future<bool> updateProfile({
     String? fullName,
     String? username,
     String? phone,
@@ -227,7 +229,7 @@ class AuthState extends ChangeNotifier {
     double? latitude,
     double? longitude,
   }) async {
-    if (_currentUser == null || _isDisposed) return;
+    if (_currentUser == null || _isDisposed) return false;
 
     final cur = _currentUser!;
     final hasChanges =
@@ -242,9 +244,10 @@ class AuthState extends ChangeNotifier {
         (longitude != null && longitude != cur.longitude) ||
         !cur.hasCompletedProfile;
 
-    if (!hasChanges) return;
+    if (!hasChanges) return true;
 
     _isLoading = true;
+    _error = null;
     if (!_isDisposed) notifyListeners();
 
     final now = DateTime.now();
@@ -268,7 +271,7 @@ class AuthState extends ChangeNotifier {
 
     try {
       await SupabaseService.client?.from('profiles').upsert(updates);
-      if (_isDisposed) return;
+      if (_isDisposed) return false;
       _currentUser = cur.copyWith(
         fullName: fullName,
         username: username,
@@ -283,8 +286,11 @@ class AuthState extends ChangeNotifier {
         termsAcceptedAt: termsAcceptedAt,
         termsVersion: 'v1.0',
       );
-    } catch (_) {
-      // ignore error
+      return true;
+    } catch (e) {
+      debugPrint('updateProfile error: $e');
+      _error = e.toString();
+      return false;
     } finally {
       if (!_isDisposed) {
         _isLoading = false;

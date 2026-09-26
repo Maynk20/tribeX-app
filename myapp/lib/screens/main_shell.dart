@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_colors.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
+import '../state/chat_state.dart';
 import '../state/notifications_state.dart';
 import '../widgets/common/custom_bottom_nav.dart';
 import '../widgets/common/loaders.dart';
@@ -121,6 +122,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           context.read<NotificationsState>().initUser(currentUserId);
+          if (currentUserId == null) {
+            context.read<ChatState>().clear();
+          }
         }
       });
     }

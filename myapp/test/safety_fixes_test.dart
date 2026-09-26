@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myapp/models/expense.dart';
+import 'package:myapp/models/poll.dart';
 import 'package:myapp/services/location_service.dart';
 import 'package:myapp/services/report_service.dart';
 import 'package:myapp/state/activities_state.dart';
@@ -68,6 +70,90 @@ void main() {
         reason: ReportReason.spam,
       );
       expect(result, isFalse);
+    });
+  });
+
+  group('Expense & ExpenseMember Schema Compatibility', () {
+    test('ExpenseMember parses Supabase columns: amount, status', () {
+      final json = {
+        'user_id': 'user_1',
+        'amount': 250.0,
+        'status': 'paid',
+        'profiles_public': {'full_name': 'Aarav Patel'},
+      };
+      final member = ExpenseMember.fromJson(json);
+      expect(member.userId, 'user_1');
+      expect(member.name, 'Aarav Patel');
+      expect(member.amount, 250.0);
+      expect(member.isPaid, isTrue);
+
+      final out = member.toJson();
+      expect(out['amount'], 250.0);
+      expect(out['status'], 'paid');
+    });
+
+    test('ExpenseMember parses legacy columns: share_amount, is_paid', () {
+      final json = {
+        'user_id': 'user_2',
+        'share_amount': 150.0,
+        'is_paid': false,
+      };
+      final member = ExpenseMember.fromJson(json);
+      expect(member.amount, 150.0);
+      expect(member.isPaid, isFalse);
+    });
+
+    test('Expense parses created_by from Supabase', () {
+      final json = {
+        'id': 'exp_1',
+        'activity_id': 'act_1',
+        'created_by': 'host_123',
+        'description': 'Dinner split',
+        'total_amount': 500.0,
+        'expense_shares': [
+          {'user_id': 'user_1', 'amount': 250.0, 'status': 'paid'},
+          {'user_id': 'user_2', 'amount': 250.0, 'status': 'pending'},
+        ],
+      };
+      final exp = Expense.fromJson(json);
+      expect(exp.id, 'exp_1');
+      expect(exp.creatorId, 'host_123');
+      expect(exp.totalAmount, 500.0);
+      expect(exp.members.length, 2);
+      expect(exp.paidCount, 1);
+      expect(exp.perHead, 250.0);
+
+      final out = exp.toJson();
+      expect(out['created_by'], 'host_123');
+    });
+  });
+
+  group('Poll Schema Compatibility', () {
+    test('Poll parses created_by and poll_votes with option_index', () {
+      final json = {
+        'id': 'poll_1',
+        'activity_id': 'act_1',
+        'created_by': 'user_abc',
+        'question': 'What time should we meet?',
+        'options': ['5:00 PM', '6:00 PM', '7:00 PM'],
+        'poll_votes': [
+          {'poll_id': 'poll_1', 'user_id': 'u1', 'option_index': 0},
+          {'poll_id': 'poll_1', 'user_id': 'u2', 'option_index': 0},
+          {'poll_id': 'poll_1', 'user_id': 'u3', 'option_index': 1},
+        ],
+      };
+      final poll = Poll.fromJson(json);
+      expect(poll.id, 'poll_1');
+      expect(poll.creatorId, 'user_abc');
+      expect(poll.options.length, 3);
+      expect(poll.options[0].text, '5:00 PM');
+      expect(poll.options[0].votes, 2);
+      expect(poll.options[1].votes, 1);
+      expect(poll.options[2].votes, 0);
+      expect(poll.totalVotes, 3);
+
+      final out = poll.toJson();
+      expect(out['created_by'], 'user_abc');
     });
   });
 }

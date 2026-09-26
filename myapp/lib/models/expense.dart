@@ -14,20 +14,29 @@ class ExpenseMember {
   });
 
   factory ExpenseMember.fromJson(Map<String, dynamic> json) {
-    final profile = json['profiles_public'] as Map<String, dynamic>?;
+    final profile = (json['profiles_public'] ?? json['profiles'])
+        as Map<String, dynamic>?;
+    final isPaidVal = json['is_paid'] == true || json['status'] == 'paid';
+    final amountVal =
+        ((json['amount'] ?? json['share_amount'] ?? 0) as num).toDouble();
+
     return ExpenseMember(
       userId: (json['user_id'] ?? '') as String,
       name:
           (profile?['full_name'] ?? profile?['username'] ?? 'Squad Member')
               as String,
       avatarUrl: profile?['avatar_url'] as String?,
-      amount: ((json['share_amount'] ?? 0) as num).toDouble(),
-      isPaid: (json['is_paid'] ?? false) as bool,
+      amount: amountVal,
+      isPaid: isPaidVal,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'user_id': userId, 'share_amount': amount, 'is_paid': isPaid};
+    return {
+      'user_id': userId,
+      'amount': amount,
+      'status': isPaid ? 'paid' : 'pending',
+    };
   }
 
   ExpenseMember copyWith({
@@ -71,7 +80,8 @@ class Expense {
   });
 
   factory Expense.fromJson(Map<String, dynamic> json) {
-    final creator = json['profiles_public'] as Map<String, dynamic>?;
+    final creator = (json['profiles_public'] ?? json['profiles'])
+        as Map<String, dynamic>?;
     final sharesRaw = (json['expense_shares'] as List<dynamic>?) ?? [];
     final membersList = sharesRaw
         .map((s) => ExpenseMember.fromJson(s as Map<String, dynamic>))
@@ -80,7 +90,8 @@ class Expense {
     return Expense(
       id: (json['id'] ?? '') as String,
       activityId: (json['activity_id'] ?? '') as String,
-      creatorId: (json['creator_id'] ?? '') as String,
+      creatorId:
+          (json['created_by'] ?? json['creator_id'] ?? '') as String,
       creatorName:
           (creator?['full_name'] ?? creator?['username'] ?? 'Host') as String,
       description: (json['description'] ?? '') as String,
@@ -97,7 +108,7 @@ class Expense {
     return {
       'id': id,
       'activity_id': activityId,
-      'creator_id': creatorId,
+      'created_by': creatorId,
       'description': description,
       'total_amount': totalAmount,
       'upi_id': upiId,

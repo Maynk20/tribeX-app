@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/utils/app_toast.dart';
 import '../state/auth_state.dart';
 import 'onboarding_screen.dart';
 
@@ -32,7 +33,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     setState(() => _isSaving = true);
 
     final auth = context.read<AuthState>();
-    await auth.updateProfile(
+    final success = await auth.updateProfile(
       phone: _phoneCtrl.text.trim().isNotEmpty ? _phoneCtrl.text.trim() : null,
       city: _cityCtrl.text.trim().isNotEmpty ? _cityCtrl.text.trim() : null,
       bio: _bioCtrl.text.trim().isNotEmpty ? _bioCtrl.text.trim() : null,
@@ -42,10 +43,18 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     if (!mounted) return;
     setState(() => _isSaving = false);
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-    );
+    if (success) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+      );
+    } else {
+      AppToast.show(
+        context,
+        auth.error ?? 'Could not update profile. Please try again.',
+        isError: true,
+      );
+    }
   }
 
   @override
