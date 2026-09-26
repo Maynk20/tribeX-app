@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../services/supabase_service.dart';
 
 enum ReportReason {
@@ -49,6 +51,10 @@ class ReportService {
   ReportService._();
 
   /// Submits a user/content report to the Supabase `reports` table.
+  ///
+  /// Returns `true` only if the database insert actually succeeded.
+  /// Returns `false` if the client is unavailable, the table does not exist,
+  /// or any other backend error occurs.
   static Future<bool> submitReport({
     required String reporterId,
     required String targetType, // 'user' | 'activity' | 'chat_message'
@@ -57,6 +63,11 @@ class ReportService {
     String? notes,
   }) async {
     final client = SupabaseService.client;
+
+    if (client == null) {
+      debugPrint('ReportService: Supabase client not initialized');
+      return false;
+    }
 
     final reportPayload = {
       'reporter_id': reporterId,
@@ -69,13 +80,14 @@ class ReportService {
     };
 
     try {
-      if (client != null) {
-        await client.from('reports').insert(reportPayload);
-      }
+      await client.from('reports').insert(reportPayload);
       return true;
-    } catch (_) {
-      // Fallback: report recorded locally for resilience
-      return true;
+    } catch (e) {
+      // Do NOT silently return true — the insert genuinely failed.
+      // Common causes: the `reports` table does not exist, RLS denies
+      // the insert, or a network error occurred.
+      debugPrint('ReportService.submitReport failed: $e');
+      return false;
     }
   }
 }

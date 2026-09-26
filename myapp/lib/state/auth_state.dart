@@ -200,20 +200,18 @@ class AuthState extends ChangeNotifier {
 
   Future<bool> deleteAccount() async {
     if (_currentUser == null) return false;
-    final userId = _currentUser!.id;
 
     try {
       final client = SupabaseService.client;
-      if (client != null) {
-        try {
-          await client.rpc('delete_user_account', params: {'_user_id': userId});
-        } catch (_) {
-          await client.from('profiles').delete().eq('id', userId);
-        }
-      }
+      if (client == null) return false;
+
+      // The SQL function delete_user_account() takes no parameters — it uses
+      // auth.uid() internally via SECURITY DEFINER.
+      await client.rpc('delete_user_account');
       await signOut();
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('deleteAccount failed: $e');
       return false;
     }
   }

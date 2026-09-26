@@ -5,9 +5,10 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
 import '../../models/join_request.dart';
+import '../../services/location_service.dart';
 import '../../state/activities_state.dart';
 
-class CheckInPanel extends StatelessWidget {
+class CheckInPanel extends StatefulWidget {
   final Activity activity;
   final bool isHost;
   final JoinRequest? myRequest;
@@ -20,17 +21,92 @@ class CheckInPanel extends StatelessWidget {
   });
 
   @override
+  State<CheckInPanel> createState() => _CheckInPanelState();
+}
+
+class _CheckInPanelState extends State<CheckInPanel> {
+  bool _isCheckingIn = false;
+
+  Future<void> _performCheckIn() async {
+    if (_isCheckingIn) return;
+    setState(() => _isCheckingIn = true);
+
+    // 1. Get real GPS coordinates
+    final locResult = await LocationService.getCurrentPosition();
+
+    if (!mounted) return;
+
+    if (!locResult.isSuccess) {
+      setState(() => _isCheckingIn = false);
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        locResult.error ?? 'Could not get your location.',
+        isError: true,
+      );
+      return;
+    }
+
+    // 2. Call the RPC with real coordinates
+    final state = context.read<ActivitiesState>();
+    final result = await state.checkInAtVenue(
+      activityId: widget.activity.id,
+      lat: locResult.latitude!,
+      lon: locResult.longitude!,
+    );
+
+    if (!mounted) return;
+    setState(() => _isCheckingIn = false);
+
+    if (!mounted) return;
+
+    // 3. Show result based on backend response
+    if (result.isSuccess) {
+      AppToast.show(context, '✅ Checked in · Verified present at venue');
+    } else if (result.isAlready) {
+      AppToast.show(context, 'You have already checked in.');
+    } else if (result.isTooFar) {
+      final dist = result.distanceM?.round() ?? 0;
+      AppToast.show(
+        context,
+        'You are ${dist}m away — must be within 150m of the venue.',
+        isError: true,
+      );
+    } else {
+      // Error from backend
+      final msg = result.errorMessage ?? 'Check-in failed. Please try again.';
+      // Extract user-friendly message from Supabase exception
+      final friendly = _extractFriendlyMessage(msg);
+      AppToast.show(context, friendly, isError: true);
+    }
+  }
+
+  String _extractFriendlyMessage(String raw) {
+    // Supabase exceptions often wrap the PG error as:
+    // "PostgrestException(message: ..., ...)"
+    final match = RegExp(r'message:\s*(.+?)(?:,|\))').firstMatch(raw);
+    if (match != null) {
+      return match.group(1)!.trim();
+    }
+    // Or "Exception: <message>"
+    if (raw.startsWith('Exception: ')) {
+      return raw.substring('Exception: '.length);
+    }
+    return 'Check-in failed. Please try again.';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = context.watch<ActivitiesState>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    final attendees = state.getRequestsForActivity(activity.id);
+    final attendees = state.getRequestsForActivity(widget.activity.id);
 
-    final isCheckedIn = myRequest?.isCheckedIn ?? false;
-    final hasPin = activity.latitude != null && activity.longitude != null;
+    final isCheckedIn = widget.myRequest?.isCheckedIn ?? false;
+    final hasPin = widget.activity.latitude != null && widget.activity.longitude != null;
 
-    if (!hasPin && !isHost) return const SizedBox.shrink();
+    if (!hasPin && !widget.isHost) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -86,17 +162,20 @@ class CheckInPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!isHost && myRequest != null && !isCheckedIn && hasPin)
+              if (!widget.isHost && widget.myRequest != null && !isCheckedIn && hasPin)
                 ElevatedButton.icon(
-                  onPressed: () {
-                    state.markAttendeeCheckIn(activity.id, myRequest!.userId);
-                    AppToast.show(
-                      context,
-                      '✅ Checked in · Verified present at venue',
-                    );
-                  },
-                  icon: const Icon(Icons.pin_drop, size: 14),
-                  label: const Text('Check in', style: TextStyle(fontSize: 11)),
+                  onPressed: _isCheckingIn ? null : _performCheckIn,
+                  icon: _isCheckingIn
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.pin_drop, size: 14),
+                  label: Text(
+                    _isCheckingIn ? 'Verifying…' : 'Check in',
+                    style: const TextStyle(fontSize: 11),
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -104,7 +183,7 @@ class CheckInPanel extends StatelessWidget {
                     ),
                   ),
                 )
-              else if (!isHost && isCheckedIn)
+              else if (!widget.isHost && isCheckedIn)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -138,7 +217,7 @@ class CheckInPanel extends StatelessWidget {
           ),
 
           // Host Roster List
-          if (isHost && attendees.isNotEmpty) ...[
+          if (widget.isHost && attendees.isNotEmpty) ...[
             const SizedBox(height: 10),
             Divider(height: 1, color: border),
             const SizedBox(height: 8),
