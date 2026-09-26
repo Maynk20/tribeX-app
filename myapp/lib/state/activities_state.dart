@@ -10,6 +10,25 @@ import '../services/supabase_service.dart';
 
 enum SortKey { date, distance, popularity }
 
+/// Structured result from the check_in_activity RPC.
+class CheckInResult {
+  /// 'checked_in', 'already', 'too_far', or 'error'.
+  final String status;
+  final double? distanceM;
+  final String? errorMessage;
+
+  const CheckInResult({
+    required this.status,
+    this.distanceM,
+    this.errorMessage,
+  });
+
+  bool get isSuccess => status == 'checked_in';
+  bool get isAlready => status == 'already';
+  bool get isTooFar => status == 'too_far';
+  bool get isError => status == 'error';
+}
+
 enum ModeFilter { all, inPerson, online }
 
 enum FeedScope { discover, joined, hosting }
@@ -555,7 +574,7 @@ class ActivitiesState extends ChangeNotifier {
         try {
           await SupabaseService.client?.rpc(
             'accept_join_request',
-            params: {'_request_id': requestId},
+            params: {'_req_id': requestId},
           );
         } catch (_) {
           await SupabaseService.client
@@ -581,7 +600,7 @@ class ActivitiesState extends ChangeNotifier {
       try {
         await SupabaseService.client?.rpc(
           'remove_join_request',
-          params: {'_request_id': requestId},
+          params: {'_req_id': requestId},
         );
       } catch (_) {
         await SupabaseService.client
@@ -596,16 +615,31 @@ class ActivitiesState extends ChangeNotifier {
     }
   }
 
-  Future<bool> markAttendeeCheckIn(String activityId, String userId) async {
+  /// Calls the check_in_activity RPC with the user's real GPS coordinates.
+  /// Returns a [CheckInResult] with the backend status and distance.
+  Future<CheckInResult> checkInAtVenue({
+    required String activityId,
+    required double lat,
+    required double lon,
+  }) async {
     try {
-      await SupabaseService.client?.rpc(
+      final res = await SupabaseService.client?.rpc(
         'check_in_activity',
-        params: {'_activity_id': activityId, '_user_id': userId},
+        params: {'_activity_id': activityId, '_lat': lat, '_lon': lon},
       );
       await fetchActivities();
-      return true;
+      // The RPC returns a table with {status, distance_m}
+      if (res is List && res.isNotEmpty) {
+        final row = res.first as Map<String, dynamic>;
+        return CheckInResult(
+          status: row['status'] as String? ?? 'unknown',
+          distanceM: (row['distance_m'] as num?)?.toDouble(),
+        );
+      }
+      return const CheckInResult(status: 'checked_in');
     } catch (e) {
-      return false;
+      final msg = e.toString();
+      return CheckInResult(status: 'error', errorMessage: msg);
     }
   }
 
@@ -613,7 +647,7 @@ class ActivitiesState extends ChangeNotifier {
     try {
       await SupabaseService.client?.rpc(
         'mark_no_show',
-        params: {'_request_id': requestId},
+        params: {'_req_id': requestId},
       );
       await fetchActivities();
       return true;

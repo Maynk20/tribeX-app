@@ -3,13 +3,21 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
+import '../../services/location_service.dart';
 
-class EmergencySosModal extends StatelessWidget {
+class EmergencySosModal extends StatefulWidget {
   const EmergencySosModal({super.key});
 
   static void show(BuildContext context) {
     showDialog(context: context, builder: (ctx) => const EmergencySosModal());
   }
+
+  @override
+  State<EmergencySosModal> createState() => _EmergencySosModalState();
+}
+
+class _EmergencySosModalState extends State<EmergencySosModal> {
+  bool _isFetchingLocation = false;
 
   Future<void> _makeCall(String number) async {
     final uri = Uri.parse('tel:$number');
@@ -18,18 +26,36 @@ class EmergencySosModal extends StatelessWidget {
     }
   }
 
-  Future<void> _shareLocation(BuildContext context) async {
-    const lat = 12.9784;
-    const lon = 77.6408;
-    const mapsUrl = 'https://maps.google.com/?q=$lat,$lon';
-    const text = '🚨 tribeX SOS — I need help. My live location: $mapsUrl';
+  Future<void> _shareLocation() async {
+    if (_isFetchingLocation) return;
+    setState(() => _isFetchingLocation = true);
+
+    final result = await LocationService.getCurrentPosition();
+
+    if (!mounted) return;
+    setState(() => _isFetchingLocation = false);
+
+    if (!result.isSuccess) {
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        result.error ?? 'Could not get your location.',
+        isError: true,
+      );
+      return;
+    }
+
+    final lat = result.latitude!;
+    final lon = result.longitude!;
+    final mapsUrl = 'https://maps.google.com/?q=$lat,$lon';
+    final text = '🚨 tribeX SOS — I need help. My live location: $mapsUrl';
     final waUri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
 
     if (await canLaunchUrl(waUri)) {
       await launchUrl(waUri, mode: LaunchMode.externalApplication);
     } else {
-      if (context.mounted) {
-        AppToast.show(context, 'Live location message copied to clipboard');
+      if (mounted) {
+        AppToast.show(context, 'Could not open WhatsApp. Copy the link and share manually.');
       }
     }
   }
@@ -131,9 +157,15 @@ class EmergencySosModal extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => _shareLocation(context),
-                icon: const Icon(Icons.share, size: 16),
-                label: const Text('Share My Live Location'),
+                onPressed: _isFetchingLocation ? null : _shareLocation,
+                icon: _isFetchingLocation
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.share, size: 16),
+                label: Text(_isFetchingLocation ? 'Getting location…' : 'Share My Live Location'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isDark ? Colors.white : Colors.black,
                   foregroundColor: isDark ? Colors.black : Colors.white,
