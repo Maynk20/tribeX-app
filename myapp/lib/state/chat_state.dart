@@ -96,13 +96,24 @@ class ChatState extends ChangeNotifier {
     if (client == null || _isDisposed) return;
 
     try {
-      final res = await client
-          .from('expenses')
-          .select(
-            '*, profiles_public(*), expense_shares(*, profiles_public(*))',
-          )
-          .eq('id', expenseId)
-          .maybeSingle();
+      dynamic res;
+      try {
+        res = await client
+            .from('expenses')
+            .select(
+              '*, profiles_public(*), expense_shares(*, profiles_public(*))',
+            )
+            .eq('id', expenseId)
+            .maybeSingle();
+      } catch (_) {
+        res = await client
+            .from('expenses')
+            .select(
+              '*, profiles(*), expense_shares(*, profiles(*))',
+            )
+            .eq('id', expenseId)
+            .maybeSingle();
+      }
 
       if (res != null && !_isDisposed) {
         final exp = Expense.fromJson(res);
@@ -217,7 +228,7 @@ class ChatState extends ChangeNotifier {
           .from('expenses')
           .insert({
             'activity_id': activityId,
-            'creator_id': creatorId,
+            'created_by': creatorId,
             'description': description,
             'total_amount': totalAmount,
             'upi_id': upiId,
@@ -228,16 +239,14 @@ class ChatState extends ChangeNotifier {
       final expId = expRes['id'] as String;
 
       if (members.isNotEmpty) {
-        await client
-            .from('expense_shares')
-            .insert(
+        await client.from('expense_shares').insert(
               members
                   .map(
                     (m) => {
                       'expense_id': expId,
                       'user_id': m.userId,
-                      'share_amount': m.amount,
-                      'is_paid': m.isPaid,
+                      'amount': m.amount,
+                      'status': m.isPaid ? 'paid' : 'pending',
                     },
                   )
                   .toList(),
@@ -252,7 +261,9 @@ class ChatState extends ChangeNotifier {
         text: 'EXPENSE:$expId',
         sender: creator,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('createExpense error: $e');
+    }
   }
 
   Future<void> toggleMemberPaid(String expenseId, String userId) async {
@@ -268,12 +279,17 @@ class ChatState extends ChangeNotifier {
       try {
         await client
             .from('expense_shares')
-            .update({'is_paid': nextPaid})
+            .update({
+              'status': nextPaid ? 'paid' : 'pending',
+              'paid_at': nextPaid ? DateTime.now().toIso8601String() : null,
+            })
             .eq('expense_id', expenseId)
             .eq('user_id', userId);
 
         await fetchExpense(expenseId);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('toggleMemberPaid error: $e');
+      }
     }
   }
 
@@ -292,7 +308,7 @@ class ChatState extends ChangeNotifier {
           .from('polls')
           .insert({
             'activity_id': activityId,
-            'creator_id': creatorId,
+            'created_by': creatorId,
             'question': question,
             'options': optionTexts,
           })
@@ -309,22 +325,31 @@ class ChatState extends ChangeNotifier {
         text: 'POLL:$pollId',
         sender: creator,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('createPoll error: $e');
+    }
   }
 
   Future<void> votePoll(String pollId, String optionId, String userId) async {
     final client = SupabaseService.client;
     if (client == null || _isDisposed) return;
 
+    final int optionIdx = int.tryParse(optionId) ?? 0;
+
     try {
-      await client.from('poll_votes').upsert({
-        'poll_id': pollId,
-        'option_id': optionId,
-        'user_id': userId,
-      });
+      await client.from('poll_votes').upsert(
+        {
+          'poll_id': pollId,
+          'user_id': userId,
+          'option_index': optionIdx,
+        },
+        onConflict: 'poll_id,user_id',
+      );
 
       await fetchPoll(pollId);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('votePoll error: $e');
+    }
   }
 
   Future<void> submitRating(RatingItem rating) async {
@@ -333,18 +358,16 @@ class ChatState extends ChangeNotifier {
 
     try {
       await client.from('ratings').insert({
-        'activity_id': rating.planId,
+        'plan_id': rating.planId,
         'reviewer_id': rating.reviewerId,
         'reviewee_id': rating.revieweeId,
-        'stars': rating.rating,
-        'tags': rating.badges,
+        'rating': rating.rating,
+        'badges': rating.badges,
         'comment': rating.comment,
       });
 
-      await client.rpc(
-        'recalculate_user_rating',
-        params: {'_user_id': rating.revieweeId},
-      );
+      // Recalculation is automatically handled by the database trigger
+      // `ratings_recalc_aiud` on insert/update/delete.
 
       final idx = _ratings.indexWhere((r) => r.id == rating.id);
       if (idx != -1) {
@@ -353,7 +376,9 @@ class ChatState extends ChangeNotifier {
         _ratings.add(rating);
       }
       if (!_isDisposed) notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('submitRating error: $e');
+    }
   }
 
   RatingItem? getMyRating(String planId, String reviewerId, String revieweeId) {
@@ -367,6 +392,19 @@ class ChatState extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Reset all local chat cache and unsubscribe from realtime channels (e.g. on logout)
+  void clear() {
+    for (final channel in _activeChannels.values) {
+      channel.unsubscribe();
+    }
+    _activeChannels.clear();
+    _messagesByActivity.clear();
+    _expenses.clear();
+    _polls.clear();
+    _ratings.clear();
+    if (!_isDisposed) notifyListeners();
   }
 
   @override

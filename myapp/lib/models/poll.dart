@@ -54,13 +54,20 @@ class Poll {
     final optsRaw = (json['options'] as List<dynamic>?) ?? [];
     final votesRaw = (json['poll_votes'] as List<dynamic>?) ?? [];
 
-    // Map votes by option ID
-    final Map<String, List<String>> votesByOption = {};
+    // Map votes by option index
+    final Map<int, List<String>> votesByIndex = {};
+    final Map<String, List<String>> votesByStrId = {};
     for (final v in votesRaw) {
-      final optId = v['option_id']?.toString() ?? '';
       final uId = v['user_id']?.toString() ?? '';
-      if (optId.isNotEmpty && uId.isNotEmpty) {
-        votesByOption.putIfAbsent(optId, () => []).add(uId);
+      if (uId.isEmpty) continue;
+
+      if (v['option_index'] != null) {
+        final idx = (v['option_index'] as num).toInt();
+        votesByIndex.putIfAbsent(idx, () => []).add(uId);
+      }
+      final optId = v['option_id']?.toString() ?? '';
+      if (optId.isNotEmpty) {
+        votesByStrId.putIfAbsent(optId, () => []).add(uId);
       }
     }
 
@@ -69,15 +76,25 @@ class Poll {
       final item = optsRaw[i];
       final text = item is String ? item : (item['text'] ?? '').toString();
       final optId = item is Map ? (item['id'] ?? text).toString() : text;
-      final voters = votesByOption[optId] ?? votesByOption[i.toString()] ?? [];
+      final voters = votesByIndex[i] ??
+          votesByStrId[i.toString()] ??
+          votesByStrId[optId] ??
+          [];
 
-      optionsList.add(PollOption(id: optId, text: text, voterIds: voters));
+      optionsList.add(
+        PollOption(
+          id: i.toString(),
+          text: text,
+          voterIds: voters,
+        ),
+      );
     }
 
     return Poll(
       id: (json['id'] ?? '') as String,
       activityId: (json['activity_id'] ?? '') as String,
-      creatorId: (json['creator_id'] ?? '') as String,
+      creatorId:
+          (json['created_by'] ?? json['creator_id'] ?? '') as String,
       question: (json['question'] ?? '') as String,
       options: optionsList,
       createdAt: json['created_at'] != null
@@ -90,7 +107,7 @@ class Poll {
     return {
       'id': id,
       'activity_id': activityId,
-      'creator_id': creatorId,
+      'created_by': creatorId,
       'question': question,
       'options': options.map((o) => o.text).toList(),
       'created_at': createdAt.toIso8601String(),

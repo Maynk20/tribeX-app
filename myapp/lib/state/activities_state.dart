@@ -657,14 +657,20 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   Future<bool> addMemoryPhoto(String activityId, String photoUrl) async {
+    final client = SupabaseService.client;
+    final currentUserId = client?.auth.currentUser?.id;
+    if (client == null || currentUserId == null) return false;
+
     try {
-      await SupabaseService.client?.from('event_memories').insert({
+      await client.from('event_memories').insert({
         'activity_id': activityId,
+        'user_id': currentUserId,
         'image_url': photoUrl,
       });
       await fetchActivities();
       return true;
     } catch (e) {
+      debugPrint('addMemoryPhoto error: $e');
       return false;
     }
   }
