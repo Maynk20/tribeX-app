@@ -689,68 +689,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showDeleteAccountDialog(BuildContext context) {
     final confirmCtrl = TextEditingController();
+    bool isDeleting = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(
-          'Delete Account?',
-          style: TextStyle(
-            color: AppColors.destructive,
-            fontWeight: FontWeight.w800,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Text(
+            'Delete Account?',
+            style: TextStyle(
+              color: AppColors.destructive,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This action cannot be undone. All your hosted plans, ratings, and profile data will be permanently deleted.',
-              style: TextStyle(fontSize: 13, height: 1.4),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This action cannot be undone. All your hosted plans, ratings, and profile data will be permanently deleted.',
+                style: TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Type "DELETE" below to confirm:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: confirmCtrl,
+                enabled: !isDeleting,
+                decoration: const InputDecoration(hintText: 'DELETE'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isDeleting ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 14),
-            const Text(
-              'Type "DELETE" below to confirm:',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: confirmCtrl,
-              decoration: const InputDecoration(hintText: 'DELETE'),
+            ElevatedButton(
+              onPressed: isDeleting
+                  ? null
+                  : () async {
+                      if (confirmCtrl.text.trim() == "DELETE") {
+                        setModalState(() => isDeleting = true);
+                        final success =
+                            await context.read<AuthState>().deleteAccount();
+                        if (!ctx.mounted) return;
+                        setModalState(() => isDeleting = false);
+                        Navigator.of(ctx).pop();
+                        Navigator.of(context).pop();
+                        if (success) {
+                          AppToast.show(context, 'Account deleted');
+                        } else {
+                          AppToast.show(context, 'Account signed out');
+                        }
+                      } else {
+                        AppToast.show(
+                          ctx,
+                          'Please type DELETE to confirm',
+                          isError: true,
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.destructive,
+              ),
+              child: isDeleting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Delete Account'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (confirmCtrl.text.trim() == "DELETE") {
-                final success = await context.read<AuthState>().deleteAccount();
-                if (!ctx.mounted) return;
-                Navigator.of(ctx).pop();
-                Navigator.of(context).pop();
-                if (success) {
-                  AppToast.show(context, 'Account deleted');
-                } else {
-                  AppToast.show(context, 'Account signed out');
-                }
-              } else {
-                AppToast.show(
-                  ctx,
-                  'Please type DELETE to confirm',
-                  isError: true,
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.destructive,
-            ),
-            child: const Text('Delete Account'),
-          ),
-        ],
       ),
     );
   }

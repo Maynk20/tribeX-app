@@ -30,6 +30,61 @@ class _CreatePollModalState extends State<CreatePollModal> {
     TextEditingController(),
     TextEditingController(),
   ];
+  bool _isSubmitting = false;
+
+  void _submit() async {
+    if (_isSubmitting) return;
+
+    final q = _questionCtrl.text.trim();
+    final opts = _optionCtrls
+        .map((c) => c.text.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    if (q.isEmpty) {
+      AppToast.show(
+        context,
+        'Please enter a question',
+        isError: true,
+      );
+      return;
+    }
+    if (opts.length < 2) {
+      AppToast.show(
+        context,
+        'Add at least 2 options',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final me = context.read<AuthState>().currentUser;
+      await context.read<ChatState>().createPoll(
+            activityId: widget.activityId,
+            creatorId: me?.id ?? "host",
+            question: q,
+            optionTexts: opts,
+            creator: me,
+          );
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        'Failed to create poll',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -59,8 +114,6 @@ class _CreatePollModalState extends State<CreatePollModal> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.watch<AuthState>();
-    final me = authState.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
@@ -179,43 +232,32 @@ class _CreatePollModalState extends State<CreatePollModal> {
             // Submit Button
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  final q = _questionCtrl.text.trim();
-                  final opts = _optionCtrls
-                      .map((c) => c.text.trim())
-                      .where((t) => t.isNotEmpty)
-                      .toList();
-
-                  if (q.isEmpty) {
-                    AppToast.show(
-                      context,
-                      'Please enter a question',
-                      isError: true,
-                    );
-                    return;
-                  }
-                  if (opts.length < 2) {
-                    AppToast.show(
-                      context,
-                      'Add at least 2 options',
-                      isError: true,
-                    );
-                    return;
-                  }
-
-                  context.read<ChatState>().createPoll(
-                    activityId: widget.activityId,
-                    creatorId: me?.id ?? "host",
-                    question: q,
-                    optionTexts: opts,
-                    creator: me,
-                  );
-
-                  Navigator.of(context).pop();
-                },
-                icon: const Icon(Icons.send, size: 16),
-                label: const Text('Post poll'),
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submit,
+                child: _isSubmitting
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.black,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text('Posting poll…'),
+                        ],
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.send, size: 16),
+                          SizedBox(width: 8),
+                          Text('Post poll'),
+                        ],
+                      ),
               ),
             ),
           ],

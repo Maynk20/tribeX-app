@@ -141,10 +141,37 @@ class ManageRequestsModal extends StatelessWidget {
   }
 }
 
-class _AttendeeRow extends StatelessWidget {
+class _AttendeeRow extends StatefulWidget {
   final JoinRequest req;
 
   const _AttendeeRow({required this.req});
+
+  @override
+  State<_AttendeeRow> createState() => _AttendeeRowState();
+}
+
+class _AttendeeRowState extends State<_AttendeeRow> {
+  bool _isProcessing = false;
+  String? _processingAction; // 'accept', 'decline', 'remove'
+
+  Future<void> _handleAction(String action, Future<bool> Function() actionFn) async {
+    if (_isProcessing) return;
+    setState(() {
+      _isProcessing = true;
+      _processingAction = action;
+    });
+
+    try {
+      await actionFn();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _processingAction = null;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,9 +179,9 @@ class _AttendeeRow extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.backgroundDark : AppColors.mutedLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    final user = req.user;
+    final user = widget.req.user;
     final name = user?.fullName ?? user?.username ?? "Squad Mate";
-    final isAccepted = req.status == JoinStatus.accepted;
+    final isAccepted = widget.req.status == JoinStatus.accepted;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -327,13 +354,29 @@ class _AttendeeRow extends StatelessWidget {
             children: [
               if (!isAccepted) ...[
                 OutlinedButton.icon(
-                  onPressed: () =>
-                      state.respondToRequest(req.id, JoinStatus.rejected),
-                  icon: const Icon(
-                    Icons.close,
-                    size: 14,
-                    color: AppColors.destructive,
-                  ),
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _handleAction(
+                            'decline',
+                            () => state.respondToRequest(
+                              widget.req.id,
+                              JoinStatus.rejected,
+                            ),
+                          ),
+                  icon: _isProcessing && _processingAction == 'decline'
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.destructive,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.close,
+                          size: 14,
+                          color: AppColors.destructive,
+                        ),
                   label: const Text(
                     'Decline',
                     style: TextStyle(
@@ -353,9 +396,25 @@ class _AttendeeRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  onPressed: () =>
-                      state.respondToRequest(req.id, JoinStatus.accepted),
-                  icon: const Icon(Icons.check, size: 14),
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _handleAction(
+                            'accept',
+                            () => state.respondToRequest(
+                              widget.req.id,
+                              JoinStatus.accepted,
+                            ),
+                          ),
+                  icon: _isProcessing && _processingAction == 'accept'
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check, size: 14),
                   label: const Text('Accept', style: TextStyle(fontSize: 11)),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
@@ -366,12 +425,26 @@ class _AttendeeRow extends StatelessWidget {
                 ),
               ] else ...[
                 OutlinedButton.icon(
-                  onPressed: () => state.removeAttendee(req.id),
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 14,
-                    color: AppColors.destructive,
-                  ),
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _handleAction(
+                            'remove',
+                            () => state.removeAttendee(widget.req.id),
+                          ),
+                  icon: _isProcessing && _processingAction == 'remove'
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.destructive,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.delete_outline,
+                          size: 14,
+                          color: AppColors.destructive,
+                        ),
                   label: const Text(
                     'Remove',
                     style: TextStyle(

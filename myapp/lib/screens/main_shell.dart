@@ -6,6 +6,7 @@ import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/notifications_state.dart';
 import '../widgets/common/custom_bottom_nav.dart';
+import '../widgets/common/loaders.dart';
 import '../widgets/common/welcome_splash.dart';
 import 'create_plan_screen.dart';
 import 'explore_screen.dart';
@@ -80,7 +81,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final currentUser = context.select<AuthState, dynamic>((a) => a.currentUser);
 
     if (isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: PageLoader(label: "Restoring session...")),
+      );
     }
 
     if (isAuthenticated && needsProfile) {
@@ -93,7 +96,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? AppColors.backgroundDark
             : AppColors.backgroundLight,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(child: PageLoader(label: "Setting up profile...")),
       );
     }
 
@@ -107,7 +110,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? AppColors.backgroundDark
             : AppColors.backgroundLight,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(child: PageLoader(label: "Loading interests...")),
       );
     }
 

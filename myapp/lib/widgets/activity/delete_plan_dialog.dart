@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/activity.dart';
 
-class DeletePlanDialog extends StatelessWidget {
+class DeletePlanDialog extends StatefulWidget {
   final Activity activity;
   final VoidCallback onConfirmDelete;
 
@@ -25,6 +25,20 @@ class DeletePlanDialog extends StatelessWidget {
         onConfirmDelete: onConfirmDelete,
       ),
     );
+  }
+
+  @override
+  State<DeletePlanDialog> createState() => _DeletePlanDialogState();
+}
+
+class _DeletePlanDialogState extends State<DeletePlanDialog> {
+  bool _isDeleting = false;
+
+  void _handleDelete() {
+    if (_isDeleting) return;
+    setState(() => _isDeleting = true);
+    Navigator.of(context).pop();
+    widget.onConfirmDelete();
   }
 
   @override
@@ -53,7 +67,7 @@ class DeletePlanDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '"${activity.title}" will be removed for everyone. This can\'t be undone.',
+              '"${widget.activity.title}" will be removed for everyone. This can\'t be undone.',
               style: TextStyle(
                 fontSize: 13,
                 height: 1.4,
@@ -67,21 +81,33 @@ class DeletePlanDialog extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: _isDeleting ? null : () => Navigator.of(context).pop(),
                   child: const Text('Cancel'),
                 ),
                 const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    onConfirmDelete();
-                  },
-                  icon: const Icon(Icons.delete_outline, size: 16),
-                  label: const Text('Delete'),
+                ElevatedButton(
+                  onPressed: _isDeleting ? null : _handleDelete,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.destructive,
                     foregroundColor: Colors.white,
                   ),
+                  child: _isDeleting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.delete_outline, size: 16),
+                            SizedBox(width: 6),
+                            Text('Delete'),
+                          ],
+                        ),
                 ),
               ],
             ),

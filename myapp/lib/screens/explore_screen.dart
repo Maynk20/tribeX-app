@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
+import '../services/location_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../widgets/activity/activity_card.dart';
@@ -43,9 +44,35 @@ class _ExploreScreenState extends State<ExploreScreen>
   Timer? _searchDebounceTimer;
   bool _showScrollToTop = false;
   bool _hasSearchText = false;
+  bool _isGettingLocation = false;
 
   @override
   bool get wantKeepAlive => true;
+
+  Future<void> _fetchGpsLocation() async {
+    if (_isGettingLocation) return;
+    setState(() => _isGettingLocation = true);
+
+    final result = await LocationService.getCurrentPosition();
+
+    if (!mounted) return;
+    setState(() => _isGettingLocation = false);
+
+    if (result.isSuccess) {
+      context.read<ActivitiesState>().setLocation(
+        "Current Location",
+        lat: result.latitude,
+        lng: result.longitude,
+      );
+      AppToast.show(context, 'GPS Location updated');
+    } else {
+      AppToast.show(
+        context,
+        result.error ?? 'Could not determine GPS location',
+        isError: true,
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -195,22 +222,23 @@ class _ExploreScreenState extends State<ExploreScreen>
                                     ),
                                     const SizedBox(width: 8),
                                     GestureDetector(
-                                      onTap: () {
-                                        actState.setLocation(
-                                          "Indiranagar, Bengaluru",
-                                        );
-                                        AppToast.show(
-                                          context,
-                                          'GPS Location updated',
-                                        );
-                                      },
-                                      child: Icon(
-                                        LucideIcons.navigation,
-                                        size: 13,
-                                        color: isDark
-                                            ? AppColors.mutedForegroundDark
-                                            : AppColors.mutedForegroundLight,
-                                      ),
+                                      onTap: _isGettingLocation ? null : _fetchGpsLocation,
+                                      child: _isGettingLocation
+                                          ? const SizedBox(
+                                              width: 13,
+                                              height: 13,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: AppColors.primary,
+                                              ),
+                                            )
+                                          : Icon(
+                                              LucideIcons.navigation,
+                                              size: 13,
+                                              color: isDark
+                                                  ? AppColors.mutedForegroundDark
+                                                  : AppColors.mutedForegroundLight,
+                                            ),
                                     ),
                                   ],
                                 )
