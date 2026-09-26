@@ -69,7 +69,11 @@ class _EditPlanModalState extends State<EditPlanModal> {
     super.dispose();
   }
 
-  void _save() {
+  bool _isSaving = false;
+
+  void _save() async {
+    if (_isSaving) return;
+
     final title = _titleCtrl.text.trim();
     final desc = _descCtrl.text.trim();
     final loc = _locCtrl.text.trim();
@@ -88,6 +92,8 @@ class _EditPlanModalState extends State<EditPlanModal> {
       return;
     }
 
+    setState(() => _isSaving = true);
+
     final updated = widget.activity.copyWith(
       title: title,
       description: desc,
@@ -99,10 +105,21 @@ class _EditPlanModalState extends State<EditPlanModal> {
       imageUrl: _imageUrl,
     );
 
-    context.read<ActivitiesState>().updateActivity(updated);
-    Navigator.of(context).pop();
+    final success = await context.read<ActivitiesState>().updateActivity(updated);
 
-    AppToast.show(context, 'Plan updated successfully');
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    if (success) {
+      Navigator.of(context).pop();
+      AppToast.show(context, 'Plan updated successfully');
+    } else {
+      AppToast.show(
+        context,
+        "Couldn't update plan. Please try again.",
+        isError: true,
+      );
+    }
   }
 
   Future<void> _pickDate() async {
@@ -493,10 +510,32 @@ class _EditPlanModalState extends State<EditPlanModal> {
             // Save
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _save,
-                icon: const Icon(Icons.check, size: 16),
-                label: const Text('Save Changes'),
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _save,
+                child: _isSaving
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.black,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text('Saving…'),
+                        ],
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check, size: 16),
+                          SizedBox(width: 8),
+                          Text('Save Changes'),
+                        ],
+                      ),
               ),
             ),
           ],

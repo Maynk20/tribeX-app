@@ -30,6 +30,7 @@ class _RateSquadModalState extends State<RateSquadModal> {
   final Map<String, int> _ratings = {};
   final Map<String, List<String>> _badges = {};
   final Map<String, TextEditingController> _comments = {};
+  final Set<String> _submittingIds = {};
 
   @override
   void dispose() {
@@ -37,6 +38,56 @@ class _RateSquadModalState extends State<RateSquadModal> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _submitSingleRating({
+    required UserProfile? me,
+    required UserProfile person,
+    required int currentRating,
+    required RatingItem? existing,
+    required List<String> currentBadges,
+    required String commentText,
+    required ChatState chatState,
+  }) async {
+    if (me == null || _submittingIds.contains(person.id)) return;
+
+    setState(() {
+      _submittingIds.add(person.id);
+    });
+
+    try {
+      final item = RatingItem(
+        id: "rat_${DateTime.now().millisecondsSinceEpoch}",
+        planId: widget.activity.id,
+        reviewerId: me.id,
+        revieweeId: person.id,
+        rating: currentRating > 0 ? currentRating : (existing?.rating ?? 5),
+        badges: currentBadges,
+        comment: commentText,
+        createdAt: DateTime.now(),
+      );
+
+      await chatState.submitRating(item);
+
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        'Rating saved for ${person.fullName}!',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        'Failed to save rating',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submittingIds.remove(person.id);
+        });
+      }
+    }
   }
 
   @override
@@ -370,44 +421,38 @@ class _RateSquadModalState extends State<RateSquadModal> {
                                 width: double.infinity,
                                 child: ElevatedButton(
                                   onPressed:
-                                      (currentRating > 0 ||
-                                          (existing != null &&
-                                              currentRating > 0))
-                                      ? () {
-                                          if (me != null) {
-                                            chatState.submitRating(
-                                              RatingItem(
-                                                id: "rat_${DateTime.now().millisecondsSinceEpoch}",
-                                                planId: widget.activity.id,
-                                                reviewerId: me.id,
-                                                revieweeId: person.id,
-                                                rating: currentRating > 0
-                                                    ? currentRating
-                                                    : (existing?.rating ?? 5),
-                                                badges: currentBadges,
-                                                comment: commentCtrl.text
-                                                    .trim(),
-                                                createdAt: DateTime.now(),
+                                      (_submittingIds.contains(person.id) ||
+                                              (currentRating <= 0 && existing == null))
+                                          ? null
+                                          : () => _submitSingleRating(
+                                                me: me,
+                                                person: person,
+                                                currentRating: currentRating,
+                                                existing: existing,
+                                                currentBadges: currentBadges,
+                                                commentText: commentCtrl.text.trim(),
+                                                chatState: chatState,
                                               ),
-                                            );
-                                            AppToast.show(
-                                              context,
-                                              'Rating saved for ${person.fullName}!',
-                                            );
-                                          }
-                                        }
-                                      : null,
                                   style: ElevatedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 8,
                                     ),
                                   ),
-                                  child: Text(
-                                    existing != null
-                                        ? 'Update Rating'
-                                        : 'Submit Rating',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
+                                  child: _submittingIds.contains(person.id)
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.black,
+                                          ),
+                                        )
+                                      : Text(
+                                          existing != null
+                                              ? 'Update Rating'
+                                              : 'Submit Rating',
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
                                 ),
                               ),
                             ],

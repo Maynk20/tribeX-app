@@ -374,23 +374,50 @@ class _AuthScreenState extends State<AuthScreen> {
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: border.withValues(alpha: 0.6)),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const GoogleGLogo(size: 20),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Continue with Google',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.foregroundDark
-                              : AppColors.foregroundLight,
+                  child: _isBusy
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: isDark
+                                    ? AppColors.foregroundDark
+                                    : AppColors.foregroundLight,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Connecting…',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.foregroundDark
+                                    : AppColors.foregroundLight,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const GoogleGLogo(size: 20),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Continue with Google',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.foregroundDark
+                                    : AppColors.foregroundLight,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
               const SizedBox(height: 18),

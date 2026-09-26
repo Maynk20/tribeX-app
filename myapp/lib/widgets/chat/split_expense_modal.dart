@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
 import '../../models/expense.dart';
+import '../../models/user_profile.dart';
 import '../../state/activities_state.dart';
 import '../../state/auth_state.dart';
 import '../../state/chat_state.dart';
@@ -32,6 +33,7 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
   final _upiCtrl = TextEditingController();
   String _splitType = "equal"; // 'equal' or 'specific'
   final Set<String> _selectedUserIds = {};
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -39,6 +41,76 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
     _amountCtrl.dispose();
     _upiCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _submit(
+    List<ExpenseMember> effectiveMembers,
+    double perHead,
+    double total,
+    UserProfile? me,
+  ) async {
+    if (_isSubmitting) return;
+
+    final desc = _descCtrl.text.trim();
+    if (desc.isEmpty) {
+      AppToast.show(
+        context,
+        'Please enter a description',
+        isError: true,
+      );
+      return;
+    }
+    if (total <= 0) {
+      AppToast.show(
+        context,
+        'Please enter a valid amount',
+        isError: true,
+      );
+      return;
+    }
+    if (effectiveMembers.isEmpty) {
+      AppToast.show(
+        context,
+        'Please select at least one member',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final membersWithShare = effectiveMembers
+          .map((m) => m.copyWith(amount: perHead))
+          .toList();
+
+      await context.read<ChatState>().createExpense(
+            activityId: widget.activityId,
+            creatorId: me?.id ?? "host",
+            creatorName: me?.fullName ?? "Host",
+            description: desc,
+            totalAmount: total,
+            upiId: _upiCtrl.text.trim().isNotEmpty
+                ? _upiCtrl.text.trim()
+                : null,
+            members: membersWithShare,
+            creator: me,
+          );
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        'Failed to split expense',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -284,55 +356,34 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
             // Submit button
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  final desc = _descCtrl.text.trim();
-                  if (desc.isEmpty) {
-                    AppToast.show(
-                      context,
-                      'Please enter a description',
-                      isError: true,
-                    );
-                    return;
-                  }
-                  if (total <= 0) {
-                    AppToast.show(
-                      context,
-                      'Please enter a valid amount',
-                      isError: true,
-                    );
-                    return;
-                  }
-                  if (effectiveMembers.isEmpty) {
-                    AppToast.show(
-                      context,
-                      'Please select at least one member',
-                      isError: true,
-                    );
-                    return;
-                  }
-
-                  final membersWithShare = effectiveMembers
-                      .map((m) => m.copyWith(amount: perHead))
-                      .toList();
-
-                  context.read<ChatState>().createExpense(
-                    activityId: widget.activityId,
-                    creatorId: me?.id ?? "host",
-                    creatorName: me?.fullName ?? "Host",
-                    description: desc,
-                    totalAmount: total,
-                    upiId: _upiCtrl.text.trim().isNotEmpty
-                        ? _upiCtrl.text.trim()
-                        : null,
-                    members: membersWithShare,
-                    creator: me,
-                  );
-
-                  Navigator.of(context).pop();
-                },
-                icon: const Icon(Icons.send, size: 16),
-                label: const Text('Post to chat'),
+              child: ElevatedButton(
+                onPressed: _isSubmitting
+                    ? null
+                    : () => _submit(effectiveMembers, perHead, total, me),
+                child: _isSubmitting
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.black,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text('Posting expense…'),
+                        ],
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.send, size: 16),
+                          SizedBox(width: 8),
+                          Text('Post to chat'),
+                        ],
+                      ),
               ),
             ),
           ],
