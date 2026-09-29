@@ -16,6 +16,7 @@ class AuthState extends ChangeNotifier {
   StreamSubscription<dynamic>? _authSubscription;
   RealtimeChannel? _blocksChannel;
   bool _isDisposed = false;
+  int _authRequestVersion = 0;
 
   AuthState() {
     _initAuth();
@@ -54,10 +55,12 @@ class AuthState extends ChangeNotifier {
       if (event == AuthChangeEvent.signedOut || session == null) {
         _handleSignedOut();
       } else {
+        final requestVersion = ++_authRequestVersion;
         await _loadProfile(
           session.user.id,
           session.user.email,
           userMetadata: session.user.userMetadata,
+          requestVersion: requestVersion,
         );
       }
     });
@@ -68,6 +71,7 @@ class AuthState extends ChangeNotifier {
         session.user.id,
         session.user.email,
         userMetadata: session.user.userMetadata,
+        requestVersion: ++_authRequestVersion,
       );
     } else {
       _handleSignedOut();
@@ -75,6 +79,7 @@ class AuthState extends ChangeNotifier {
   }
 
   void _handleSignedOut() {
+    _authRequestVersion++;
     _currentUser = null;
     _isLoading = false;
     _isProfileLoading = false;
@@ -86,8 +91,11 @@ class AuthState extends ChangeNotifier {
     String userId,
     String? email, {
     Map<String, dynamic>? userMetadata,
+    required int requestVersion,
   }) async {
-    if (_isProfileLoading && _currentUser != null && _currentUser!.id == userId) {
+    if (_isProfileLoading &&
+        _currentUser != null &&
+        _currentUser!.id == userId) {
       return;
     }
     _isProfileLoading = true;
@@ -96,7 +104,7 @@ class AuthState extends ChangeNotifier {
 
     try {
       final profile = await AuthService.fetchUserProfile(userId);
-      if (_isDisposed) return;
+      if (_isDisposed || requestVersion != _authRequestVersion) return;
 
       final metaName = (userMetadata?['full_name'] as String?)?.trim() ?? '';
       final metaUname = (userMetadata?['username'] as String?)?.trim() ?? '';
@@ -119,7 +127,7 @@ class AuthState extends ChangeNotifier {
       }
       _subscribeBlocks(userId);
     } catch (_) {
-      if (_isDisposed) return;
+      if (_isDisposed || requestVersion != _authRequestVersion) return;
       final metaName = (userMetadata?['full_name'] as String?)?.trim() ?? '';
       final metaUname = (userMetadata?['username'] as String?)?.trim() ?? '';
       _currentUser = UserProfile(
@@ -270,7 +278,9 @@ class AuthState extends ChangeNotifier {
     };
 
     try {
-      await SupabaseService.client?.from('profiles').upsert(updates);
+      final client = SupabaseService.client;
+      if (client == null) return false;
+      await client.from('profiles').upsert(updates);
       if (_isDisposed) return false;
       _currentUser = cur.copyWith(
         fullName: fullName,
@@ -289,7 +299,7 @@ class AuthState extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('updateProfile error: $e');
-      _error = e.toString();
+      _error = 'Unable to save your profile right now.';
       return false;
     } finally {
       if (!_isDisposed) {
@@ -301,12 +311,14 @@ class AuthState extends ChangeNotifier {
 
   Future<void> completeOnboarding(List<String> interests) async {
     if (_currentUser == null || _isDisposed) return;
+    final client = SupabaseService.client;
+    if (client == null) return;
     _isLoading = true;
     if (!_isDisposed) notifyListeners();
 
     try {
-      await SupabaseService.client
-          ?.from('profiles')
+      await client
+          .from('profiles')
           .update({'interests': interests, 'has_completed_onboarding': true})
           .eq('id', _currentUser!.id);
 
@@ -332,32 +344,38 @@ class AuthState extends ChangeNotifier {
 
   Future<void> blockUser(String targetUserId) async {
     if (_currentUser == null) return;
+    final client = SupabaseService.client;
+    if (client == null) return;
     _blockedUserIds.add(targetUserId);
     if (!_isDisposed) notifyListeners();
 
     try {
-      await SupabaseService.client?.from('blocks').insert({
+      await client.from('blocks').insert({
         'blocker_id': _currentUser!.id,
         'blocked_id': targetUserId,
       });
     } catch (_) {
-      // ignore
+      _blockedUserIds.remove(targetUserId);
+      if (!_isDisposed) notifyListeners();
     }
   }
 
   Future<void> unblockUser(String targetUserId) async {
     if (_currentUser == null) return;
+    final client = SupabaseService.client;
+    if (client == null) return;
     _blockedUserIds.remove(targetUserId);
     if (!_isDisposed) notifyListeners();
 
     try {
-      await SupabaseService.client
-          ?.from('blocks')
+      await client
+          .from('blocks')
           .delete()
           .eq('blocker_id', _currentUser!.id)
           .eq('blocked_id', targetUserId);
     } catch (_) {
-      // ignore
+      _blockedUserIds.add(targetUserId);
+      if (!_isDisposed) notifyListeners();
     }
   }
 

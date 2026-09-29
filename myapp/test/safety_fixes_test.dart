@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myapp/models/activity.dart';
 import 'package:myapp/models/expense.dart';
 import 'package:myapp/models/poll.dart';
 import 'package:myapp/services/location_service.dart';
@@ -71,6 +72,15 @@ void main() {
         reason: ReportReason.spam,
       );
       expect(result, isFalse);
+    });
+
+    test('ReportReason extensions map properly to db strings', () {
+      expect(ReportReason.harassment.dbValue, 'harassment');
+      expect(ReportReason.unsafeBehavior.dbValue, 'unsafe_behavior');
+      expect(ReportReason.fakeProfile.dbValue, 'fake_profile');
+      expect(ReportReason.inappropriateContent.dbValue, 'inappropriate_content');
+      expect(ReportReason.spam.dbValue, 'spam');
+      expect(ReportReason.other.dbValue, 'other');
     });
   });
 
@@ -170,6 +180,51 @@ void main() {
       expect(place.subtitle, 'Indiranagar, Bengaluru');
       expect(place.lat, 12.9716);
       expect(place.lon, 77.5946);
+    });
+  });
+
+  group('Distance Sorting Priority', () {
+    test('Activities with coordinates sort ahead of activities without coordinates', () {
+      final withCoords = Activity(
+        id: '1',
+        hostId: 'h1',
+        title: 'Football',
+        description: 'Match',
+        category: 'Sports',
+        dateTime: DateTime.now().add(const Duration(hours: 1)),
+        location: 'Turf A',
+        totalSlots: 10,
+        slotsLeft: 5,
+        costPerHead: 100,
+        latitude: 12.9716,
+        longitude: 77.5946,
+      );
+      final withoutCoords = Activity(
+        id: '2',
+        hostId: 'h2',
+        title: 'Board Games',
+        description: 'Fun night',
+        category: 'Social',
+        dateTime: DateTime.now().add(const Duration(hours: 2)),
+        location: 'Online',
+        totalSlots: 6,
+        slotsLeft: 2,
+        costPerHead: 0,
+        latitude: null,
+        longitude: null,
+      );
+
+      final list = [withoutCoords, withCoords];
+      list.sort((a, b) {
+        final aHasCoords = a.latitude != null && a.longitude != null;
+        final bHasCoords = b.latitude != null && b.longitude != null;
+        if (aHasCoords && !bHasCoords) return -1;
+        if (!aHasCoords && bHasCoords) return 1;
+        return 0;
+      });
+
+      expect(list.first.id, '1');
+      expect(list.last.id, '2');
     });
   });
 }

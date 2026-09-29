@@ -31,15 +31,15 @@ Future<void> main() async {
     return true; // handled
   };
   ErrorWidget.builder = (FlutterErrorDetails details) {
-    return Material(
+    return const Material(
       color: Colors.transparent,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16),
           child: Text(
-            'Unable to render: ${details.exception}',
+            'Something went wrong while displaying this screen.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            style: TextStyle(fontSize: 12),
           ),
         ),
       ),
