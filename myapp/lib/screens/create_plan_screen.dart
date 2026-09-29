@@ -10,6 +10,7 @@ import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../models/activity.dart';
+import '../services/location_service.dart';
 import '../services/storage_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
@@ -46,6 +47,50 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
   String? _imageUrl;
   PlaceItem? _pinnedPlace;
   bool _isPublishing = false;
+  bool _isLocating = false;
+
+  Future<void> _useCurrentLocation() async {
+    if (_isLocating) return;
+    setState(() => _isLocating = true);
+
+    final res = await LocationService.getCurrentPosition();
+    if (!mounted) return;
+
+    if (!res.isSuccess) {
+      setState(() => _isLocating = false);
+      AppToast.show(
+        context,
+        res.error ?? 'Could not determine GPS location.',
+        isError: true,
+      );
+      return;
+    }
+
+    final lat = res.latitude!;
+    final lon = res.longitude!;
+
+    final placeInfo = await LocationService.reverseGeocode(lat, lon);
+    if (!mounted) return;
+    setState(() => _isLocating = false);
+
+    final title = placeInfo?['title'] ?? 'Current Location';
+    final subtitle = placeInfo?['subtitle'] ??
+        '${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}';
+
+    setState(() {
+      _pinnedPlace = PlaceItem(
+        title: title,
+        subtitle: subtitle,
+        lat: lat,
+        lon: lon,
+      );
+      _locCtrl.text = subtitle.isNotEmpty && title != 'Current Location'
+          ? '$title, $subtitle'
+          : title;
+    });
+
+    AppToast.show(context, '📍 Location pinned to your GPS position');
+  }
 
   @override
   void dispose() {
@@ -136,6 +181,36 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
 
     setState(() => _isPublishing = true);
 
+    // Auto-resolve coordinates if the host typed a venue location but didn't manually pin
+    if (!_isOnline && _pinnedPlace == null && loc.isNotEmpty) {
+      final geocoded = await LocationService.geocodeAddress(loc);
+      if (!mounted) return;
+      if (geocoded != null) {
+        _pinnedPlace = PlaceItem(
+          title: geocoded['title'] as String? ?? loc,
+          subtitle: geocoded['subtitle'] as String? ?? '',
+          lat: (geocoded['lat'] as num).toDouble(),
+          lon: (geocoded['lon'] as num).toDouble(),
+        );
+      }
+    }
+
+    final double? actLat = _pinnedPlace?.lat ?? user.latitude;
+    final double? actLon = _pinnedPlace?.lon ?? user.longitude;
+
+    if (!_isOnline &&
+        (actLat == null ||
+            actLon == null ||
+            (actLat == 0.0 && actLon == 0.0))) {
+      setState(() => _isPublishing = false);
+      AppToast.show(
+        context,
+        'Please pin the venue or tap the GPS icon so attendees can find and check in to your event.',
+        isError: true,
+      );
+      return;
+    }
+
     final combinedDateTime = DateTime(
       _date.year,
       _date.month,
@@ -161,9 +236,10 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       totalSlots: slots,
       slotsLeft: slots,
       costPerHead: cost,
-      imageUrl: _imageUrl ?? "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-      latitude: _pinnedPlace?.lat ?? user.latitude,
-      longitude: _pinnedPlace?.lon ?? user.longitude,
+      imageUrl: _imageUrl ??
+          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+      latitude: _isOnline ? null : actLat,
+      longitude: _isOnline ? null : actLon,
       womenOnly: _womenOnly,
       verifiedOnly: _verifiedOnly,
       isOnline: _isOnline,
@@ -787,16 +863,37 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
               ] else ...[
                 _FormFieldWrapper(
                   label: 'VENUE / LOCATION',
-                  child: TextField(
-                    controller: _locCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'Turf Arena, Indiranagar',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    style: const TextStyle(fontSize: 13),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _locCtrl,
+                          decoration: const InputDecoration(
+                            hintText: 'Turf Arena, Indiranagar',
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      if (_isLocating)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.my_location, size: 18),
+                          tooltip: 'Use current GPS location',
+                          onPressed: _useCurrentLocation,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -810,15 +907,19 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                   decoration: BoxDecoration(
                     color: cardBg,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: border.withValues(alpha: 0.6)),
+                    border: Border.all(
+                      color: _pinnedPlace != null
+                          ? AppColors.primary.withValues(alpha: 0.5)
+                          : border.withValues(alpha: 0.6),
+                    ),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
                               'PIN THE VENUE (FOR GPS CHECK-IN)',
                               style: TextStyle(
                                 fontSize: 10,
@@ -829,8 +930,33 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                     : AppColors.mutedForegroundLight,
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
+                          ),
+                          if (_pinnedPlace != null)
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _pinnedPlace = null;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: isDark
+                                      ? AppColors.mutedForegroundDark
+                                      : AppColors.mutedForegroundLight,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
                               _pinnedPlace != null
                                   ? '📍 ${_pinnedPlace!.title} · ${_pinnedPlace!.lat.toStringAsFixed(4)}, ${_pinnedPlace!.lon.toStringAsFixed(4)}'
                                   : 'Needed so attendees can check in on arrival.',
@@ -844,41 +970,74 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                     : AppColors.mutedForegroundLight,
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      OutlinedButton(
-                        onPressed: () {
-                          PlaceSearchDialog.show(
-                            context,
-                            initialValue: _locCtrl.text,
-                            onSelect: (p) {
-                              setState(() {
-                                _pinnedPlace = p;
-                                if (_locCtrl.text.isEmpty) {
-                                  _locCtrl.text = p.title;
-                                }
-                              });
-                            },
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
                           ),
-                          minimumSize: Size.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
+                          const SizedBox(width: 8),
+                          Wrap(
+                            spacing: 6,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: _isLocating ? null : _useCurrentLocation,
+                                icon: _isLocating
+                                    ? const SizedBox(
+                                        width: 10,
+                                        height: 10,
+                                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                                      )
+                                    : const Icon(Icons.my_location, size: 12),
+                                label: const Text(
+                                  'GPS',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () {
+                                  PlaceSearchDialog.show(
+                                    context,
+                                    initialValue: _locCtrl.text,
+                                    onSelect: (p) {
+                                      setState(() {
+                                        _pinnedPlace = p;
+                                        if (_locCtrl.text.isEmpty) {
+                                          _locCtrl.text = p.title;
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  _pinnedPlace != null ? 'Change' : 'Search Place',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        child: const Text(
-                          'Pin Place',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        ],
                       ),
                     ],
                   ),

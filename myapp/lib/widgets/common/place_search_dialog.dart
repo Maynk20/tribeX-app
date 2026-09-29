@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../services/location_service.dart';
 
 class PlaceItem {
   final String title;
@@ -52,6 +53,7 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
   String _query = "";
   List<PlaceItem> _searchResults = [];
   bool _isLoading = false;
+  bool _isLocatingCurrent = false;
   String? _error;
   Timer? _debounceTimer;
 
@@ -206,6 +208,46 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
         });
       }
     }
+  }
+
+  Future<void> _useCurrentGpsLocation() async {
+    if (_isLocatingCurrent) return;
+    setState(() {
+      _isLocatingCurrent = true;
+      _error = null;
+    });
+
+    final res = await LocationService.getCurrentPosition();
+    if (!mounted) return;
+
+    if (!res.isSuccess) {
+      setState(() {
+        _isLocatingCurrent = false;
+        _error = res.error ?? "Couldn't detect your GPS location.";
+      });
+      return;
+    }
+
+    final lat = res.latitude!;
+    final lon = res.longitude!;
+
+    final placeInfo = await LocationService.reverseGeocode(lat, lon);
+    if (!mounted) return;
+    setState(() => _isLocatingCurrent = false);
+
+    final title = placeInfo?['title'] ?? 'Current GPS Location';
+    final subtitle = placeInfo?['subtitle'] ??
+        '${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}';
+
+    widget.onSelect(
+      PlaceItem(
+        title: title,
+        subtitle: subtitle,
+        lat: lat,
+        lon: lon,
+      ),
+    );
+    Navigator.of(context).pop();
   }
 
   Future<List<PlaceItem>> _searchPhoton(String q) async {
@@ -391,6 +433,82 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
             ),
             Divider(height: 1, color: border.withValues(alpha: 0.6)),
 
+            // Quick Action: Use Current GPS Location
+            InkWell(
+              onTap: _isLocatingCurrent ? null : _useCurrentGpsLocation,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  border: Border(
+                    bottom: BorderSide(color: border.withValues(alpha: 0.4)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: _isLocatingCurrent
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            )
+                          : const Icon(
+                              LucideIcons.locateFixed,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isLocatingCurrent
+                                ? 'Detecting current GPS location...'
+                                : 'Use Current GPS Location',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
+                            ),
+                          ),
+                          Text(
+                            'Pins venue to your live coordinates for check-in',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      LucideIcons.chevronRight,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             // Loading / Error / Header Info Bar
             if (_isLoading)
               const Padding(
@@ -473,15 +591,49 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
                           if (trimmed.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             ElevatedButton.icon(
-                              onPressed: () {
-                                widget.onSelect(
-                                  PlaceItem(
-                                    title: _query.trim(),
-                                    subtitle: 'Custom Location',
-                                    lat: 23.2304,
-                                    lon: 69.6588,
-                                  ),
-                                );
+                              onPressed: () async {
+                                final text = _query.trim();
+                                // Try geocoding the custom address first
+                                final geocoded =
+                                    await LocationService.geocodeAddress(text);
+                                if (!context.mounted) return;
+                                if (geocoded != null) {
+                                  widget.onSelect(
+                                    PlaceItem(
+                                      title: geocoded['title'] as String? ?? text,
+                                      subtitle: geocoded['subtitle'] as String? ??
+                                          'Custom Location',
+                                      lat: (geocoded['lat'] as num).toDouble(),
+                                      lon: (geocoded['lon'] as num).toDouble(),
+                                    ),
+                                  );
+                                  Navigator.of(context).pop();
+                                  return;
+                                }
+
+                                // Fallback: try device GPS
+                                final gps =
+                                    await LocationService.getCurrentPosition();
+                                if (!context.mounted) return;
+                                if (gps.isSuccess) {
+                                  widget.onSelect(
+                                    PlaceItem(
+                                      title: text,
+                                      subtitle: 'GPS Location',
+                                      lat: gps.latitude!,
+                                      lon: gps.longitude!,
+                                    ),
+                                  );
+                                } else {
+                                  widget.onSelect(
+                                    PlaceItem(
+                                      title: text,
+                                      subtitle: 'Custom Location',
+                                      lat: 0.0,
+                                      lon: 0.0,
+                                    ),
+                                  );
+                                }
                                 Navigator.of(context).pop();
                               },
                               icon: const Icon(LucideIcons.mapPin, size: 14),
