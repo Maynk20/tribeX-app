@@ -59,12 +59,17 @@ class _ExploreScreenState extends State<ExploreScreen>
     setState(() => _isGettingLocation = false);
 
     if (result.isSuccess) {
+      final lat = result.latitude!;
+      final lng = result.longitude!;
+      final placeInfo = await LocationService.reverseGeocode(lat, lng);
+      final placeName = placeInfo?['title'] ?? 'Current Location';
+      if (!mounted) return;
       context.read<ActivitiesState>().setLocation(
-        "Current Location",
-        lat: result.latitude,
-        lng: result.longitude,
+        placeName,
+        lat: lat,
+        lng: lng,
       );
-      AppToast.show(context, 'GPS Location updated');
+      AppToast.show(context, 'Location: $placeName');
     } else {
       AppToast.show(
         context,
@@ -186,7 +191,11 @@ class _ExploreScreenState extends State<ExploreScreen>
                                           context,
                                           initialValue: actState.location,
                                           onSelect: (p) => actState.setLocation(
-                                            '${p.title}, ${p.subtitle.split(",")[0]}',
+                                            p.subtitle.isNotEmpty
+                                                ? '${p.title}, ${p.subtitle.split(",")[0].trim()}'
+                                                : p.title,
+                                            lat: p.lat,
+                                            lng: p.lon,
                                           ),
                                         );
                                       },

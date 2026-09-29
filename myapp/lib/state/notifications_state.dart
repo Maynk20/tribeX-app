@@ -93,6 +93,7 @@ class NotificationsState extends ChangeNotifier {
     final client = SupabaseService.client;
     if (client == null) return;
 
+    final previousNotifications = List<NotificationItem>.from(_notifications);
     for (int i = 0; i < _notifications.length; i++) {
       _notifications[i] = _notifications[i].copyWith(isRead: true);
     }
@@ -104,7 +105,11 @@ class NotificationsState extends ChangeNotifier {
           .update({'is_read': true})
           .eq('user_id', _userId!)
           .eq('is_read', false);
-    } catch (_) {}
+    } catch (_) {
+      if (_isDisposed) return;
+      _notifications = previousNotifications;
+      notifyListeners();
+    }
   }
 
   Future<void> markAsRead(String id) async {
@@ -114,6 +119,7 @@ class NotificationsState extends ChangeNotifier {
 
     final idx = _notifications.indexWhere((n) => n.id == id);
     if (idx != -1) {
+      final previousNotification = _notifications[idx];
       _notifications[idx] = _notifications[idx].copyWith(isRead: true);
       if (!_isDisposed) notifyListeners();
 
@@ -122,7 +128,11 @@ class NotificationsState extends ChangeNotifier {
             .from('notifications')
             .update({'is_read': true})
             .eq('id', id);
-      } catch (_) {}
+      } catch (_) {
+        if (_isDisposed) return;
+        _notifications[idx] = previousNotification;
+        notifyListeners();
+      }
     }
   }
 

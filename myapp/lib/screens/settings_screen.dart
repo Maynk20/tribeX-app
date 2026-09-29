@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../models/user_profile.dart';
+import '../services/report_service.dart';
 import '../state/auth_state.dart';
 import '../state/theme_state.dart';
 import 'terms_and_policies_screen.dart';
@@ -362,12 +363,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 }
 
                                 Navigator.of(ctx).pop();
-                                nameCtrl.dispose();
-                                unameCtrl.dispose();
-                                avatarCtrl.dispose();
-                                phoneCtrl.dispose();
-                                cityCtrl.dispose();
-                                bioCtrl.dispose();
                                 AppToast.show(
                                   context,
                                   'Profile details updated successfully',
@@ -392,7 +387,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      unameCtrl.dispose();
+      avatarCtrl.dispose();
+      phoneCtrl.dispose();
+      cityCtrl.dispose();
+      bioCtrl.dispose();
+    });
   }
 
   void _showBlockedUsersModal(BuildContext context, AuthState authState) {
@@ -528,6 +530,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showReportIssueModal(BuildContext context) {
     final textCtrl = TextEditingController();
     String category = "Safety & Conduct";
+    bool isSubmitting = false;
 
     showModalBottomSheet(
       context: context,
@@ -599,14 +602,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        AppToast.show(
-                          context,
-                          'Report submitted. Safety team will review it.',
-                        );
-                      },
-                      child: const Text('Submit Report'),
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final notes = textCtrl.text.trim();
+                              if (notes.isEmpty) {
+                                AppToast.show(
+                                  ctx,
+                                  'Please describe the issue in detail.',
+                                  isError: true,
+                                );
+                                return;
+                              }
+                              setModalState(() => isSubmitting = true);
+                              final user = context.read<AuthState>().currentUser;
+                              if (user != null) {
+                                ReportReason reasonEnum = ReportReason.other;
+                                if (category == "Safety & Conduct") {
+                                  reasonEnum = ReportReason.unsafeBehavior;
+                                } else if (category == "Inappropriate Plan") {
+                                  reasonEnum = ReportReason.inappropriateContent;
+                                }
+                                await ReportService.submitReport(
+                                  reporterId: user.id,
+                                  targetType: 'user',
+                                  targetId: user.id,
+                                  reason: reasonEnum,
+                                  notes: notes,
+                                );
+                              }
+                              if (!ctx.mounted) return;
+                              Navigator.of(ctx).pop();
+                              AppToast.show(
+                                context,
+                                'Report submitted. Safety team will review it.',
+                              );
+                            },
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Submit Report'),
                     ),
                   ),
                 ],
@@ -615,7 +656,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() => textCtrl.dispose());
   }
 
   void _showFeedbackModal(BuildContext context) {
@@ -696,7 +737,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() => textCtrl.dispose());
   }
 
   void _showDeleteAccountDialog(BuildContext context) {
@@ -782,7 +823,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() => confirmCtrl.dispose());
   }
 
   @override

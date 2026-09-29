@@ -21,8 +21,26 @@ class _EmergencySosModalState extends State<EmergencySosModal> {
 
   Future<void> _makeCall(String number) async {
     final uri = Uri.parse('tel:$number');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        if (mounted) {
+          AppToast.show(
+            context,
+            'Unable to open phone dialer for $number. Please dial manually.',
+            isError: true,
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        AppToast.show(
+          context,
+          'Unable to dial $number. Please dial manually.',
+          isError: true,
+        );
+      }
     }
   }
 

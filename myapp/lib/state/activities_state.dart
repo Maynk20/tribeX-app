@@ -271,7 +271,9 @@ class ActivitiesState extends ChangeNotifier {
             final hostIds = _activities.map((a) => a.hostId).toSet().toList();
             final profRes = await client
                 .from('profiles_public')
-                .select('id, full_name, username, avatar_url, rating, is_verified')
+                .select(
+                  'id, full_name, username, avatar_url, rating, is_verified',
+                )
                 .filter('id', 'in', hostIds);
             final profMap = <String, UserProfile>{};
             for (final p in profRes) {
@@ -451,8 +453,10 @@ class ActivitiesState extends ChangeNotifier {
     // Sort
     if (_sortKey == SortKey.date) {
       result.sort((a, b) {
-        final aUpcoming = a.dateTime.isAfter(now) || a.dateTime.isAtSameMomentAs(now);
-        final bUpcoming = b.dateTime.isAfter(now) || b.dateTime.isAtSameMomentAs(now);
+        final aUpcoming =
+            a.dateTime.isAfter(now) || a.dateTime.isAtSameMomentAs(now);
+        final bUpcoming =
+            b.dateTime.isAfter(now) || b.dateTime.isAtSameMomentAs(now);
         if (aUpcoming && !bUpcoming) return -1;
         if (!aUpcoming && bUpcoming) return 1;
         return a.dateTime.compareTo(b.dateTime);
@@ -461,13 +465,16 @@ class ActivitiesState extends ChangeNotifier {
       result.sort((a, b) => a.slotsLeft.compareTo(b.slotsLeft));
     } else if (_sortKey == SortKey.distance) {
       result.sort((a, b) {
-        if (a.latitude != null &&
-            a.longitude != null &&
-            b.latitude != null &&
-            b.longitude != null) {
-          final distA = (a.latitude! - _userLat) * (a.latitude! - _userLat) +
+        final aHasCoords = a.latitude != null && a.longitude != null;
+        final bHasCoords = b.latitude != null && b.longitude != null;
+        if (aHasCoords && !bHasCoords) return -1;
+        if (!aHasCoords && bHasCoords) return 1;
+        if (aHasCoords && bHasCoords) {
+          final distA =
+              (a.latitude! - _userLat) * (a.latitude! - _userLat) +
               (a.longitude! - _userLng) * (a.longitude! - _userLng);
-          final distB = (b.latitude! - _userLat) * (b.latitude! - _userLat) +
+          final distB =
+              (b.latitude! - _userLat) * (b.latitude! - _userLat) +
               (b.longitude! - _userLng) * (b.longitude! - _userLng);
           return distA.compareTo(distB);
         }
@@ -485,10 +492,10 @@ class ActivitiesState extends ChangeNotifier {
 
   // Database Actions
   Future<bool> createActivity(Activity activity) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
     try {
-      await SupabaseService.client
-          ?.from('activities')
-          .insert(activity.toJson());
+      await client.from('activities').insert(activity.toJson());
       await fetchActivities();
       return true;
     } catch (e) {
@@ -499,9 +506,11 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   Future<bool> updateActivity(Activity activity) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
     try {
-      await SupabaseService.client
-          ?.from('activities')
+      await client
+          .from('activities')
           .update(activity.toJson())
           .eq('id', activity.id);
       await fetchActivities();
@@ -514,9 +523,11 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   Future<bool> deleteActivity(String id) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
     try {
-      await SupabaseService.client
-          ?.from('activities')
+      await client
+          .from('activities')
           .update({'deleted_at': DateTime.now().toIso8601String()})
           .eq('id', id);
       await fetchActivities();
@@ -537,10 +548,12 @@ class ActivitiesState extends ChangeNotifier {
     final urgentUntil = nextUrgent
         ? DateTime.now().add(const Duration(minutes: 30)).toIso8601String()
         : null;
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
 
     try {
-      await SupabaseService.client
-          ?.from('activities')
+      await client
+          .from('activities')
           .update({'is_urgent': nextUrgent, 'urgent_until': urgentUntil})
           .eq('id', activityId);
       await fetchActivities();
@@ -551,8 +564,10 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   Future<bool> requestToJoin(String activityId, UserProfile user) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
     try {
-      await SupabaseService.client?.from('join_requests').insert({
+      await client.from('join_requests').insert({
         'activity_id': activityId,
         'user_id': user.id,
         'status': 'pending',
@@ -569,22 +584,25 @@ class ActivitiesState extends ChangeNotifier {
         ? 'accepted'
         : (status == JoinStatus.rejected ? 'rejected' : 'pending');
 
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
+
     try {
       if (status == JoinStatus.accepted) {
         try {
-          await SupabaseService.client?.rpc(
+          await client.rpc(
             'accept_join_request',
             params: {'_req_id': requestId},
           );
         } catch (_) {
-          await SupabaseService.client
-              ?.from('join_requests')
+          await client
+              .from('join_requests')
               .update({'status': 'accepted'})
               .eq('id', requestId);
         }
       } else {
-        await SupabaseService.client
-            ?.from('join_requests')
+        await client
+            .from('join_requests')
             .update({'status': statusStr})
             .eq('id', requestId);
       }
@@ -596,15 +614,15 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   Future<bool> removeAttendee(String requestId) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
+
     try {
       try {
-        await SupabaseService.client?.rpc(
-          'remove_join_request',
-          params: {'_req_id': requestId},
-        );
+        await client.rpc('remove_join_request', params: {'_req_id': requestId});
       } catch (_) {
-        await SupabaseService.client
-            ?.from('join_requests')
+        await client
+            .from('join_requests')
             .update({'status': 'rejected'})
             .eq('id', requestId);
       }
@@ -622,8 +640,15 @@ class ActivitiesState extends ChangeNotifier {
     required double lat,
     required double lon,
   }) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) {
+      return const CheckInResult(
+        status: 'error',
+        errorMessage: 'The service is temporarily unavailable.',
+      );
+    }
     try {
-      final res = await SupabaseService.client?.rpc(
+      final res = await client.rpc(
         'check_in_activity',
         params: {'_activity_id': activityId, '_lat': lat, '_lon': lon},
       );
@@ -636,19 +661,24 @@ class ActivitiesState extends ChangeNotifier {
           distanceM: (row['distance_m'] as num?)?.toDouble(),
         );
       }
-      return const CheckInResult(status: 'checked_in');
+      return const CheckInResult(
+        status: 'error',
+        errorMessage: 'Unexpected response from check-in service.',
+      );
     } catch (e) {
-      final msg = e.toString();
-      return CheckInResult(status: 'error', errorMessage: msg);
+      debugPrint('checkInAtVenue error: $e');
+      return const CheckInResult(
+        status: 'error',
+        errorMessage: 'Unable to check in right now. Please try again.',
+      );
     }
   }
 
   Future<bool> markAttendeeNoShow(String requestId) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
     try {
-      await SupabaseService.client?.rpc(
-        'mark_no_show',
-        params: {'_req_id': requestId},
-      );
+      await client.rpc('mark_no_show', params: {'_req_id': requestId});
       await fetchActivities();
       return true;
     } catch (e) {
