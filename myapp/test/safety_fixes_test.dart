@@ -4,6 +4,7 @@ import 'package:myapp/models/poll.dart';
 import 'package:myapp/services/location_service.dart';
 import 'package:myapp/services/report_service.dart';
 import 'package:myapp/state/activities_state.dart';
+import 'package:myapp/widgets/common/place_search_dialog.dart';
 
 /// Focused tests for the safety and RPC fixes.
 void main() {
@@ -154,6 +155,21 @@ void main() {
 
       final out = poll.toJson();
       expect(out['created_by'], 'user_abc');
+    });
+  });
+
+  group('PlaceItem & LocationService', () {
+    test('PlaceItem correctly holds venue title and coordinates', () {
+      const place = PlaceItem(
+        title: 'Turf Arena',
+        subtitle: 'Indiranagar, Bengaluru',
+        lat: 12.9716,
+        lon: 77.5946,
+      );
+      expect(place.title, 'Turf Arena');
+      expect(place.subtitle, 'Indiranagar, Bengaluru');
+      expect(place.lat, 12.9716);
+      expect(place.lon, 77.5946);
     });
   });
 }
