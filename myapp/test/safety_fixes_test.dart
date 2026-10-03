@@ -78,7 +78,10 @@ void main() {
       expect(ReportReason.harassment.dbValue, 'harassment');
       expect(ReportReason.unsafeBehavior.dbValue, 'unsafe_behavior');
       expect(ReportReason.fakeProfile.dbValue, 'fake_profile');
-      expect(ReportReason.inappropriateContent.dbValue, 'inappropriate_content');
+      expect(
+        ReportReason.inappropriateContent.dbValue,
+        'inappropriate_content',
+      );
       expect(ReportReason.spam.dbValue, 'spam');
       expect(ReportReason.other.dbValue, 'other');
     });

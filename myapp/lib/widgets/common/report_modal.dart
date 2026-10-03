@@ -58,7 +58,11 @@ class _ReportModalState extends State<ReportModal> {
     final auth = context.read<AuthState>();
     final me = auth.currentUser;
     if (me == null) {
-      AppToast.show(context, 'Please sign in to report content.', isError: true);
+      AppToast.show(
+        context,
+        'Please sign in to report content.',
+        isError: true,
+      );
       return;
     }
 
@@ -175,7 +179,10 @@ class _ReportModalState extends State<ReportModal> {
                 onTap: () => setState(() => _selectedReason = reason),
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 4,
+                  ),
                   child: Row(
                     children: [
                       Icon(
@@ -194,7 +201,9 @@ class _ReportModalState extends State<ReportModal> {
                         reason.label,
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                           color: isDark
                               ? AppColors.foregroundDark
                               : AppColors.foregroundLight,
@@ -212,7 +221,8 @@ class _ReportModalState extends State<ReportModal> {
               maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Additional details (optional)',
-                hintText: 'Describe what happened or why this should be reviewed…',
+                hintText:
+                    'Describe what happened or why this should be reviewed…',
                 alignLabelWithHint: true,
               ),
             ),

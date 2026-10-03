@@ -41,7 +41,7 @@ class Message {
           json['sender_id'] as String? ?? json['senderId'] as String? ?? '',
       text: json['text'] as String? ?? json['message'] as String? ?? '',
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
       sender: senderObj,
     );

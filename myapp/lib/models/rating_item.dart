@@ -56,7 +56,7 @@ class RatingItem {
       badges: tagsRaw,
       comment: json['comment'] as String?,
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
     );
   }

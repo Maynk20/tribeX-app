@@ -42,19 +42,11 @@ class _CreatePollModalState extends State<CreatePollModal> {
         .toList();
 
     if (q.isEmpty) {
-      AppToast.show(
-        context,
-        'Please enter a question',
-        isError: true,
-      );
+      AppToast.show(context, 'Please enter a question', isError: true);
       return;
     }
     if (opts.length < 2) {
-      AppToast.show(
-        context,
-        'Add at least 2 options',
-        isError: true,
-      );
+      AppToast.show(context, 'Add at least 2 options', isError: true);
       return;
     }
 
@@ -63,22 +55,18 @@ class _CreatePollModalState extends State<CreatePollModal> {
     try {
       final me = context.read<AuthState>().currentUser;
       await context.read<ChatState>().createPoll(
-            activityId: widget.activityId,
-            creatorId: me?.id ?? "host",
-            question: q,
-            optionTexts: opts,
-            creator: me,
-          );
+        activityId: widget.activityId,
+        creatorId: me?.id ?? "host",
+        question: q,
+        optionTexts: opts,
+        creator: me,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      AppToast.show(
-        context,
-        'Failed to create poll',
-        isError: true,
-      );
+      AppToast.show(context, 'Failed to create poll', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

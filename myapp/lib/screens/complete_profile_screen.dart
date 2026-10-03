@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../state/auth_state.dart';
+import '../widgets/common/place_search_dialog.dart';
 import 'onboarding_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
@@ -15,10 +16,29 @@ class CompleteProfileScreen extends StatefulWidget {
 
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _phoneCtrl = TextEditingController();
-  final _cityCtrl = TextEditingController(text: "Bengaluru, Karnataka");
+  final _cityCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   String _gender = "Prefer not to say";
   bool _isSaving = false;
+
+  /// Coordinates of the chosen city (TanStack `coords` state). Null until a
+  /// place is picked or loaded from the existing profile.
+  double? _lat;
+  double? _lon;
+
+  @override
+  void initState() {
+    super.initState();
+    // Prefill from an existing profile, like TanStack does on load.
+    final u = context.read<AuthState>().currentUser;
+    if (u != null) {
+      if ((u.city ?? '').trim().isNotEmpty) _cityCtrl.text = u.city!.trim();
+      if (u.latitude != null && u.longitude != null) {
+        _lat = u.latitude;
+        _lon = u.longitude;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -28,16 +48,38 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     super.dispose();
   }
 
+  void _pickCity() {
+    PlaceSearchDialog.show(
+      context,
+      initialValue: _cityCtrl.text,
+      onSelect: (p) {
+        if (!mounted) return;
+        setState(() {
+          _cityCtrl.text = p.title;
+          _lat = p.lat;
+          _lon = p.lon;
+        });
+      },
+    );
+  }
+
   void _save() async {
     if (_isSaving) return;
+    final city = _cityCtrl.text.trim();
+    if (city.length < 2) {
+      AppToast.show(context, 'Pick your city', isError: true);
+      return;
+    }
     setState(() => _isSaving = true);
 
     final auth = context.read<AuthState>();
     final success = await auth.updateProfile(
       phone: _phoneCtrl.text.trim().isNotEmpty ? _phoneCtrl.text.trim() : null,
-      city: _cityCtrl.text.trim().isNotEmpty ? _cityCtrl.text.trim() : null,
+      city: city,
       bio: _bioCtrl.text.trim().isNotEmpty ? _bioCtrl.text.trim() : null,
       gender: _gender,
+      latitude: _lat,
+      longitude: _lon,
     );
 
     if (!mounted) return;
@@ -141,9 +183,13 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
               TextField(
                 controller: _cityCtrl,
+                readOnly: true,
+                onTap: _pickCity,
                 decoration: const InputDecoration(
-                  labelText: 'City / Location',
+                  labelText: 'City / Location *',
+                  hintText: 'Search your city or pincode',
                   prefixIcon: Icon(Icons.location_on_outlined, size: 20),
+                  suffixIcon: Icon(Icons.unfold_more, size: 18),
                 ),
               ),
               const SizedBox(height: 14),

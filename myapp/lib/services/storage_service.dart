@@ -129,6 +129,10 @@ class StorageService {
       if (file == null) return null;
 
       final Uint8List bytes = await file.readAsBytes();
+      if (bytes.lengthInBytes > 5 * 1024 * 1024) {
+        debugPrint('Image exceeds 5MB limit');
+        return null;
+      }
       return await uploadBytes(
         bytes: bytes,
         filename: '${const Uuid().v4()}.jpg',
@@ -153,7 +157,9 @@ class StorageService {
       // 1. Try uploading to 'activities' bucket
       for (final bucket in ['activities', 'activity_images', 'public']) {
         try {
-          await client.storage.from(bucket).uploadBinary(
+          await client.storage
+              .from(bucket)
+              .uploadBinary(
                 path,
                 bytes,
                 fileOptions: const FileOptions(

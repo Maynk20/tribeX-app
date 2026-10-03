@@ -105,7 +105,9 @@ class _EditPlanModalState extends State<EditPlanModal> {
       imageUrl: _imageUrl,
     );
 
-    final success = await context.read<ActivitiesState>().updateActivity(updated);
+    final success = await context.read<ActivitiesState>().updateActivity(
+      updated,
+    );
 
     if (!mounted) return;
     setState(() => _isSaving = false);
@@ -314,7 +316,9 @@ class _EditPlanModalState extends State<EditPlanModal> {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.7),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.7,
+                                      ),
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: const Row(
@@ -345,7 +349,9 @@ class _EditPlanModalState extends State<EditPlanModal> {
                                     width: 24,
                                     height: 24,
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.7),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.7,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(

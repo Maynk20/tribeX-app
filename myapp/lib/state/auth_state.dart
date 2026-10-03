@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import '../services/location_service.dart';
 import '../services/supabase_service.dart';
 
 class AuthState extends ChangeNotifier {
@@ -36,6 +37,24 @@ class AuthState extends ChangeNotifier {
       _currentUser != null &&
       _currentUser!.hasCompletedProfile &&
       !_currentUser!.hasCompletedOnboarding;
+
+  /// TanStack: `!user || (!!profile.city && latitude != null && longitude != null)`.
+  /// Signed-out viewers are treated as "has location" so the card shows the
+  /// normal Join button (which routes to sign-in).
+  bool get hasProfileGpsLocation {
+    final u = _currentUser;
+    if (u == null) return true;
+    return (u.city?.trim().isNotEmpty ?? false) &&
+        u.latitude != null &&
+        u.longitude != null;
+  }
+
+  bool _isSavingLocation = false;
+  bool get isSavingLocation => _isSavingLocation;
+
+  /// User id for which the silent GPS refresh was already attempted during
+  /// this app session (TanStack uses sessionStorage `tribex:gps-tried:<id>`).
+  String? _gpsTriedForUserId;
 
   bool _isProfileLoading = false;
 
@@ -83,6 +102,8 @@ class AuthState extends ChangeNotifier {
     _currentUser = null;
     _isLoading = false;
     _isProfileLoading = false;
+    _gpsTriedForUserId = null;
+    _blockedUserIds.clear();
     _unsubscribeBlocks();
     if (!_isDisposed) notifyListeners();
   }
@@ -144,6 +165,66 @@ class AuthState extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
       }
+    }
+    _maybeSilentGpsRefresh();
+  }
+
+  /// Best-effort silent GPS refresh once per signed-in session, only when the
+  /// profile has no verified location yet. Failures (denied permission, GPS
+  /// off) are swallowed — the join flow still shows a clear prompt.
+  /// Mirrors the effect in TanStack `src/routes/__root.tsx`.
+  void _maybeSilentGpsRefresh() {
+    final u = _currentUser;
+    if (_isDisposed || u == null) return;
+    if (!u.hasCompletedProfile || !u.hasCompletedOnboarding) return;
+    if (hasProfileGpsLocation) return;
+    if (_gpsTriedForUserId == u.id) return;
+    _gpsTriedForUserId = u.id;
+    unawaited(saveVerifiedProfileLocation().then((_) {}, onError: (_) {}));
+  }
+
+  /// Read the device location, reverse-geocode it into a city label and save
+  /// `city`, `latitude`, `longitude` on the profile. Returns `null` on success
+  /// or a user-facing error message. Port of TanStack
+  /// `saveVerifiedProfileLocation` (src/lib/services.ts).
+  Future<String?> saveVerifiedProfileLocation() async {
+    final u = _currentUser;
+    final client = SupabaseService.client;
+    if (u == null || client == null || _isDisposed) {
+      return "Couldn't fetch your location";
+    }
+    if (_isSavingLocation) return null;
+    _isSavingLocation = true;
+    if (!_isDisposed) notifyListeners();
+    try {
+      final coords = await LocationService.getProfileCoords();
+      if (!coords.isSuccess) {
+        return coords.error ?? "Couldn't fetch your location";
+      }
+      final lat = coords.latitude!;
+      final lon = coords.longitude!;
+      final city = await LocationService.resolveProfileCity(lat, lon);
+      if (_isDisposed) return null;
+
+      await client
+          .from('profiles')
+          .update({'city': city, 'latitude': lat, 'longitude': lon})
+          .eq('id', u.id);
+
+      // Only apply if the same user is still signed in.
+      if (_isDisposed || _currentUser?.id != u.id) return null;
+      _currentUser = _currentUser!.copyWith(
+        city: city,
+        latitude: lat,
+        longitude: lon,
+      );
+      return null;
+    } catch (e) {
+      debugPrint('saveVerifiedProfileLocation failed');
+      return 'Unable to save your location right now. Please try again.';
+    } finally {
+      _isSavingLocation = false;
+      if (!_isDisposed) notifyListeners();
     }
   }
 
@@ -335,6 +416,7 @@ class AuthState extends ChangeNotifier {
         notifyListeners();
       }
     }
+    _maybeSilentGpsRefresh();
   }
 
   void togglePush(bool value) {

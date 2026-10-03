@@ -6,12 +6,15 @@ import '../theme/app_colors.dart';
 class AppToast {
   AppToast._();
 
-  /// Show a 2-second floating popup toast notification or alert
+  /// Show a 2-second floating popup toast notification or alert.
+  /// Pass [actionLabel] + [onAction] to add a tappable action (e.g. "Settings").
   static void show(
     BuildContext context,
     String message, {
     bool isError = false,
     Duration duration = const Duration(seconds: 2),
+    String? actionLabel,
+    VoidCallback? onAction,
   }) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
@@ -27,6 +30,13 @@ class AppToast {
             ? AppColors.destructive
             : (isDark ? const Color(0xFF1E293B) : const Color(0xFF0F172A)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        action: (actionLabel != null && onAction != null)
+            ? SnackBarAction(
+                label: actionLabel,
+                textColor: Colors.white,
+                onPressed: onAction,
+              )
+            : null,
         content: Row(
           children: [
             Icon(

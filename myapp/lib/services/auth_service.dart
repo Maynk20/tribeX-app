@@ -39,8 +39,7 @@ class AuthService {
       return OtpResult(
         success: false,
         code: 'RATE_LIMIT',
-        message:
-            'Too many requests. Please check your inbox for an existing code or wait 60 seconds.',
+        message: 'Too many requests. Please check your inbox for an existing code or wait 60 seconds.',
       );
     }
 
@@ -52,8 +51,7 @@ class AuthService {
       return OtpResult(
         success: false,
         code: 'OTP_EXPIRED',
-        message:
-            'Code has expired or is invalid. Please tap Resend code to get a new one.',
+        message: 'Code has expired or is invalid. Please tap Resend code to get a new one.',
       );
     }
 
@@ -86,8 +84,7 @@ class AuthService {
       return OtpResult(
         success: false,
         code: 'NETWORK_ERROR',
-        message:
-            'Network error. Please check your internet connection and try again.',
+        message: 'Network error. Please check your internet connection and try again.',
       );
     }
 
@@ -177,10 +174,7 @@ class AuthService {
         email: normalizedEmail,
         shouldCreateUser: true,
         emailRedirectTo: _defaultRedirectTo,
-        data: {
-          'full_name': trimmedName,
-          'username': normalizedUsername,
-        },
+        data: {'full_name': trimmedName, 'username': normalizedUsername},
       );
       return OtpResult(
         success: true,

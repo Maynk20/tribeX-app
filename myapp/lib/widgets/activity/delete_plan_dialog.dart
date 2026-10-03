@@ -81,7 +81,9 @@ class _DeletePlanDialogState extends State<DeletePlanDialog> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 OutlinedButton(
-                  onPressed: _isDeleting ? null : () => Navigator.of(context).pop(),
+                  onPressed: _isDeleting
+                      ? null
+                      : () => Navigator.of(context).pop(),
                   child: const Text('Cancel'),
                 ),
                 const SizedBox(width: 10),

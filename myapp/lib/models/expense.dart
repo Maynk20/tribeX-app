@@ -14,11 +14,11 @@ class ExpenseMember {
   });
 
   factory ExpenseMember.fromJson(Map<String, dynamic> json) {
-    final profile = (json['profiles_public'] ?? json['profiles'])
-        as Map<String, dynamic>?;
+    final profile =
+        (json['profiles_public'] ?? json['profiles']) as Map<String, dynamic>?;
     final isPaidVal = json['is_paid'] == true || json['status'] == 'paid';
-    final amountVal =
-        ((json['amount'] ?? json['share_amount'] ?? 0) as num).toDouble();
+    final amountVal = ((json['amount'] ?? json['share_amount'] ?? 0) as num)
+        .toDouble();
 
     return ExpenseMember(
       userId: (json['user_id'] ?? '') as String,
@@ -80,8 +80,8 @@ class Expense {
   });
 
   factory Expense.fromJson(Map<String, dynamic> json) {
-    final creator = (json['profiles_public'] ?? json['profiles'])
-        as Map<String, dynamic>?;
+    final creator =
+        (json['profiles_public'] ?? json['profiles']) as Map<String, dynamic>?;
     final sharesRaw = (json['expense_shares'] as List<dynamic>?) ?? [];
     final membersList = sharesRaw
         .map((s) => ExpenseMember.fromJson(s as Map<String, dynamic>))
@@ -90,8 +90,7 @@ class Expense {
     return Expense(
       id: (json['id'] ?? '') as String,
       activityId: (json['activity_id'] ?? '') as String,
-      creatorId:
-          (json['created_by'] ?? json['creator_id'] ?? '') as String,
+      creatorId: (json['created_by'] ?? json['creator_id'] ?? '') as String,
       creatorName:
           (creator?['full_name'] ?? creator?['username'] ?? 'Host') as String,
       description: (json['description'] ?? '') as String,
@@ -99,7 +98,7 @@ class Expense {
       upiId: json['upi_id'] as String?,
       members: membersList,
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
     );
   }

@@ -72,9 +72,10 @@ class Activity {
       description: json['description'] as String? ?? '',
       category: json['category'] as String? ?? 'Social',
       dateTime: json['date_time'] != null
-          ? DateTime.parse(json['date_time'] as String)
+          ? (DateTime.tryParse(json['date_time'].toString()) ?? DateTime.now())
           : (json['dateTime'] != null
-                ? DateTime.parse(json['dateTime'] as String)
+                ? (DateTime.tryParse(json['dateTime'].toString()) ??
+                      DateTime.now())
                 : DateTime.now()),
       location: json['location'] as String? ?? '',
       totalSlots:
@@ -100,7 +101,7 @@ class Activity {
       isUrgent:
           json['is_urgent'] as bool? ?? json['isUrgent'] as bool? ?? false,
       urgentUntil: json['urgent_until'] != null
-          ? DateTime.parse(json['urgent_until'] as String)
+          ? DateTime.tryParse(json['urgent_until'].toString())
           : null,
       isOnline:
           json['is_online'] as bool? ?? json['isOnline'] as bool? ?? false,
