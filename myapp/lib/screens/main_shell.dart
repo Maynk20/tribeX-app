@@ -76,10 +76,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final isLoading = context.select<AuthState, bool>((a) => a.isLoading);
-    final isAuthenticated = context.select<AuthState, bool>((a) => a.isAuthenticated);
+    final isAuthenticated = context.select<AuthState, bool>(
+      (a) => a.isAuthenticated,
+    );
     final needsProfile = context.select<AuthState, bool>((a) => a.needsProfile);
-    final needsOnboarding = context.select<AuthState, bool>((a) => a.needsOnboarding);
-    final currentUser = context.select<AuthState, dynamic>((a) => a.currentUser);
+    final needsOnboarding = context.select<AuthState, bool>(
+      (a) => a.needsOnboarding,
+    );
+    final currentUser = context.select<AuthState, dynamic>(
+      (a) => a.currentUser,
+    );
 
     if (isLoading) {
       return const Scaffold(
@@ -122,9 +128,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           context.read<NotificationsState>().initUser(currentUserId);
-          if (currentUserId == null) {
-            context.read<ChatState>().clear();
-          }
+          context.read<ChatState>().clear();
         }
       });
     }
@@ -139,9 +143,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onNavigateToCreate: _goToCreate,
                 onNavigateToProfile: _goToProfile,
               ),
-              CreatePlanScreen(
-                onPlanCreated: _goToExplore,
-              ),
+              CreatePlanScreen(onPlanCreated: _goToExplore),
               const MessagesScreen(),
               const ProfileScreen(),
             ],

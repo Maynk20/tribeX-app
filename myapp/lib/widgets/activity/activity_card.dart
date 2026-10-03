@@ -39,6 +39,14 @@ class ActivityCard extends StatelessWidget {
   final bool isFemale;
   final bool isVerified;
 
+  /// Whether the viewer's profile has the verified GPS location required by
+  /// the join RLS policy. When false the Join button becomes an
+  /// "Add GPS Location" safety block (TanStack parity).
+  final bool hasProfileGpsLocation;
+
+  /// Called when the "Add GPS Location" block is tapped.
+  final VoidCallback? onAddGpsLocation;
+
   const ActivityCard({
     super.key,
     required this.activity,
@@ -54,6 +62,8 @@ class ActivityCard extends StatelessWidget {
     this.onReport,
     this.isFemale = true,
     this.isVerified = true,
+    this.hasProfileGpsLocation = true,
+    this.onAddGpsLocation,
   });
 
   @override
@@ -74,7 +84,10 @@ class ActivityCard extends StatelessWidget {
       safetyBlock = 'Women Only Plan';
     } else if (blockedByVerified) {
       safetyBlock = 'Verification Required';
+    } else if (!hasProfileGpsLocation) {
+      safetyBlock = 'Add GPS Location';
     }
+    final isGpsBlock = safetyBlock == 'Add GPS Location';
 
     // Shield label
     String? shieldLabel;
@@ -109,143 +122,167 @@ class ActivityCard extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
-          // Main content column
-          Padding(
-            padding: const EdgeInsets.all(16), // p-4
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Cover Photo: -mx-4 -mt-4 mb-3 h-36 — bleed to edges
-                if (activity.imageUrl != null)
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      left:
-                          -0, // covered by negative margin trick via transform
-                      bottom: 12, // mb-3
+            // Main content column
+            Padding(
+              padding: const EdgeInsets.all(16), // p-4
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Cover Photo: -mx-4 -mt-4 mb-3 h-36 — bleed to edges
+                  if (activity.imageUrl != null)
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: -0, // covered by negative margin trick via transform
+                        bottom: 12, // mb-3
+                      ),
+                      child: _CoverImage(
+                        imageUrl: activity.imageUrl!,
+                        urgentActive: urgentActive,
+                      ),
                     ),
-                    child: _CoverImage(
-                      imageUrl: activity.imageUrl!,
-                      urgentActive: urgentActive,
-                    ),
+
+                  // Top row: Emoji + Badges + Title
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Emoji box: h-12 w-12 rounded-2xl (48x48, 16px radius) bg-primary/15
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: accentBg,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          AppCategories.emojiFor(activity.category),
+                          // text-2xl leading-none
+                          style: const TextStyle(fontSize: 22, height: 1),
+                        ),
+                      ),
+                      const SizedBox(width: 12), // gap-3
+                      // Badges + Title
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Badges row: flex flex-wrap items-center gap-1.5
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                // Category badge: rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider
+                                _Badge(
+                                  text: activity.category.toUpperCase(),
+                                  bgColor: accentBg,
+                                  textColor: AppColors.primary,
+                                ),
+                                // Virtual badge
+                                if (activity.isOnline)
+                                  _Badge(
+                                    icon: LucideIcons.globe,
+                                    text: 'VIRTUAL',
+                                    bgColor: AppColors.successMuted,
+                                    textColor: isDark
+                                        ? const Color(0xFF34D399)
+                                        : AppColors.success,
+                                  ),
+                                // Status badges
+                                if (myStatus == JoinStatus.accepted)
+                                  _Badge(
+                                    text: 'CONFIRMED',
+                                    bgColor: const Color(0x2622C55E),
+                                    textColor: isDark
+                                        ? const Color(0xFF4ADE80)
+                                        : const Color(0xFF16A34A),
+                                  )
+                                else if (myStatus == JoinStatus.pending)
+                                  _Badge(
+                                    text: 'AWAITING APPROVAL',
+                                    bgColor: AppColors.warningMuted,
+                                    textColor: isDark
+                                        ? const Color(0xFFFBBF24)
+                                        : const Color(0xFFD97706),
+                                  ),
+                                if (isHost)
+                                  const _Badge(
+                                    text: 'HOSTING',
+                                    bgColor: AppColors.primaryMuted,
+                                    textColor: AppColors.primary,
+                                  ),
+                                // Shield badge
+                                if (activity.hasSafetyShield &&
+                                    shieldLabel != null)
+                                  _Badge(
+                                    icon: LucideIcons.shield,
+                                    text: shieldLabel,
+                                    bgColor: AppColors.primaryMuted,
+                                    textColor: AppColors.primary,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 6), // mt-1.5
+                            // Title: text-base font-semibold tracking-tight (16px, w600)
+                            Text(
+                              activity.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.25, // tracking-tight
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
 
-                // Top row: Emoji + Badges + Title
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Emoji box: h-12 w-12 rounded-2xl (48x48, 16px radius) bg-primary/15
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: accentBg,
-                        borderRadius: BorderRadius.circular(16),
+                  const SizedBox(height: 8), // mt-0.5 equiv on children
+                  // Location: flex items-center gap-1 text-xs text-muted-foreground
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.mapPin,
+                        size: 12, // h-3 w-3
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        AppCategories.emojiFor(activity.category),
-                        // text-2xl leading-none
-                        style: const TextStyle(fontSize: 22, height: 1),
-                      ),
-                    ),
-                    const SizedBox(width: 12), // gap-3
-                    // Badges + Title
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Badges row: flex flex-wrap items-center gap-1.5
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              // Category badge: rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider
-                              _Badge(
-                                text: activity.category.toUpperCase(),
-                                bgColor: accentBg,
-                                textColor: AppColors.primary,
-                              ),
-                              // Virtual badge
-                              if (activity.isOnline)
-                                _Badge(
-                                  icon: LucideIcons.globe,
-                                  text: 'VIRTUAL',
-                                  bgColor: AppColors.successMuted,
-                                  textColor: isDark
-                                      ? const Color(0xFF34D399)
-                                      : AppColors.success,
-                                ),
-                              // Status badges
-                              if (myStatus == JoinStatus.accepted)
-                                _Badge(
-                                  text: 'CONFIRMED',
-                                  bgColor: const Color(0x2622C55E),
-                                  textColor: isDark
-                                      ? const Color(0xFF4ADE80)
-                                      : const Color(0xFF16A34A),
-                                )
-                              else if (myStatus == JoinStatus.pending)
-                                _Badge(
-                                  text: 'AWAITING APPROVAL',
-                                  bgColor: AppColors.warningMuted,
-                                  textColor: isDark
-                                      ? const Color(0xFFFBBF24)
-                                      : const Color(0xFFD97706),
-                                ),
-                              if (isHost)
-                                const _Badge(
-                                  text: 'HOSTING',
-                                  bgColor: AppColors.primaryMuted,
-                                  textColor: AppColors.primary,
-                                ),
-                              // Shield badge
-                              if (activity.hasSafetyShield &&
-                                  shieldLabel != null)
-                                _Badge(
-                                  icon: LucideIcons.shield,
-                                  text: shieldLabel,
-                                  bgColor: AppColors.primaryMuted,
-                                  textColor: AppColors.primary,
-                                ),
-                            ],
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          activity.location,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12, // text-xs
+                            color: isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight,
                           ),
-                          const SizedBox(height: 6), // mt-1.5
-                          // Title: text-base font-semibold tracking-tight (16px, w600)
-                          Text(
-                            activity.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.25, // tracking-tight
-                              height: 1.3,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
 
-                const SizedBox(height: 8), // mt-0.5 equiv on children
-                // Location: flex items-center gap-1 text-xs text-muted-foreground
-                Row(
-                  children: [
-                    Icon(
-                      LucideIcons.mapPin,
-                      size: 12, // h-3 w-3
-                      color: isDark
-                          ? AppColors.mutedForegroundDark
-                          : AppColors.mutedForegroundLight,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        activity.location,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  // Time: flex items-center gap-1 text-xs text-muted-foreground
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.clock,
+                        size: 12, // h-3 w-3
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        DateFormatter.formatWhen(activity.dateTime),
                         style: TextStyle(
                           fontSize: 12, // text-xs
                           color: isDark
@@ -253,168 +290,193 @@ class ActivityCard extends StatelessWidget {
                               : AppColors.mutedForegroundLight,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
+                    ],
+                  ),
 
-                // Time: flex items-center gap-1 text-xs text-muted-foreground
-                Row(
-                  children: [
-                    Icon(
-                      LucideIcons.clock,
-                      size: 12, // h-3 w-3
-                      color: isDark
-                          ? AppColors.mutedForegroundDark
-                          : AppColors.mutedForegroundLight,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      DateFormatter.formatWhen(activity.dateTime),
-                      style: TextStyle(
-                        fontSize: 12, // text-xs
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Amenities / Tags (if any)
-                if (activity.amenities.isNotEmpty ||
-                    activity.topicTags.isNotEmpty) ...[
-                  const SizedBox(height: 8), // mt-2
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      // Amenities: rounded-full bg-secondary text-[10px] font-medium
-                      ...activity.amenities.take(4).map((k) {
-                        final a = AppCategories.amenityMap[k];
-                        if (a == null) return const SizedBox.shrink();
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppColors.mutedDark
-                                : AppColors.mutedLight,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            a.badge,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: isDark
-                                  ? AppColors.foregroundDark.withValues(
-                                      alpha: 0.8,
-                                    )
-                                  : AppColors.foregroundLight.withValues(
-                                      alpha: 0.8,
-                                    ),
+                  // Amenities / Tags (if any)
+                  if (activity.amenities.isNotEmpty ||
+                      activity.topicTags.isNotEmpty) ...[
+                    const SizedBox(height: 8), // mt-2
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        // Amenities: rounded-full bg-secondary text-[10px] font-medium
+                        ...activity.amenities.take(4).map((k) {
+                          final a = AppCategories.amenityMap[k];
+                          if (a == null) return const SizedBox.shrink();
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
                             ),
-                          ),
-                        );
-                      }),
-                      // Topic tags: #tag with border
-                      ...activity.topicTags
-                          .take(3)
-                          .map(
-                            (t) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.mutedDark
+                                  : AppColors.mutedLight,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              a.badge,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
                                 color: isDark
-                                    ? AppColors.backgroundDark
-                                    : AppColors.backgroundLight,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: border.withValues(alpha: 0.6),
-                                ),
+                                    ? AppColors.foregroundDark.withValues(
+                                        alpha: 0.8,
+                                      )
+                                    : AppColors.foregroundLight.withValues(
+                                        alpha: 0.8,
+                                      ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    LucideIcons.hash,
-                                    size: 10,
-                                    color: isDark
-                                        ? AppColors.mutedForegroundDark
-                                        : AppColors.mutedForegroundLight,
+                            ),
+                          );
+                        }),
+                        // Topic tags: #tag with border
+                        ...activity.topicTags
+                            .take(3)
+                            .map(
+                              (t) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppColors.backgroundDark
+                                      : AppColors.backgroundLight,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: border.withValues(alpha: 0.6),
                                   ),
-                                  Text(
-                                    t,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.hash,
+                                      size: 10,
                                       color: isDark
                                           ? AppColors.mutedForegroundDark
                                           : AppColors.mutedForegroundLight,
                                     ),
-                                  ),
-                                ],
+                                    Text(
+                                      t,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? AppColors.mutedForegroundDark
+                                            : AppColors.mutedForegroundLight,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
 
-                // Divider + stats + actions: mt-auto flex flex-col gap-3 border-t border-border/60 pt-3
-                const SizedBox(height: 12),
-                Divider(height: 1, color: border.withValues(alpha: 0.6)),
-                const SizedBox(height: 12), // pt-3
-                // Stats row: flex items-center gap-x-2 text-xs
-                Row(
-                  children: [
-                    // Slots: Users icon h-3.5 w-3.5
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          LucideIcons.users,
-                          size: 14, // h-3.5 w-3.5
+                  // Divider + stats + actions: mt-auto flex flex-col gap-3 border-t border-border/60 pt-3
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: border.withValues(alpha: 0.6)),
+                  const SizedBox(height: 12), // pt-3
+                  // Stats row: flex items-center gap-x-2 text-xs
+                  Row(
+                    children: [
+                      // Slots: Users icon h-3.5 w-3.5
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.users,
+                            size: 14, // h-3.5 w-3.5
+                            color: isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${activity.slotsLeft}/${activity.totalSlots}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isUrgentSlots
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: isUrgentSlots
+                                  ? AppColors.primary
+                                  : (isDark
+                                        ? AppColors.mutedForegroundDark
+                                        : AppColors.mutedForegroundLight),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Rating: Star fill-current text-primary h-3.5 w-3.5
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.star,
+                            size: 14, // h-3.5 w-3.5
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            (host?.rating ?? 5.0).toStringAsFixed(1),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Separator + Host
+                      const SizedBox(width: 4),
+                      Text(
+                        '·',
+                        style: TextStyle(
                           color: isDark
                               ? AppColors.mutedForegroundDark
                               : AppColors.mutedForegroundLight,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${activity.slotsLeft}/${activity.totalSlots}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: isUrgentSlots
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: isUrgentSlots
-                                ? AppColors.primary
-                                : (isDark
-                                      ? AppColors.mutedForegroundDark
-                                      : AppColors.mutedForegroundLight),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 8),
+                      ),
+                      const SizedBox(width: 4),
 
-                    // Rating: Star fill-current text-primary h-3.5 w-3.5
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          LucideIcons.star,
-                          size: 14, // h-3.5 w-3.5
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          (host?.rating ?? 5.0).toStringAsFixed(1),
+                      // Host avatar (h-4 w-4 = 16px circle)
+                      CircleAvatar(
+                        radius: 8,
+                        backgroundColor: AppColors.primaryMuted,
+                        backgroundImage: host?.avatarUrl != null
+                            ? NetworkImage(host!.avatarUrl!)
+                            : null,
+                        onBackgroundImageError: host?.avatarUrl != null
+                            ? (exception, stackTrace) {}
+                            : null,
+                        child: host?.avatarUrl == null
+                            ? Text(
+                                (hostName.isNotEmpty ? hostName[0] : 'H')
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          hostName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
                             color: isDark
@@ -422,284 +484,235 @@ class ActivityCard extends StatelessWidget {
                                 : AppColors.mutedForegroundLight,
                           ),
                         ),
-                      ],
-                    ),
-
-                    // Separator + Host
-                    const SizedBox(width: 4),
-                    Text(
-                      '·',
-                      style: TextStyle(
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-
-                    // Host avatar (h-4 w-4 = 16px circle)
-                    CircleAvatar(
-                      radius: 8,
-                      backgroundColor: AppColors.primaryMuted,
-                      backgroundImage: host?.avatarUrl != null
-                          ? NetworkImage(host!.avatarUrl!)
-                          : null,
-                      onBackgroundImageError: host?.avatarUrl != null
-                          ? (exception, stackTrace) {}
-                          : null,
-                      child: host?.avatarUrl == null
-                          ? Text(
-                              (hostName.isNotEmpty ? hostName[0] : 'H')
-                                  .toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.primary,
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        hostName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark
-                              ? AppColors.mutedForegroundDark
-                              : AppColors.mutedForegroundLight,
+                      if (host?.isVerified ?? false)
+                        const Icon(
+                          LucideIcons.badgeCheck,
+                          size: 12,
+                          color: AppColors.primary,
                         ),
-                      ),
-                    ),
-                    if (host?.isVerified ?? false)
-                      const Icon(
-                        LucideIcons.badgeCheck,
-                        size: 12,
-                        color: AppColors.primary,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
 
-                // Action buttons row
-                Row(
-                  children: [
-                    if (isHost) ...[
-                      // Urgent toggle: h-9 w-9 rounded-full
-                      if (activity.slotsLeft > 0) ...[
-                        _CircleIconButton(
-                          icon: LucideIcons.zap,
-                          size: 14,
-                          onTap: onToggleUrgent ?? () {},
-                          backgroundColor: urgentActive
-                              ? const Color(0xFFEF4444)
-                              : const Color(0x26F59E0B),
-                          iconColor: urgentActive
-                              ? Colors.white
-                              : const Color(0xFFD97706),
-                          tooltip: urgentActive
-                              ? 'Cancel urgent alert'
-                              : 'Send urgent spot alert',
+                  // Action buttons row
+                  Row(
+                    children: [
+                      if (isHost) ...[
+                        // Urgent toggle: h-9 w-9 rounded-full
+                        if (activity.slotsLeft > 0) ...[
+                          _CircleIconButton(
+                            icon: LucideIcons.zap,
+                            size: 14,
+                            onTap: onToggleUrgent ?? () {},
+                            backgroundColor: urgentActive
+                                ? const Color(0xFFEF4444)
+                                : const Color(0x26F59E0B),
+                            iconColor: urgentActive
+                                ? Colors.white
+                                : const Color(0xFFD97706),
+                            tooltip: urgentActive
+                                ? 'Cancel urgent alert'
+                                : 'Send urgent spot alert',
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+
+                        // Manage button: rounded-full border border-primary/40 bg-primary/10 px-3 py-2
+                        Expanded(
+                          child: _ActionButton(
+                            label: 'Manage',
+                            onTap: onManage ?? () {},
+                            bgColor: AppColors.primaryMuted,
+                            textColor: AppColors.primary,
+                            borderColor: AppColors.primary.withValues(
+                              alpha: 0.4,
+                            ),
+                            flex: true,
+                          ),
                         ),
                         const SizedBox(width: 6),
-                      ],
 
-                      // Manage button: rounded-full border border-primary/40 bg-primary/10 px-3 py-2
-                      Expanded(
-                        child: _ActionButton(
-                          label: 'Manage',
-                          onTap: onManage ?? () {},
-                          bgColor: AppColors.primaryMuted,
-                          textColor: AppColors.primary,
-                          borderColor: AppColors.primary.withValues(alpha: 0.4),
-                          flex: true,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-
-                      // Chat icon button: h-9 w-9 rounded-full border
-                      _CircleIconButton(
-                        icon: LucideIcons.messageCircle,
-                        size: 14,
-                        onTap: onChat,
-                        backgroundColor: isDark
-                            ? AppColors.backgroundDark
-                            : AppColors.backgroundLight,
-                        iconColor: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                        borderColor: border.withValues(alpha: 0.6),
-                      ),
-                      const SizedBox(width: 6),
-
-                      // Edit icon button
-                      _CircleIconButton(
-                        icon: LucideIcons.pencil,
-                        size: 14,
-                        onTap: onEdit ?? () {},
-                        backgroundColor: isDark
-                            ? AppColors.backgroundDark
-                            : AppColors.backgroundLight,
-                        iconColor: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                        borderColor: border.withValues(alpha: 0.6),
-                      ),
-                      const SizedBox(width: 6),
-
-                      // Delete icon button
-                      _CircleIconButton(
-                        icon: LucideIcons.trash2,
-                        size: 14,
-                        onTap: onDelete ?? () {},
-                        backgroundColor: isDark
-                            ? AppColors.backgroundDark
-                            : AppColors.backgroundLight,
-                        iconColor: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                        borderColor: border.withValues(alpha: 0.6),
-                      ),
-                    ] else ...[
-                      // Chat icon button (guest)
-                      _CircleIconButton(
-                        icon: LucideIcons.messageCircle,
-                        size: 14,
-                        onTap: onChat,
-                        backgroundColor: isDark
-                            ? AppColors.backgroundDark
-                            : AppColors.backgroundLight,
-                        iconColor: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                        borderColor: border.withValues(alpha: 0.6),
-                      ),
-                      if (onReport != null) ...[
-                        const SizedBox(width: 6),
+                        // Chat icon button: h-9 w-9 rounded-full border
                         _CircleIconButton(
-                          icon: LucideIcons.flag,
+                          icon: LucideIcons.messageCircle,
                           size: 14,
-                          onTap: onReport!,
+                          onTap: onChat,
                           backgroundColor: isDark
                               ? AppColors.backgroundDark
                               : AppColors.backgroundLight,
-                          iconColor: AppColors.destructive,
+                          iconColor: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
                           borderColor: border.withValues(alpha: 0.6),
-                          tooltip: 'Report concern',
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Edit icon button
+                        _CircleIconButton(
+                          icon: LucideIcons.pencil,
+                          size: 14,
+                          onTap: onEdit ?? () {},
+                          backgroundColor: isDark
+                              ? AppColors.backgroundDark
+                              : AppColors.backgroundLight,
+                          iconColor: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                          borderColor: border.withValues(alpha: 0.6),
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Delete icon button
+                        _CircleIconButton(
+                          icon: LucideIcons.trash2,
+                          size: 14,
+                          onTap: onDelete ?? () {},
+                          backgroundColor: isDark
+                              ? AppColors.backgroundDark
+                              : AppColors.backgroundLight,
+                          iconColor: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                          borderColor: border.withValues(alpha: 0.6),
+                        ),
+                      ] else ...[
+                        // Chat icon button (guest)
+                        _CircleIconButton(
+                          icon: LucideIcons.messageCircle,
+                          size: 14,
+                          onTap: onChat,
+                          backgroundColor: isDark
+                              ? AppColors.backgroundDark
+                              : AppColors.backgroundLight,
+                          iconColor: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                          borderColor: border.withValues(alpha: 0.6),
+                        ),
+                        if (onReport != null) ...[
+                          const SizedBox(width: 6),
+                          _CircleIconButton(
+                            icon: LucideIcons.flag,
+                            size: 14,
+                            onTap: onReport!,
+                            backgroundColor: isDark
+                                ? AppColors.backgroundDark
+                                : AppColors.backgroundLight,
+                            iconColor: AppColors.destructive,
+                            borderColor: border.withValues(alpha: 0.6),
+                            tooltip: 'Report concern',
+                          ),
+                        ],
+                        const SizedBox(width: 6),
+
+                        // Join / status button
+                        Expanded(
+                          child: myStatus == JoinStatus.pending
+                              ? _ActionButton(
+                                  icon: LucideIcons.hourglass,
+                                  label: 'Request Pending',
+                                  onTap: null,
+                                  bgColor: isDark
+                                      ? AppColors.mutedDark
+                                      : AppColors.mutedLight,
+                                  textColor: isDark
+                                      ? AppColors.mutedForegroundDark
+                                      : AppColors.mutedForegroundLight,
+                                  borderColor: border.withValues(alpha: 0.6),
+                                  flex: true,
+                                )
+                              : myStatus == JoinStatus.accepted
+                              ? _ActionButton(
+                                  icon: LucideIcons.check,
+                                  label: 'Joined',
+                                  onTap: onChat,
+                                  bgColor: const Color(0x2622C55E),
+                                  textColor: isDark
+                                      ? const Color(0xFF4ADE80)
+                                      : const Color(0xFF16A34A),
+                                  flex: true,
+                                )
+                              : safetyBlock != null
+                              ? _ActionButton(
+                                  icon: LucideIcons.shield,
+                                  label: safetyBlock,
+                                  onTap: isGpsBlock ? onAddGpsLocation : null,
+                                  bgColor: isDark
+                                      ? AppColors.mutedDark
+                                      : AppColors.mutedLight,
+                                  textColor: isDark
+                                      ? AppColors.mutedForegroundDark
+                                      : AppColors.mutedForegroundLight,
+                                  borderColor: border.withValues(alpha: 0.6),
+                                  flex: true,
+                                )
+                              : _ActionButton(
+                                  label: activity.slotsLeft <= 0
+                                      ? 'Full'
+                                      : 'Request to Join',
+                                  onTap: activity.slotsLeft <= 0
+                                      ? null
+                                      : onJoin,
+                                  bgColor: AppColors.primary,
+                                  textColor: Colors.white,
+                                  flex: true,
+                                ),
                         ),
                       ],
-                      const SizedBox(width: 6),
-
-                      // Join / status button
-                      Expanded(
-                        child: myStatus == JoinStatus.pending
-                            ? _ActionButton(
-                                icon: LucideIcons.hourglass,
-                                label: 'Request Pending',
-                                onTap: null,
-                                bgColor: isDark
-                                    ? AppColors.mutedDark
-                                    : AppColors.mutedLight,
-                                textColor: isDark
-                                    ? AppColors.mutedForegroundDark
-                                    : AppColors.mutedForegroundLight,
-                                borderColor: border.withValues(alpha: 0.6),
-                                flex: true,
-                              )
-                            : myStatus == JoinStatus.accepted
-                                ? _ActionButton(
-                                    icon: LucideIcons.check,
-                                    label: 'Joined',
-                                    onTap: onChat,
-                                    bgColor: const Color(0x2622C55E),
-                                    textColor: isDark
-                                        ? const Color(0xFF4ADE80)
-                                        : const Color(0xFF16A34A),
-                                    flex: true,
-                                  )
-                                : safetyBlock != null
-                                    ? _ActionButton(
-                                        icon: LucideIcons.shield,
-                                        label: safetyBlock,
-                                        onTap: null,
-                                        bgColor: isDark
-                                            ? AppColors.mutedDark
-                                            : AppColors.mutedLight,
-                                        textColor: isDark
-                                            ? AppColors.mutedForegroundDark
-                                            : AppColors.mutedForegroundLight,
-                                        borderColor:
-                                            border.withValues(alpha: 0.6),
-                                        flex: true,
-                                      )
-                                    : _ActionButton(
-                                        label: activity.slotsLeft <= 0
-                                            ? 'Full'
-                                            : 'Request to Join',
-                                        onTap: activity.slotsLeft <= 0
-                                            ? null
-                                            : onJoin,
-                                        bgColor: AppColors.primary,
-                                        textColor: Colors.white,
-                                        flex: true,
-                                      ),
-                      ),
                     ],
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Pending count overlay badge (absolute top-right)
-          if (isHost && pendingCount > 0)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: GestureDetector(
-                onTap: onManage,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        LucideIcons.bell,
-                        size: 12,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        '$pendingCount pending',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+            // Pending count overlay badge (absolute top-right)
+            if (isHost && pendingCount > 0)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: GestureDetector(
+                  onTap: onManage,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          LucideIcons.bell,
+                          size: 12,
                           color: Colors.white,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 3),
+                        Text(
+                          '$pendingCount pending',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
@@ -744,12 +757,16 @@ class _CoverImage extends StatelessWidget {
                       ? Image.memory(
                           _getDecodedBytes(imageUrl),
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: AppColors.primaryMuted,
-                            child: const Center(
-                              child: Icon(LucideIcons.image, color: AppColors.primary),
-                            ),
-                          ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                color: AppColors.primaryMuted,
+                                child: const Center(
+                                  child: Icon(
+                                    LucideIcons.image,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
                         )
                       : Image.network(
                           imageUrl,
@@ -763,21 +780,26 @@ class _CoverImage extends StatelessWidget {
                               child: Center(
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  value: loadingProgress.expectedTotalBytes != null
+                                  value:
+                                      loadingProgress.expectedTotalBytes != null
                                       ? loadingProgress.cumulativeBytesLoaded /
-                                          loadingProgress.expectedTotalBytes!
+                                            loadingProgress.expectedTotalBytes!
                                       : null,
                                   color: AppColors.primary,
                                 ),
                               ),
                             );
                           },
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: AppColors.primaryMuted,
-                            child: const Center(
-                              child: Icon(LucideIcons.image, color: AppColors.primary),
-                            ),
-                          ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                color: AppColors.primaryMuted,
+                                child: const Center(
+                                  child: Icon(
+                                    LucideIcons.image,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
                         ),
                   // Urgent overlay badge on cover image
                   if (urgentActive)
@@ -802,7 +824,11 @@ class _CoverImage extends StatelessWidget {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(LucideIcons.zap, size: 12, color: Colors.white),
+                            Icon(
+                              LucideIcons.zap,
+                              size: 12,
+                              color: Colors.white,
+                            ),
                             SizedBox(width: 3),
                             Text(
                               'URGENT · SPOT NEEDED',

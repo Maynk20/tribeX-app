@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/activity.dart';
 import '../models/join_request.dart';
 import '../models/user_profile.dart';
+import '../services/location_service.dart';
 import '../services/supabase_service.dart';
 
 enum SortKey { date, distance, popularity }
@@ -42,6 +45,8 @@ class ActivitiesState extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isDisposed = false;
+  final Set<String> _pendingJoinRequests = {};
+  final Set<String> _pendingRespondRequests = {};
 
   // Memoization Cache for Filtered Activities
   List<Activity>? _cachedFilteredActivities;
@@ -84,9 +89,16 @@ class ActivitiesState extends ChangeNotifier {
   String _searchQuery = "";
   SortKey _sortKey = SortKey.date;
   FeedScope _scope = FeedScope.discover;
-  String _location = "Indiranagar, Bengaluru";
-  double _userLat = 12.9784; // Indiranagar, Bengaluru default lat
-  double _userLng = 77.6408; // Indiranagar, Bengaluru default lng
+
+  // Location — mirrors TanStack `useLocation` (src/hooks/use-location.ts):
+  // a human label (default DEFAULT_CITY) plus an optional chosen place with
+  // coordinates. No coordinates are invented when nothing has been chosen.
+  static const String defaultCity = 'Bengaluru';
+  static const String locationPrefsKey = 'lobby:location';
+  static const String placePrefsKey = 'lobby:place';
+  String _location = defaultCity;
+  SavedPlace? _place;
+  bool _locationTouched = false;
 
   // Quick Filters
   bool _freeOnly = false;
@@ -96,6 +108,7 @@ class ActivitiesState extends ChangeNotifier {
   bool _verifiedHostsOnly = false;
 
   ActivitiesState() {
+    _restoreLocation();
     fetchActivities();
     _subscribeRealtime();
   }
@@ -114,6 +127,10 @@ class ActivitiesState extends ChangeNotifier {
   FeedScope get scope => _scope;
   String get location => _location;
 
+  /// The chosen/GPS place with coordinates, or null when only the default
+  /// city label is in use.
+  SavedPlace? get place => _place;
+
   bool get freeOnly => _freeOnly;
   bool get spotsOnly => _spotsOnly;
   bool get todayOnly => _todayOnly;
@@ -130,14 +147,97 @@ class ActivitiesState extends ChangeNotifier {
     return count;
   }
 
-  void setLocation(String loc, {double? lat, double? lng}) {
-    _location = loc;
-    if (lat != null && lng != null) {
-      _userLat = lat;
-      _userLng = lng;
+  /// Restore the persisted label/place (TanStack reads localStorage on mount).
+  Future<void> _restoreLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Don't clobber a location the user picked while prefs were loading.
+      if (_isDisposed || _locationTouched) return;
+      final saved = prefs.getString(locationPrefsKey);
+      final savedPlace = prefs.getString(placePrefsKey);
+      var changed = false;
+      if (saved != null && saved.trim().isNotEmpty) {
+        _location = saved;
+        changed = true;
+      }
+      if (savedPlace != null) {
+        try {
+          final p = SavedPlace.tryFromJson(jsonDecode(savedPlace));
+          if (p != null) {
+            _place = p;
+            changed = true;
+          }
+        } catch (_) {
+          // corrupt entry — ignore, same as TanStack
+        }
+      }
+      if (changed) {
+        _invalidateFilterCache();
+        notifyListeners();
+      }
+    } catch (_) {
+      // storage unavailable — safe to ignore
     }
+  }
+
+  Future<void> _persistLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(locationPrefsKey, _location);
+      final p = _place;
+      if (p != null) {
+        await prefs.setString(placePrefsKey, jsonEncode(p.toJson()));
+      }
+    } catch (_) {
+      // storage unavailable — safe to ignore
+    }
+  }
+
+  /// Set only the label (TanStack `setLocation`). Empty input falls back to
+  /// the default city. If [lat]/[lng] are supplied, behaves like [setPlace].
+  void setLocation(String loc, {double? lat, double? lng}) {
+    if (lat != null && lng != null) {
+      final label = loc.trim().isNotEmpty ? loc.trim() : defaultCity;
+      setPlace(
+        SavedPlace(displayName: label, short: label, lat: lat, lon: lng),
+      );
+      return;
+    }
+    _locationTouched = true;
+    _location = loc.trim().isNotEmpty ? loc.trim() : defaultCity;
     _invalidateFilterCache();
     if (!_isDisposed) notifyListeners();
+    unawaited(_persistLocation());
+  }
+
+  /// Choose a place with coordinates (TanStack `setPlace`).
+  void setPlace(SavedPlace next) {
+    _locationTouched = true;
+    _place = next;
+    final label = next.label;
+    _location = label.isNotEmpty ? label : defaultCity;
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
+    unawaited(_persistLocation());
+  }
+
+  /// Reset to the default city and forget the stored place
+  /// (TanStack `clearLocation`, called on sign-out).
+  void clearLocation() {
+    _locationTouched = true;
+    _location = defaultCity;
+    _place = null;
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(locationPrefsKey);
+        await prefs.remove(placePrefsKey);
+      } catch (_) {
+        // ignore
+      }
+    }());
   }
 
   void setGroup(String group) {
@@ -464,22 +564,38 @@ class ActivitiesState extends ChangeNotifier {
     } else if (_sortKey == SortKey.popularity) {
       result.sort((a, b) => a.slotsLeft.compareTo(b.slotsLeft));
     } else if (_sortKey == SortKey.distance) {
-      result.sort((a, b) {
-        final aHasCoords = a.latitude != null && a.longitude != null;
-        final bHasCoords = b.latitude != null && b.longitude != null;
-        if (aHasCoords && !bHasCoords) return -1;
-        if (!aHasCoords && bHasCoords) return 1;
-        if (aHasCoords && bHasCoords) {
-          final distA =
-              (a.latitude! - _userLat) * (a.latitude! - _userLat) +
-              (a.longitude! - _userLng) * (a.longitude! - _userLng);
-          final distB =
-              (b.latitude! - _userLat) * (b.latitude! - _userLat) +
-              (b.longitude! - _userLng) * (b.longitude! - _userLng);
-          return distA.compareTo(distB);
-        }
-        return a.location.compareTo(b.location);
-      });
+      final origin = _place;
+      if (origin == null) {
+        // No chosen coordinates: TanStack sorts by the venue label
+        // (`a.location.localeCompare(b.location)`). Never assume a city centre.
+        result.sort(
+          (a, b) =>
+              a.location.toLowerCase().compareTo(b.location.toLowerCase()),
+        );
+      } else {
+        // A real place is known: order by great-circle distance; plans
+        // without coordinates (e.g. online) go last.
+        double? distOf(Activity a) =>
+            (a.latitude != null && a.longitude != null)
+            ? LocationService.haversineKm(
+                origin.lat,
+                origin.lon,
+                a.latitude!,
+                a.longitude!,
+              )
+            : null;
+        result.sort((a, b) {
+          final da = distOf(a);
+          final db = distOf(b);
+          if (da != null && db == null) return -1;
+          if (da == null && db != null) return 1;
+          if (da != null && db != null) {
+            final c = da.compareTo(db);
+            if (c != 0) return c;
+          }
+          return a.location.toLowerCase().compareTo(b.location.toLowerCase());
+        });
+      }
     }
 
     _cachedFilteredActivities = List.unmodifiable(result);
@@ -563,9 +679,38 @@ class ActivitiesState extends ChangeNotifier {
     }
   }
 
-  Future<bool> requestToJoin(String activityId, UserProfile user) async {
+  /// True when the profile has the verified GPS location that the backend
+  /// RLS policy "Users can request to join with verified profile location"
+  /// requires (city + latitude + longitude). Same check as TanStack.
+  static bool profileHasGpsLocation(UserProfile? user) =>
+      user != null &&
+      (user.city?.trim().isNotEmpty ?? false) &&
+      user.latitude != null &&
+      user.longitude != null;
+
+  /// Sends a join request. Returns `null` on success or a user-facing error
+  /// message. Pre-checks and error mapping mirror TanStack `requestToJoin`.
+  Future<String?> requestToJoin(String activityId, UserProfile user) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return false;
+    if (client == null || _isDisposed) {
+      return 'The service is temporarily unavailable.';
+    }
+    if (!profileHasGpsLocation(user)) {
+      return 'Add your GPS profile location before requesting to join.';
+    }
+    final act = _activities.where((a) => a.id == activityId).firstOrNull;
+    if (act != null && act.hostId == user.id) {
+      return "You're the host of this plan.";
+    }
+    final existing = _userRequestIndex['$activityId:${user.id}'];
+    if (existing != null) {
+      return existing.status == JoinStatus.accepted
+          ? "You've already joined this plan!"
+          : "You've already requested to join this plan!";
+    }
+    final key = '$activityId:${user.id}';
+    if (_pendingJoinRequests.contains(key)) return null;
+    _pendingJoinRequests.add(key);
     try {
       await client.from('join_requests').insert({
         'activity_id': activityId,
@@ -573,19 +718,38 @@ class ActivitiesState extends ChangeNotifier {
         'status': 'pending',
       });
       await fetchActivities();
-      return true;
-    } catch (e) {
-      return false;
+      return null;
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        return "You've already requested to join this plan!";
+      }
+      if (e.code == '42501' ||
+          RegExp(
+            'row-level security',
+            caseSensitive: false,
+          ).hasMatch(e.message)) {
+        return "Add your GPS profile location first, or this plan has safety restrictions you don't meet.";
+      }
+      return 'Could not send your join request. Please try again.';
+    } catch (_) {
+      return 'Could not send your join request. Please try again.';
+    } finally {
+      _pendingJoinRequests.remove(key);
     }
   }
 
   Future<bool> respondToRequest(String requestId, JoinStatus status) async {
+    if (_pendingRespondRequests.contains(requestId)) return false;
+    _pendingRespondRequests.add(requestId);
     final statusStr = status == JoinStatus.accepted
         ? 'accepted'
         : (status == JoinStatus.rejected ? 'rejected' : 'pending');
 
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return false;
+    if (client == null || _isDisposed) {
+      _pendingRespondRequests.remove(requestId);
+      return false;
+    }
 
     try {
       if (status == JoinStatus.accepted) {
@@ -610,6 +774,8 @@ class ActivitiesState extends ChangeNotifier {
       return true;
     } catch (e) {
       return false;
+    } finally {
+      _pendingRespondRequests.remove(requestId);
     }
   }
 

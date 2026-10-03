@@ -70,17 +70,10 @@ class _RateSquadModalState extends State<RateSquadModal> {
       await chatState.submitRating(item);
 
       if (!mounted) return;
-      AppToast.show(
-        context,
-        'Rating saved for ${person.fullName}!',
-      );
+      AppToast.show(context, 'Rating saved for ${person.fullName}!');
     } catch (_) {
       if (!mounted) return;
-      AppToast.show(
-        context,
-        'Failed to save rating',
-        isError: true,
-      );
+      AppToast.show(context, 'Failed to save rating', isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -422,17 +415,18 @@ class _RateSquadModalState extends State<RateSquadModal> {
                                 child: ElevatedButton(
                                   onPressed:
                                       (_submittingIds.contains(person.id) ||
-                                              (currentRating <= 0 && existing == null))
-                                          ? null
-                                          : () => _submitSingleRating(
-                                                me: me,
-                                                person: person,
-                                                currentRating: currentRating,
-                                                existing: existing,
-                                                currentBadges: currentBadges,
-                                                commentText: commentCtrl.text.trim(),
-                                                chatState: chatState,
-                                              ),
+                                          (currentRating <= 0 &&
+                                              existing == null))
+                                      ? null
+                                      : () => _submitSingleRating(
+                                          me: me,
+                                          person: person,
+                                          currentRating: currentRating,
+                                          existing: existing,
+                                          currentBadges: currentBadges,
+                                          commentText: commentCtrl.text.trim(),
+                                          chatState: chatState,
+                                        ),
                                   style: ElevatedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 8,

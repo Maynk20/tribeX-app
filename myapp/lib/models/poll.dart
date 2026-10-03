@@ -76,29 +76,25 @@ class Poll {
       final item = optsRaw[i];
       final text = item is String ? item : (item['text'] ?? '').toString();
       final optId = item is Map ? (item['id'] ?? text).toString() : text;
-      final voters = votesByIndex[i] ??
+      final voters =
+          votesByIndex[i] ??
           votesByStrId[i.toString()] ??
           votesByStrId[optId] ??
           [];
 
       optionsList.add(
-        PollOption(
-          id: i.toString(),
-          text: text,
-          voterIds: voters,
-        ),
+        PollOption(id: i.toString(), text: text, voterIds: voters),
       );
     }
 
     return Poll(
       id: (json['id'] ?? '') as String,
       activityId: (json['activity_id'] ?? '') as String,
-      creatorId:
-          (json['created_by'] ?? json['creator_id'] ?? '') as String,
+      creatorId: (json['created_by'] ?? json['creator_id'] ?? '') as String,
       question: (json['question'] ?? '') as String,
       options: optionsList,
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
     );
   }

@@ -154,7 +154,10 @@ class _AttendeeRowState extends State<_AttendeeRow> {
   bool _isProcessing = false;
   String? _processingAction; // 'accept', 'decline', 'remove'
 
-  Future<void> _handleAction(String action, Future<bool> Function() actionFn) async {
+  Future<void> _handleAction(
+    String action,
+    Future<bool> Function() actionFn,
+  ) async {
     if (_isProcessing) return;
     setState(() {
       _isProcessing = true;
@@ -357,12 +360,12 @@ class _AttendeeRowState extends State<_AttendeeRow> {
                   onPressed: _isProcessing
                       ? null
                       : () => _handleAction(
-                            'decline',
-                            () => state.respondToRequest(
-                              widget.req.id,
-                              JoinStatus.rejected,
-                            ),
+                          'decline',
+                          () => state.respondToRequest(
+                            widget.req.id,
+                            JoinStatus.rejected,
                           ),
+                        ),
                   icon: _isProcessing && _processingAction == 'decline'
                       ? const SizedBox(
                           width: 12,
@@ -399,12 +402,12 @@ class _AttendeeRowState extends State<_AttendeeRow> {
                   onPressed: _isProcessing
                       ? null
                       : () => _handleAction(
-                            'accept',
-                            () => state.respondToRequest(
-                              widget.req.id,
-                              JoinStatus.accepted,
-                            ),
+                          'accept',
+                          () => state.respondToRequest(
+                            widget.req.id,
+                            JoinStatus.accepted,
                           ),
+                        ),
                   icon: _isProcessing && _processingAction == 'accept'
                       ? const SizedBox(
                           width: 12,
@@ -428,9 +431,9 @@ class _AttendeeRowState extends State<_AttendeeRow> {
                   onPressed: _isProcessing
                       ? null
                       : () => _handleAction(
-                            'remove',
-                            () => state.removeAttendee(widget.req.id),
-                          ),
+                          'remove',
+                          () => state.removeAttendee(widget.req.id),
+                        ),
                   icon: _isProcessing && _processingAction == 'remove'
                       ? const SizedBox(
                           width: 12,

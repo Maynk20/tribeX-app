@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
+import '../core/utils/location_feedback.dart';
 import '../models/user_profile.dart';
 import '../services/report_service.dart';
+import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/theme_state.dart';
 import 'terms_and_policies_screen.dart';
@@ -48,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final bioCtrl = TextEditingController(text: user.bio ?? "");
     String gender = user.gender ?? "Prefer not to say";
     bool isSaving = false;
+    bool fetchingGps = false;
 
     final presetAvatars = [
       "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
@@ -70,7 +73,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final currentAvatar = avatarCtrl.text.trim();
             final initialChar = user.fullName.isNotEmpty
                 ? user.fullName[0].toUpperCase()
-                : (user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U');
+                : (user.username.isNotEmpty
+                      ? user.username[0].toUpperCase()
+                      : 'U');
 
             return Container(
               decoration: BoxDecoration(
@@ -96,10 +101,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         width: 36,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: (isDark
-                                  ? AppColors.borderDark
-                                  : AppColors.borderLight)
-                              .withValues(alpha: 0.8),
+                          color:
+                              (isDark
+                                      ? AppColors.borderDark
+                                      : AppColors.borderLight)
+                                  .withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -194,7 +200,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     });
                                   },
                                   child: Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
                                     padding: const EdgeInsets.all(2),
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
@@ -292,7 +300,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         prefixIcon: Icon(LucideIcons.mapPin, size: 18),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    // TanStack profile.settings.tsx → handleFetchProfileGPS.
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: fetchingGps
+                            ? null
+                            : () async {
+                                setModalState(() => fetchingGps = true);
+                                final auth = context.read<AuthState>();
+                                final err = await auth
+                                    .saveVerifiedProfileLocation();
+                                if (!ctx.mounted) return;
+                                setModalState(() {
+                                  fetchingGps = false;
+                                  if (err == null) {
+                                    cityCtrl.text =
+                                        auth.currentUser?.city ?? cityCtrl.text;
+                                  }
+                                });
+                                if (err == null) {
+                                  AppToast.show(
+                                    ctx,
+                                    'Profile location verified',
+                                  );
+                                } else {
+                                  showLocationError(ctx, err);
+                                }
+                              },
+                        icon: fetchingGps
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
+                              )
+                            : const Icon(
+                                LucideIcons.navigation,
+                                size: 14,
+                                color: AppColors.primary,
+                              ),
+                        label: Text(
+                          fetchingGps
+                              ? 'Fetching location…'
+                              : 'Use current location',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     TextField(
                       controller: bioCtrl,
                       maxLines: 2,
@@ -355,8 +417,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   setModalState(() => isSaving = false);
                                   AppToast.show(
                                     ctx,
-                                    auth.error ??
-                                        'Failed to update profile. Please try again.',
+                                    auth.error ?? 'Failed to update profile. Please try again.',
                                     isError: true,
                                   );
                                   return;
@@ -615,13 +676,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 return;
                               }
                               setModalState(() => isSubmitting = true);
-                              final user = context.read<AuthState>().currentUser;
+                              final user = context
+                                  .read<AuthState>()
+                                  .currentUser;
                               if (user != null) {
                                 ReportReason reasonEnum = ReportReason.other;
                                 if (category == "Safety & Conduct") {
                                   reasonEnum = ReportReason.unsafeBehavior;
                                 } else if (category == "Inappropriate Plan") {
-                                  reasonEnum = ReportReason.inappropriateContent;
+                                  reasonEnum =
+                                      ReportReason.inappropriateContent;
                                 }
                                 await ReportService.submitReport(
                                   reporterId: user.id,
@@ -787,8 +851,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : () async {
                       if (confirmCtrl.text.trim() == "DELETE") {
                         setModalState(() => isDeleting = true);
-                        final success =
-                            await context.read<AuthState>().deleteAccount();
+                        final actState = context.read<ActivitiesState>();
+                        final success = await context
+                            .read<AuthState>()
+                            .deleteAccount();
+                        actState.clearLocation();
                         if (!ctx.mounted) return;
                         setModalState(() => isDeleting = false);
                         Navigator.of(ctx).pop();
@@ -967,8 +1034,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       themeState.themeMode == ThemeMode.dark
                           ? LucideIcons.moon
                           : (themeState.themeMode == ThemeMode.light
-                              ? LucideIcons.sun
-                              : LucideIcons.laptop),
+                                ? LucideIcons.sun
+                                : LucideIcons.laptop),
                       size: 20,
                       color: AppColors.primary,
                     ),
@@ -983,8 +1050,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       themeState.themeMode == ThemeMode.system
                           ? 'System Theme'
                           : (themeState.themeMode == ThemeMode.dark
-                              ? 'Dark Theme'
-                              : 'Light Theme'),
+                                ? 'Dark Theme'
+                                : 'Light Theme'),
                       style: TextStyle(
                         fontSize: 11,
                         color: isDark

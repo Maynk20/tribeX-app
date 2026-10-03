@@ -43,41 +43,41 @@ class CustomBottomNav extends StatelessWidget {
             top: BorderSide(color: border.withValues(alpha: 0.6), width: 1),
           ),
         ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 56,
-          child: Row(
-            children: [
-              _NavItem(
-                icon: LucideIcons.compass,
-                label: 'Explore',
-                isActive: currentIndex == 0,
-                onTap: () => _handleTap(0),
-              ),
-              _NavItem(
-                icon: LucideIcons.plusCircle,
-                label: 'Create',
-                isActive: currentIndex == 1,
-                onTap: () => _handleTap(1),
-              ),
-              _NavItem(
-                icon: LucideIcons.messageCircle,
-                label: 'Messages',
-                isActive: currentIndex == 2,
-                onTap: () => _handleTap(2),
-              ),
-              _NavItem(
-                icon: LucideIcons.user,
-                label: 'Profile',
-                isActive: currentIndex == 3,
-                onTap: () => _handleTap(3),
-              ),
-            ],
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 56,
+            child: Row(
+              children: [
+                _NavItem(
+                  icon: LucideIcons.compass,
+                  label: 'Explore',
+                  isActive: currentIndex == 0,
+                  onTap: () => _handleTap(0),
+                ),
+                _NavItem(
+                  icon: LucideIcons.plusCircle,
+                  label: 'Create',
+                  isActive: currentIndex == 1,
+                  onTap: () => _handleTap(1),
+                ),
+                _NavItem(
+                  icon: LucideIcons.messageCircle,
+                  label: 'Messages',
+                  isActive: currentIndex == 2,
+                  onTap: () => _handleTap(2),
+                ),
+                _NavItem(
+                  icon: LucideIcons.user,
+                  label: 'Profile',
+                  isActive: currentIndex == 3,
+                  onTap: () => _handleTap(3),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }

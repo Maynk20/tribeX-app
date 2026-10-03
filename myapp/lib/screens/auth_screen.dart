@@ -239,10 +239,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
     final trimmedEmail = _emailCtrl.text.trim().toLowerCase();
 
-    final res = await AuthService.verifyOtp(
-      email: trimmedEmail,
-      code: code,
-    );
+    final res = await AuthService.verifyOtp(email: trimmedEmail, code: code);
 
     if (!mounted) return;
     setState(() => _isBusy = false);
@@ -261,7 +258,10 @@ class _AuthScreenState extends State<AuthScreen> {
     } else {
       final msg = res.message ?? "Couldn't verify code. Please try again.";
       if (res.code == 'OTP_EXPIRED') {
-        _showToast('Code expired or invalid. Please tap Resend code.', isError: true);
+        _showToast(
+          'Code expired or invalid. Please tap Resend code.',
+          isError: true,
+        );
       } else {
         _showToast(msg, isError: true);
       }

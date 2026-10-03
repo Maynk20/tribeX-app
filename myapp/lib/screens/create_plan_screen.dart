@@ -74,7 +74,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     setState(() => _isLocating = false);
 
     final title = placeInfo?['title'] ?? 'Current Location';
-    final subtitle = placeInfo?['subtitle'] ??
+    final subtitle =
+        placeInfo?['subtitle'] ??
         '${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}';
 
     setState(() {
@@ -195,8 +196,10 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       }
     }
 
-    final double? actLat = _pinnedPlace?.lat ?? user.latitude;
-    final double? actLon = _pinnedPlace?.lon ?? user.longitude;
+    // Venue coordinates come only from the pinned/geocoded venue. Never use
+    // the host's own profile location as the venue (wrong check-in point).
+    final double? actLat = _pinnedPlace?.lat;
+    final double? actLon = _pinnedPlace?.lon;
 
     if (!_isOnline &&
         (actLat == null ||
@@ -236,8 +239,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       totalSlots: slots,
       slotsLeft: slots,
       costPerHead: cost,
-      imageUrl: _imageUrl ??
-          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+      imageUrl: _imageUrl ?? "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
       latitude: _isOnline ? null : actLat,
       longitude: _isOnline ? null : actLon,
       womenOnly: _womenOnly,
@@ -250,7 +252,9 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     );
 
     if (!mounted) return;
-    final success = await context.read<ActivitiesState>().createActivity(newAct);
+    final success = await context.read<ActivitiesState>().createActivity(
+      newAct,
+    );
 
     if (!mounted) return;
     setState(() => _isPublishing = false);
@@ -493,8 +497,12 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                         vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.7),
-                                        borderRadius: BorderRadius.circular(999),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
                                       ),
                                       child: const Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -519,12 +527,15 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                   ),
                                   const SizedBox(width: 6),
                                   GestureDetector(
-                                    onTap: () => setState(() => _imageUrl = null),
+                                    onTap: () =>
+                                        setState(() => _imageUrl = null),
                                     child: Container(
                                       width: 28,
                                       height: 28,
                                       decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.7),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.7,
+                                        ),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(
@@ -891,7 +902,10 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                           onPressed: _useCurrentLocation,
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
                         ),
                     ],
                   ),
@@ -976,17 +990,24 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                             spacing: 6,
                             children: [
                               OutlinedButton.icon(
-                                onPressed: _isLocating ? null : _useCurrentLocation,
+                                onPressed: _isLocating
+                                    ? null
+                                    : _useCurrentLocation,
                                 icon: _isLocating
                                     ? const SizedBox(
                                         width: 10,
                                         height: 10,
-                                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                        ),
                                       )
                                     : const Icon(Icons.my_location, size: 12),
                                 label: const Text(
                                   'GPS',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 style: OutlinedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(
@@ -1028,7 +1049,9 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                   elevation: 0,
                                 ),
                                 child: Text(
-                                  _pinnedPlace != null ? 'Change' : 'Search Place',
+                                  _pinnedPlace != null
+                                      ? 'Change'
+                                      : 'Search Place',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,

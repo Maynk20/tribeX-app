@@ -53,8 +53,18 @@ void main() {
 
     test('Expense calculation and per-head share splitting', () {
       final members = [
-        ExpenseMember(userId: "u1", name: "Mayank", amount: 250.0, isPaid: true),
-        ExpenseMember(userId: "u2", name: "Rahul", amount: 250.0, isPaid: false),
+        ExpenseMember(
+          userId: "u1",
+          name: "Mayank",
+          amount: 250.0,
+          isPaid: true,
+        ),
+        ExpenseMember(
+          userId: "u2",
+          name: "Rahul",
+          amount: 250.0,
+          isPaid: false,
+        ),
       ];
       final expense = Expense(
         id: "exp_1",
@@ -114,8 +124,12 @@ void main() {
         ),
       ];
 
-      final pendingCount = reqs.where((r) => r.status == JoinStatus.pending).length;
-      final acceptedCount = reqs.where((r) => r.status == JoinStatus.accepted).length;
+      final pendingCount = reqs
+          .where((r) => r.status == JoinStatus.pending)
+          .length;
+      final acceptedCount = reqs
+          .where((r) => r.status == JoinStatus.accepted)
+          .length;
 
       expect(pendingCount, 1);
       expect(acceptedCount, 1);

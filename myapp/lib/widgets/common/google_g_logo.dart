@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Official Google "G" logo rendered via CustomPainter with 4 brand colors:
@@ -13,9 +14,7 @@ class GoogleGLogo extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: const CustomPaint(
-        painter: _GoogleGLogoPainter(),
-      ),
+      child: const CustomPaint(painter: _GoogleGLogoPainter()),
     );
   }
 }
@@ -62,19 +61,43 @@ class _GoogleGLogoPainter extends CustomPainter {
 
     // 1. Red segment (top)
     paint.color = const Color(0xFFEA4335);
-    canvas.drawArc(rect, math.pi * _redStart, math.pi * _redSweep, false, paint);
+    canvas.drawArc(
+      rect,
+      math.pi * _redStart,
+      math.pi * _redSweep,
+      false,
+      paint,
+    );
 
     // 2. Yellow segment (left)
     paint.color = const Color(0xFFFBBC05);
-    canvas.drawArc(rect, math.pi * _yellowStart, math.pi * _yellowSweep, false, paint);
+    canvas.drawArc(
+      rect,
+      math.pi * _yellowStart,
+      math.pi * _yellowSweep,
+      false,
+      paint,
+    );
 
     // 3. Green segment (bottom)
     paint.color = const Color(0xFF34A853);
-    canvas.drawArc(rect, math.pi * _greenStart, math.pi * _greenSweep, false, paint);
+    canvas.drawArc(
+      rect,
+      math.pi * _greenStart,
+      math.pi * _greenSweep,
+      false,
+      paint,
+    );
 
     // 4. Blue segment (right)
     paint.color = const Color(0xFF4285F4);
-    canvas.drawArc(rect, math.pi * _blueStart, math.pi * _blueSweep, false, paint);
+    canvas.drawArc(
+      rect,
+      math.pi * _blueStart,
+      math.pi * _blueSweep,
+      false,
+      paint,
+    );
 
     // 5. Blue crossbar — fills the transparent interior on the right side,
     // from just past center out to the outer edge of the ring, giving the
@@ -88,7 +111,7 @@ class _GoogleGLogoPainter extends CustomPainter {
     final barRect = Rect.fromLTRB(
       cx - thickness * 0.05, // starts just past center
       cy - thickness / 2,
-      cx + r,               // ends exactly at the ring's outer radius
+      cx + r, // ends exactly at the ring's outer radius
       cy + thickness / 2,
     );
     canvas.drawRect(barRect, barPaint);

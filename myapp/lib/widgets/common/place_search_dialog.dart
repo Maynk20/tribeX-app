@@ -236,16 +236,12 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
     setState(() => _isLocatingCurrent = false);
 
     final title = placeInfo?['title'] ?? 'Current GPS Location';
-    final subtitle = placeInfo?['subtitle'] ??
+    final subtitle =
+        placeInfo?['subtitle'] ??
         '${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}';
 
     widget.onSelect(
-      PlaceItem(
-        title: title,
-        subtitle: subtitle,
-        lat: lat,
-        lon: lon,
-      ),
+      PlaceItem(title: title, subtitle: subtitle, lat: lat, lon: lon),
     );
     Navigator.of(context).pop();
   }
@@ -437,8 +433,10 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
             InkWell(
               onTap: _isLocatingCurrent ? null : _useCurrentGpsLocation,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 11,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.08),
                   border: Border(
@@ -600,8 +598,10 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
                                 if (geocoded != null) {
                                   widget.onSelect(
                                     PlaceItem(
-                                      title: geocoded['title'] as String? ?? text,
-                                      subtitle: geocoded['subtitle'] as String? ??
+                                      title:
+                                          geocoded['title'] as String? ?? text,
+                                      subtitle:
+                                          geocoded['subtitle'] as String? ??
                                           'Custom Location',
                                       lat: (geocoded['lat'] as num).toDouble(),
                                       lon: (geocoded['lon'] as num).toDouble(),
@@ -611,30 +611,15 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
                                   return;
                                 }
 
-                                // Fallback: try device GPS
-                                final gps =
-                                    await LocationService.getCurrentPosition();
-                                if (!context.mounted) return;
-                                if (gps.isSuccess) {
-                                  widget.onSelect(
-                                    PlaceItem(
-                                      title: text,
-                                      subtitle: 'GPS Location',
-                                      lat: gps.latitude!,
-                                      lon: gps.longitude!,
-                                    ),
-                                  );
-                                } else {
-                                  widget.onSelect(
-                                    PlaceItem(
-                                      title: text,
-                                      subtitle: 'Custom Location',
-                                      lat: 0.0,
-                                      lon: 0.0,
-                                    ),
-                                  );
-                                }
-                                Navigator.of(context).pop();
+                                // Never attach the device GPS or 0,0 to a
+                                // typed name: that stores wrong coordinates.
+                                // TanStack only returns places with real
+                                // coordinates, so ask for a better search.
+                                setState(() {
+                                  _error =
+                                      "Couldn't find '$text' on the map. Try a nearby landmark, area or 6-digit pincode.";
+                                });
+                                return;
                               },
                               icon: const Icon(LucideIcons.mapPin, size: 14),
                               label: Text("Use '$_query'"),

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
+import '../core/utils/location_feedback.dart';
 import '../services/location_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
@@ -49,34 +50,36 @@ class _ExploreScreenState extends State<ExploreScreen>
   @override
   bool get wantKeepAlive => true;
 
+  /// TanStack `handleUseGPS` → `requestBrowserLocation`.
   Future<void> _fetchGpsLocation() async {
     if (_isGettingLocation) return;
     setState(() => _isGettingLocation = true);
 
-    final result = await LocationService.getCurrentPosition();
+    final lookup = await LocationService.resolveCurrentPlace();
 
     if (!mounted) return;
     setState(() => _isGettingLocation = false);
 
-    if (result.isSuccess) {
-      final lat = result.latitude!;
-      final lng = result.longitude!;
-      final placeInfo = await LocationService.reverseGeocode(lat, lng);
-      final placeName = placeInfo?['title'] ?? 'Current Location';
-      if (!mounted) return;
-      context.read<ActivitiesState>().setLocation(
-        placeName,
-        lat: lat,
-        lng: lng,
-      );
-      AppToast.show(context, 'Location: $placeName');
+    final place = lookup.place;
+    if (place != null) {
+      context.read<ActivitiesState>().setPlace(place);
+      AppToast.show(context, 'Location updated');
     } else {
-      AppToast.show(
+      showLocationError(
         context,
-        result.error ?? 'Could not determine GPS location',
-        isError: true,
+        lookup.result.error ?? "Couldn't get your location",
       );
     }
+  }
+
+  /// TanStack onJoin guard: toast when the profile lacks a verified location.
+  void _showAddGpsLocationPrompt() {
+    AppToast.show(
+      context,
+      'Add your GPS profile location first — open Settings → Edit Profile → Use current location.',
+      isError: true,
+      duration: const Duration(seconds: 4),
+    );
   }
 
   @override
@@ -190,13 +193,25 @@ class _ExploreScreenState extends State<ExploreScreen>
                                         PlaceSearchDialog.show(
                                           context,
                                           initialValue: actState.location,
-                                          onSelect: (p) => actState.setLocation(
-                                            p.subtitle.isNotEmpty
-                                                ? '${p.title}, ${p.subtitle.split(",")[0].trim()}'
-                                                : p.title,
-                                            lat: p.lat,
-                                            lng: p.lon,
-                                          ),
+                                          onSelect: (p) {
+                                            // TanStack toPlace(): short = title.
+                                            actState.setPlace(
+                                              SavedPlace(
+                                                displayName: [
+                                                  p.title,
+                                                  if (p.subtitle.isNotEmpty)
+                                                    p.subtitle,
+                                                ].join(', '),
+                                                short: p.title,
+                                                lat: p.lat,
+                                                lon: p.lon,
+                                              ),
+                                            );
+                                            AppToast.show(
+                                              context,
+                                              'Showing plans near ${p.title}',
+                                            );
+                                          },
                                         );
                                       },
                                       child: Row(
@@ -231,7 +246,9 @@ class _ExploreScreenState extends State<ExploreScreen>
                                     ),
                                     const SizedBox(width: 8),
                                     GestureDetector(
-                                      onTap: _isGettingLocation ? null : _fetchGpsLocation,
+                                      onTap: _isGettingLocation
+                                          ? null
+                                          : _fetchGpsLocation,
                                       child: _isGettingLocation
                                           ? const SizedBox(
                                               width: 13,
@@ -245,8 +262,10 @@ class _ExploreScreenState extends State<ExploreScreen>
                                               LucideIcons.navigation,
                                               size: 13,
                                               color: isDark
-                                                  ? AppColors.mutedForegroundDark
-                                                  : AppColors.mutedForegroundLight,
+                                                  ? AppColors
+                                                        .mutedForegroundDark
+                                                  : AppColors
+                                                        .mutedForegroundLight,
                                             ),
                                     ),
                                   ],
@@ -651,7 +670,9 @@ class _ExploreScreenState extends State<ExploreScreen>
                     child: ListSkeleton(count: 3),
                   ),
                 )
-              else if (actState.error != null && filteredActivities.isEmpty && !actState.isLoading)
+              else if (actState.error != null &&
+                  filteredActivities.isEmpty &&
+                  !actState.isLoading)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -851,6 +872,9 @@ class _ExploreScreenState extends State<ExploreScreen>
                           isHost: isHost,
                           myStatus: myReq?.status,
                           pendingCount: pendingCount,
+                          hasProfileGpsLocation:
+                              authState.hasProfileGpsLocation,
+                          onAddGpsLocation: _showAddGpsLocationPrompt,
                           onJoin: () {
                             if (user == null) {
                               Navigator.push(
@@ -861,11 +885,26 @@ class _ExploreScreenState extends State<ExploreScreen>
                               );
                               return;
                             }
+                            if (!authState.hasProfileGpsLocation) {
+                              _showAddGpsLocationPrompt();
+                              return;
+                            }
                             SafetyDisclaimerModal.show(
                               context,
-                              onAgree: () {
-                                actState.requestToJoin(act.id, user);
-                                AppToast.show(context, 'Request sent to host!');
+                              onAgree: () async {
+                                final err = await actState.requestToJoin(
+                                  act.id,
+                                  user,
+                                );
+                                if (!context.mounted) return;
+                                if (err == null) {
+                                  AppToast.show(
+                                    context,
+                                    'Request sent to host',
+                                  );
+                                } else {
+                                  AppToast.show(context, err, isError: true);
+                                }
                               },
                             );
                           },

@@ -118,10 +118,11 @@ class _WelcomeSplashState extends State<WelcomeSplash>
                                   : AppColors.cardLight,
                               borderRadius: BorderRadius.circular(28),
                               border: Border.all(
-                                color: (isDark
-                                        ? AppColors.borderDark
-                                        : AppColors.borderLight)
-                                    .withValues(alpha: 0.8),
+                                color:
+                                    (isDark
+                                            ? AppColors.borderDark
+                                            : AppColors.borderLight)
+                                        .withValues(alpha: 0.8),
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -144,10 +145,10 @@ class _WelcomeSplashState extends State<WelcomeSplash>
                             fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) =>
                                 const Icon(
-                              Icons.explore,
-                              size: 54,
-                              color: AppColors.primary,
-                            ),
+                                  Icons.explore,
+                                  size: 54,
+                                  color: AppColors.primary,
+                                ),
                           ),
                         ),
                       ),
@@ -254,8 +255,9 @@ class _WelcomeSplashState extends State<WelcomeSplash>
                   animation: _pulseAnimation,
                   builder: (context, _) {
                     return Opacity(
-                      opacity: (0.4 + 0.5 * (_pulseAnimation.value - 0.85) / 0.3)
-                          .clamp(0.2, 1.0),
+                      opacity:
+                          (0.4 + 0.5 * (_pulseAnimation.value - 0.85) / 0.3)
+                              .clamp(0.2, 1.0),
                       child: Text(
                         'TAP ANYWHERE TO ENTER',
                         style: TextStyle(

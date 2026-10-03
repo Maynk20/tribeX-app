@@ -53,19 +53,11 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
 
     final desc = _descCtrl.text.trim();
     if (desc.isEmpty) {
-      AppToast.show(
-        context,
-        'Please enter a description',
-        isError: true,
-      );
+      AppToast.show(context, 'Please enter a description', isError: true);
       return;
     }
     if (total <= 0) {
-      AppToast.show(
-        context,
-        'Please enter a valid amount',
-        isError: true,
-      );
+      AppToast.show(context, 'Please enter a valid amount', isError: true);
       return;
     }
     if (effectiveMembers.isEmpty) {
@@ -85,27 +77,21 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
           .toList();
 
       await context.read<ChatState>().createExpense(
-            activityId: widget.activityId,
-            creatorId: me?.id ?? "host",
-            creatorName: me?.fullName ?? "Host",
-            description: desc,
-            totalAmount: total,
-            upiId: _upiCtrl.text.trim().isNotEmpty
-                ? _upiCtrl.text.trim()
-                : null,
-            members: membersWithShare,
-            creator: me,
-          );
+        activityId: widget.activityId,
+        creatorId: me?.id ?? "host",
+        creatorName: me?.fullName ?? "Host",
+        description: desc,
+        totalAmount: total,
+        upiId: _upiCtrl.text.trim().isNotEmpty ? _upiCtrl.text.trim() : null,
+        members: membersWithShare,
+        creator: me,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      AppToast.show(
-        context,
-        'Failed to split expense',
-        isError: true,
-      );
+      AppToast.show(context, 'Failed to split expense', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

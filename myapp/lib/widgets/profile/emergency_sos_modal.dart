@@ -73,7 +73,10 @@ class _EmergencySosModalState extends State<EmergencySosModal> {
       await launchUrl(waUri, mode: LaunchMode.externalApplication);
     } else {
       if (mounted) {
-        AppToast.show(context, 'Could not open WhatsApp. Copy the link and share manually.');
+        AppToast.show(
+          context,
+          'Could not open WhatsApp. Copy the link and share manually.',
+        );
       }
     }
   }
@@ -183,7 +186,11 @@ class _EmergencySosModalState extends State<EmergencySosModal> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.share, size: 16),
-                label: Text(_isFetchingLocation ? 'Getting location…' : 'Share My Live Location'),
+                label: Text(
+                  _isFetchingLocation
+                      ? 'Getting location…'
+                      : 'Share My Live Location',
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isDark ? Colors.white : Colors.black,
                   foregroundColor: isDark ? Colors.black : Colors.white,

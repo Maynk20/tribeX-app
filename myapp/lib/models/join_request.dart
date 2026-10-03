@@ -49,12 +49,13 @@ class JoinRequest {
       userId: json['user_id'] as String? ?? json['userId'] as String? ?? '',
       status: st,
       requestedAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : (json['requestedAt'] != null
-                ? DateTime.parse(json['requestedAt'] as String)
+                ? (DateTime.tryParse(json['requestedAt'].toString()) ??
+                      DateTime.now())
                 : DateTime.now()),
       checkedInAt: json['checked_in_at'] != null
-          ? DateTime.parse(json['checked_in_at'] as String)
+          ? DateTime.tryParse(json['checked_in_at'].toString())
           : null,
       noShow: json['no_show'] as bool? ?? false,
       user: userObj,

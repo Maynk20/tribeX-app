@@ -104,7 +104,8 @@ class _CheckInPanelState extends State<CheckInPanel> {
     final attendees = state.getRequestsForActivity(widget.activity.id);
 
     final isCheckedIn = widget.myRequest?.isCheckedIn ?? false;
-    final hasPin = widget.activity.latitude != null && widget.activity.longitude != null;
+    final hasPin =
+        widget.activity.latitude != null && widget.activity.longitude != null;
 
     if (!hasPin && !widget.isHost) return const SizedBox.shrink();
 
@@ -162,7 +163,10 @@ class _CheckInPanelState extends State<CheckInPanel> {
                   ],
                 ),
               ),
-              if (!widget.isHost && widget.myRequest != null && !isCheckedIn && hasPin)
+              if (!widget.isHost &&
+                  widget.myRequest != null &&
+                  !isCheckedIn &&
+                  hasPin)
                 ElevatedButton.icon(
                   onPressed: _isCheckingIn ? null : _performCheckIn,
                   icon: _isCheckingIn

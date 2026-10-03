@@ -108,9 +108,7 @@ class ChatState extends ChangeNotifier {
       } catch (_) {
         res = await client
             .from('expenses')
-            .select(
-              '*, profiles(*), expense_shares(*, profiles(*))',
-            )
+            .select('*, profiles(*), expense_shares(*, profiles(*))')
             .eq('id', expenseId)
             .maybeSingle();
       }
@@ -239,7 +237,9 @@ class ChatState extends ChangeNotifier {
       final expId = expRes['id'] as String;
 
       if (members.isNotEmpty) {
-        await client.from('expense_shares').insert(
+        await client
+            .from('expense_shares')
+            .insert(
               members
                   .map(
                     (m) => {
@@ -337,14 +337,11 @@ class ChatState extends ChangeNotifier {
     final int optionIdx = int.tryParse(optionId) ?? 0;
 
     try {
-      await client.from('poll_votes').upsert(
-        {
-          'poll_id': pollId,
-          'user_id': userId,
-          'option_index': optionIdx,
-        },
-        onConflict: 'poll_id,user_id',
-      );
+      await client.from('poll_votes').upsert({
+        'poll_id': pollId,
+        'user_id': userId,
+        'option_index': optionIdx,
+      }, onConflict: 'poll_id,user_id');
 
       await fetchPoll(pollId);
     } catch (e) {
