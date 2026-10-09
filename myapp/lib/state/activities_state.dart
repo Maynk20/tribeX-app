@@ -52,6 +52,7 @@ class ActivitiesState extends ChangeNotifier {
   List<Activity>? _cachedFilteredActivities;
   String? _cachedCurrentUserId;
   Set<String>? _cachedBlockedIds;
+  bool? _cachedApplyRadiusFilter;
   bool _filterCacheValid = false;
 
   RealtimeChannel? _activitiesChannel;
@@ -60,6 +61,7 @@ class ActivitiesState extends ChangeNotifier {
   void _invalidateFilterCache() {
     _filterCacheValid = false;
     _cachedFilteredActivities = null;
+    _cachedApplyRadiusFilter = null;
   }
 
   void _rebuildJoinRequestIndices() {
@@ -518,10 +520,12 @@ class ActivitiesState extends ChangeNotifier {
   // Filtered Activities with Memoization
   List<Activity> getFilteredActivities(
     String? currentUserId,
-    Set<String> blockedIds,
-  ) {
+    Set<String> blockedIds, {
+    bool applyRadiusFilter = true,
+  }) {
     if (_filterCacheValid &&
         _cachedCurrentUserId == currentUserId &&
+        _cachedApplyRadiusFilter == applyRadiusFilter &&
         _cachedBlockedIds != null &&
         _cachedBlockedIds!.length == blockedIds.length &&
         _cachedBlockedIds!.containsAll(blockedIds) &&
@@ -554,8 +558,8 @@ class ActivitiesState extends ChangeNotifier {
       if (_modeFilter == ModeFilter.inPerson && a.isOnline) return false;
       if (_modeFilter == ModeFilter.online && !a.isOnline) return false;
 
-      // 15 KM Default Radius Filtering (applies to in-person plans in discover feed when location is known):
-      if (_scope == FeedScope.discover && _place != null && !a.isOnline) {
+      // 15 KM Default Radius Filtering (applies to in-person plans in discover feed when location is known and radius filtering is active):
+      if (applyRadiusFilter && _scope == FeedScope.discover && _place != null && !a.isOnline) {
         if (a.latitude != null && a.longitude != null) {
           final dist = LocationService.haversineKm(
             _place!.lat,
@@ -658,6 +662,7 @@ class ActivitiesState extends ChangeNotifier {
     _cachedFilteredActivities = List.unmodifiable(result);
     _cachedCurrentUserId = currentUserId;
     _cachedBlockedIds = Set.from(blockedIds);
+    _cachedApplyRadiusFilter = applyRadiusFilter;
     _filterCacheValid = true;
 
     return _cachedFilteredActivities!;

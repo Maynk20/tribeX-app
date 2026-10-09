@@ -28,10 +28,13 @@ class ExploreScreen extends StatefulWidget {
   final VoidCallback? onNavigateToCreate;
   final VoidCallback? onNavigateToProfile;
 
+  final Duration fifteenKmDuration;
+
   const ExploreScreen({
     super.key,
     this.onNavigateToCreate,
     this.onNavigateToProfile,
+    this.fifteenKmDuration = const Duration(seconds: 10),
   });
 
   @override
@@ -43,12 +46,27 @@ class _ExploreScreenState extends State<ExploreScreen>
   late final TextEditingController _searchCtrl;
   late final ScrollController _scrollCtrl;
   Timer? _searchDebounceTimer;
+  Timer? _fifteenKmTimer;
+  bool _is15kmActive = true;
   bool _showScrollToTop = false;
   bool _hasSearchText = false;
   bool _isGettingLocation = false;
 
   @override
   bool get wantKeepAlive => true;
+
+  void _start15kmTimer() {
+    _fifteenKmTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _is15kmActive = true);
+    _fifteenKmTimer = Timer(widget.fifteenKmDuration, () {
+      if (mounted) {
+        setState(() {
+          _is15kmActive = false;
+        });
+      }
+    });
+  }
 
   /// TanStack `handleUseGPS` → `requestBrowserLocation`.
   Future<void> _fetchGpsLocation() async {
@@ -62,6 +80,7 @@ class _ExploreScreenState extends State<ExploreScreen>
 
     final place = lookup.place;
     if (place != null) {
+      _start15kmTimer();
       context.read<ActivitiesState>().setPlace(place);
       AppToast.show(context, 'Showing plans within 15 km of your location');
     } else {
@@ -113,6 +132,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   @override
   void initState() {
     super.initState();
+    _start15kmTimer();
     _searchCtrl = TextEditingController();
     _scrollCtrl = ScrollController();
 
@@ -141,6 +161,7 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   @override
   void dispose() {
+    _fifteenKmTimer?.cancel();
     _searchDebounceTimer?.cancel();
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
@@ -179,6 +200,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     final filteredActivities = actState.getFilteredActivities(
       user?.id,
       authState.blockedUserIds,
+      applyRadiusFilter: _is15kmActive,
     );
 
     return Scaffold(
@@ -197,6 +219,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
+            _start15kmTimer();
             await actState.fetchActivities();
           },
           color: AppColors.primary,
@@ -230,6 +253,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                                           context,
                                           initialValue: actState.location,
                                           onSelect: (p) {
+                                            _start15kmTimer();
                                             // TanStack toPlace(): short = title.
                                             actState.setPlace(
                                               SavedPlace(
@@ -692,7 +716,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                                 Text(
                                   user == null ||
                                           actState.scope == FeedScope.discover
-                                      ? (actState.place != null
+                                      ? (_is15kmActive && actState.place != null
                                             ? 'Plans within 15 km'
                                             : 'Nearby plans')
                                       : actState.scope == FeedScope.joined
@@ -704,7 +728,8 @@ class _ExploreScreenState extends State<ExploreScreen>
                                     letterSpacing: -0.25,
                                   ),
                                 ),
-                                if (actState.scope == FeedScope.discover &&
+                                if (_is15kmActive &&
+                                    actState.scope == FeedScope.discover &&
                                     actState.place != null) ...[
                                   const SizedBox(height: 2),
                                   Text(
@@ -722,7 +747,8 @@ class _ExploreScreenState extends State<ExploreScreen>
                               ],
                             ),
                           ),
-                          if (actState.scope == FeedScope.discover &&
+                          if (_is15kmActive &&
+                              actState.scope == FeedScope.discover &&
                               actState.place != null)
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -764,7 +790,8 @@ class _ExploreScreenState extends State<ExploreScreen>
                       ),
 
                       // Location unavailable banner when discovering plans without coordinates
-                      if (actState.scope == FeedScope.discover &&
+                      if (_is15kmActive &&
+                          actState.scope == FeedScope.discover &&
                           actState.place == null) ...[
                         const SizedBox(height: 12),
                         Container(
