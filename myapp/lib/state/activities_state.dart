@@ -94,10 +94,12 @@ class ActivitiesState extends ChangeNotifier {
   // a human label (default DEFAULT_CITY) plus an optional chosen place with
   // coordinates. No coordinates are invented when nothing has been chosen.
   static const String defaultCity = 'Bengaluru';
+  static const double defaultRadiusKm = 15.0;
   static const String locationPrefsKey = 'lobby:location';
   static const String placePrefsKey = 'lobby:place';
   String _location = defaultCity;
   SavedPlace? _place;
+  double _radiusKm = defaultRadiusKm;
   bool _locationTouched = false;
 
   // Quick Filters
@@ -130,6 +132,24 @@ class ActivitiesState extends ChangeNotifier {
   /// The chosen/GPS place with coordinates, or null when only the default
   /// city label is in use.
   SavedPlace? get place => _place;
+
+  /// Default 15.0 km radius from user's current GPS or selected location.
+  double get radiusKm => _radiusKm;
+
+  void setRadiusKm(double km) {
+    if (_radiusKm == km) return;
+    _radiusKm = km;
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
+    fetchActivities();
+  }
+
+  @visibleForTesting
+  void setActivitiesForTesting(List<Activity> acts) {
+    _activities = List.from(acts);
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
+  }
 
   bool get freeOnly => _freeOnly;
   bool get spotsOnly => _spotsOnly;
@@ -219,6 +239,7 @@ class ActivitiesState extends ChangeNotifier {
     _invalidateFilterCache();
     if (!_isDisposed) notifyListeners();
     unawaited(_persistLocation());
+    fetchActivities();
   }
 
   /// Reset to the default city and forget the stored place
@@ -229,6 +250,7 @@ class ActivitiesState extends ChangeNotifier {
     _place = null;
     _invalidateFilterCache();
     if (!_isDisposed) notifyListeners();
+    fetchActivities();
     unawaited(() async {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -334,28 +356,43 @@ class ActivitiesState extends ChangeNotifier {
 
     try {
       dynamic res;
-      // 1. Try with profiles_public relation
-      try {
-        res = await client
-            .from('activities')
-            .select('*, profiles_public(*)')
-            .filter('deleted_at', 'is', null)
-            .order('date_time', ascending: true);
-      } catch (_) {
-        // 2. Fallback to profiles relation
+      final currentPlace = _place;
+
+      // 1. When coordinates are available, attempt backend spatial filtering via get_nearby_activities RPC
+      if (currentPlace != null) {
+        try {
+          res = await SupabaseService.fetchNearbyActivities(
+            lat: currentPlace.lat,
+            lng: currentPlace.lon,
+            radiusKm: _radiusKm,
+          );
+        } catch (_) {
+          res = null;
+        }
+      }
+
+      // 2. If spatial RPC returned null, not configured, or failed, fallback to standard queries
+      if (res == null) {
         try {
           res = await client
               .from('activities')
-              .select('*, profiles(*)')
+              .select('*, profiles_public(*)')
               .filter('deleted_at', 'is', null)
               .order('date_time', ascending: true);
         } catch (_) {
-          // 3. Fallback to flat activities table
-          res = await client
-              .from('activities')
-              .select('*')
-              .filter('deleted_at', 'is', null)
-              .order('date_time', ascending: true);
+          try {
+            res = await client
+                .from('activities')
+                .select('*, profiles(*)')
+                .filter('deleted_at', 'is', null)
+                .order('date_time', ascending: true);
+          } catch (_) {
+            res = await client
+                .from('activities')
+                .select('*')
+                .filter('deleted_at', 'is', null)
+                .order('date_time', ascending: true);
+          }
         }
       }
 
@@ -516,6 +553,26 @@ class ActivitiesState extends ChangeNotifier {
 
       if (_modeFilter == ModeFilter.inPerson && a.isOnline) return false;
       if (_modeFilter == ModeFilter.online && !a.isOnline) return false;
+
+      // 15 KM Default Radius Filtering (applies to discover feed when location is known):
+      if (_scope == FeedScope.discover && _place != null) {
+        if (a.latitude != null && a.longitude != null) {
+          final dist = LocationService.haversineKm(
+            _place!.lat,
+            _place!.lon,
+            a.latitude!,
+            a.longitude!,
+          );
+          // Plans within 15 km appear; plans beyond 15 km do not appear
+          // 0.001km precision allowance handles floating-point 15.000km edge
+          if (dist > _radiusKm + 0.001) {
+            return false;
+          }
+        } else if (!a.isOnline) {
+          // In-person physical plans with no coordinates cannot be confirmed within 15 km
+          return false;
+        }
+      }
 
       if (_freeOnly && a.costPerHead > 0) return false;
       if (_spotsOnly && a.slotsLeft <= 0) return false;

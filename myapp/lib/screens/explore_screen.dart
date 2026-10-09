@@ -63,13 +63,41 @@ class _ExploreScreenState extends State<ExploreScreen>
     final place = lookup.place;
     if (place != null) {
       context.read<ActivitiesState>().setPlace(place);
-      AppToast.show(context, 'Location updated');
+      AppToast.show(context, 'Showing plans within 15 km of your location');
     } else {
       showLocationError(
         context,
         lookup.result.error ?? "Couldn't get your location",
       );
     }
+  }
+
+  Future<void> _checkInitialLocation() async {
+    // 1. If user is signed in with GPS coords on profile, use that as initial center if no place set
+    final user = context.read<AuthState>().currentUser;
+    if (user != null && user.latitude != null && user.longitude != null) {
+      if (!mounted) return;
+      final actState = context.read<ActivitiesState>();
+      if (actState.place == null) {
+        actState.setPlace(
+          SavedPlace(
+            displayName: user.city ?? 'Current Location',
+            short: user.city ?? 'Current Location',
+            lat: user.latitude!,
+            lon: user.longitude!,
+          ),
+        );
+        return;
+      }
+    }
+
+    // 2. Otherwise, check if GPS permission is already granted silently
+    try {
+      final hasPerm = await LocationService.hasLocationPermission();
+      if (hasPerm && mounted) {
+        await _fetchGpsLocation();
+      }
+    } catch (_) {}
   }
 
   /// TanStack onJoin guard: toast when the profile lacks a verified location.
@@ -99,6 +127,14 @@ class _ExploreScreenState extends State<ExploreScreen>
       final shouldShow = _scrollCtrl.hasClients && _scrollCtrl.offset > 240;
       if (shouldShow != _showScrollToTop) {
         setState(() => _showScrollToTop = shouldShow);
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final act = context.read<ActivitiesState>();
+      if (act.place == null) {
+        _checkInitialLocation();
       }
     });
   }
@@ -209,7 +245,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                                             );
                                             AppToast.show(
                                               context,
-                                              'Showing plans near ${p.title}',
+                                              'Showing plans within 15 km of ${p.title}',
                                             );
                                           },
                                         );
@@ -644,19 +680,189 @@ class _ExploreScreenState extends State<ExploreScreen>
                         ),
                       const SizedBox(height: 16),
 
-                      // Section Title
-                      Text(
-                        user == null || actState.scope == FeedScope.discover
-                            ? 'Happening nearby'
-                            : actState.scope == FeedScope.joined
-                            ? "Plans you've joined"
-                            : "Plans you're hosting",
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.25,
-                        ),
+                      // Section Title & 15 km Radius Badge
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  user == null ||
+                                          actState.scope == FeedScope.discover
+                                      ? (actState.place != null
+                                            ? 'Plans within 15 km'
+                                            : 'Nearby plans')
+                                      : actState.scope == FeedScope.joined
+                                      ? "Plans you've joined"
+                                      : "Plans you're hosting",
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.25,
+                                  ),
+                                ),
+                                if (actState.scope == FeedScope.discover &&
+                                    actState.place != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Showing activities around ${actState.place!.short.isNotEmpty ? actState.place!.short : actState.location}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? AppColors.mutedForegroundDark
+                                          : AppColors.mutedForegroundLight,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (actState.scope == FeedScope.discover &&
+                              actState.place != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    LucideIcons.compass,
+                                    size: 11,
+                                    color: AppColors.primary,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '15 km radius',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
+
+                      // Location unavailable banner when discovering plans without coordinates
+                      if (actState.scope == FeedScope.discover &&
+                          actState.place == null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.cardDark
+                                : AppColors.secondaryLight,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: border.withValues(alpha: 0.8),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  LucideIcons.mapPinOff,
+                                  size: 18,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Location unavailable',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? AppColors.foregroundDark
+                                            : AppColors.foregroundLight,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Enable GPS or select your city to filter plans within 15 km of you.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? AppColors.mutedForegroundDark
+                                            : AppColors.mutedForegroundLight,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: _isGettingLocation
+                                    ? null
+                                    : _fetchGpsLocation,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: _isGettingLocation
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Use GPS',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -863,12 +1069,24 @@ class _ExploreScreenState extends State<ExploreScreen>
                       final pendingCount = actState.getPendingCountForActivity(
                         act.id,
                       );
+                      final distanceKm =
+                          actState.place != null &&
+                              act.latitude != null &&
+                              act.longitude != null
+                          ? LocationService.haversineKm(
+                              actState.place!.lat,
+                              actState.place!.lon,
+                              act.latitude!,
+                              act.longitude!,
+                            )
+                          : null;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 14),
                         child: ActivityCard(
                           key: ValueKey(act.id),
                           activity: act,
+                          distanceKm: distanceKm,
                           isHost: isHost,
                           myStatus: myReq?.status,
                           pendingCount: pendingCount,

@@ -315,6 +315,18 @@ class _ChatScreenState extends State<ChatScreen> {
                             'Message from ${m.sender?.fullName ?? "user"}',
                       );
                     },
+                    onRetry: () async {
+                      final success = await context
+                          .read<ChatState>()
+                          .retrySendMessage(m);
+                      if (!success && context.mounted) {
+                        AppToast.show(
+                          context,
+                          'Failed to resend message. Check your connection.',
+                          isError: true,
+                        );
+                      }
+                    },
                   ),
                 );
               },

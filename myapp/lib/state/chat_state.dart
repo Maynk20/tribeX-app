@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/activity.dart';
 import '../models/expense.dart';
 import '../models/message.dart';
 import '../models/poll.dart';
@@ -18,7 +19,15 @@ class ChatState extends ChangeNotifier {
   final Set<String> _pendingExpenseFetches = {};
   final Set<String> _pendingPollFetches = {};
   final Map<String, RealtimeChannel> _activeChannels = {};
+  final Map<String, List<ExpenseMember>> _squadMembersByActivity = {};
+  List<Activity> _userChats = [];
+  bool _isLoadingUserChats = false;
   bool _isDisposed = false;
+
+  List<Activity> get userChats => List.unmodifiable(_userChats);
+  bool get isLoadingUserChats => _isLoadingUserChats;
+  List<ExpenseMember>? getSquadMembers(String activityId) =>
+      _squadMembersByActivity[activityId];
 
   List<Message> getMessagesForActivity(String activityId) {
     final list = _messagesByActivity[activityId];
@@ -92,8 +101,9 @@ class ChatState extends ChangeNotifier {
           .toList();
 
       final currentList = _messagesByActivity[activityId] ?? [];
-      final pendingTemp =
-          currentList.where((m) => m.id.startsWith('temp_')).toList();
+      final pendingTemp = currentList
+          .where((m) => m.id.startsWith('temp_'))
+          .toList();
 
       final Map<String, Message> deduped = {};
       for (final m in msgs) {
@@ -205,7 +215,8 @@ class ChatState extends ChangeNotifier {
           ),
           callback: (payload) {
             if (!_isDisposed) {
-              final pollId = payload.newRecord['id']?.toString() ??
+              final pollId =
+                  payload.newRecord['id']?.toString() ??
                   payload.oldRecord['id']?.toString();
               if (pollId != null) {
                 fetchPoll(pollId);
@@ -219,7 +230,8 @@ class ChatState extends ChangeNotifier {
           table: 'poll_votes',
           callback: (payload) {
             if (!_isDisposed) {
-              final pollId = payload.newRecord['poll_id']?.toString() ??
+              final pollId =
+                  payload.newRecord['poll_id']?.toString() ??
                   payload.oldRecord['poll_id']?.toString();
               if (pollId != null && _polls.containsKey(pollId)) {
                 fetchPoll(pollId);
@@ -238,7 +250,8 @@ class ChatState extends ChangeNotifier {
           ),
           callback: (payload) {
             if (!_isDisposed) {
-              final expId = payload.newRecord['id']?.toString() ??
+              final expId =
+                  payload.newRecord['id']?.toString() ??
                   payload.oldRecord['id']?.toString();
               if (expId != null) {
                 fetchExpense(expId);
@@ -252,7 +265,8 @@ class ChatState extends ChangeNotifier {
           table: 'expense_shares',
           callback: (payload) {
             if (!_isDisposed) {
-              final expId = payload.newRecord['expense_id']?.toString() ??
+              final expId =
+                  payload.newRecord['expense_id']?.toString() ??
                   payload.oldRecord['expense_id']?.toString();
               if (expId != null && _expenses.containsKey(expId)) {
                 fetchExpense(expId);
@@ -276,6 +290,255 @@ class ChatState extends ChangeNotifier {
     }
   }
 
+  /// Fetches all joined and confirmed squad members (Host + all accepted attendees).
+  /// Uses get_squad_members security-definer RPC with fallback to direct queries.
+  Future<List<ExpenseMember>> fetchSquadMembers(String activityId) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) {
+      return _squadMembersByActivity[activityId] ?? const [];
+    }
+
+    try {
+      // 1. Try security-definer RPC
+      final rpcRes = await client.rpc(
+        'get_squad_members',
+        params: {'_activity_id': activityId},
+      );
+      if (rpcRes is List<dynamic> && rpcRes.isNotEmpty) {
+        final list = rpcRes.map((item) {
+          final map = item as Map<String, dynamic>;
+          return ExpenseMember(
+            userId: map['user_id']?.toString() ?? '',
+            name:
+                map['full_name']?.toString() ??
+                map['username']?.toString() ??
+                'Squad Member',
+            avatarUrl: map['avatar_url']?.toString(),
+            amount: 0.0,
+            isPaid: false,
+          );
+        }).toList();
+        _squadMembersByActivity[activityId] = list;
+        if (!_isDisposed) notifyListeners();
+        return list;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+
+    try {
+      // 2. Query activity host
+      final actRes = await client
+          .from('activities')
+          .select('id, host_id')
+          .eq('id', activityId)
+          .maybeSingle();
+
+      final hostId = actRes?['host_id']?.toString();
+
+      // Query accepted join requests
+      dynamic reqsRes;
+      try {
+        reqsRes = await client
+            .from('join_requests')
+            .select('user_id, status, profiles_public(*)')
+            .eq('activity_id', activityId)
+            .eq('status', 'accepted');
+      } catch (_) {
+        try {
+          reqsRes = await client
+              .from('join_requests')
+              .select('user_id, status, profiles(*)')
+              .eq('activity_id', activityId)
+              .eq('status', 'accepted');
+        } catch (_) {
+          reqsRes = await client
+              .from('join_requests')
+              .select('user_id, status')
+              .eq('activity_id', activityId)
+              .eq('status', 'accepted');
+        }
+      }
+
+      final participantUserIds = <String>{};
+      if (hostId != null) participantUserIds.add(hostId);
+
+      final reqsList = (reqsRes as List<dynamic>?) ?? [];
+      for (final r in reqsList) {
+        final uid = r['user_id']?.toString();
+        if (uid != null) participantUserIds.add(uid);
+      }
+
+      // Fetch profiles for all participantUserIds
+      final Map<String, UserProfile> profMap = {};
+      if (participantUserIds.isNotEmpty) {
+        try {
+          final profs = await client
+              .from('profiles_public')
+              .select('id, full_name, username, avatar_url')
+              .filter('id', 'in', participantUserIds.toList());
+          for (final p in profs) {
+            final uid = p['id']?.toString();
+            if (uid != null) {
+              profMap[uid] = UserProfile.fromJson(p);
+            }
+          }
+        } catch (_) {
+          try {
+            final profs = await client
+                .from('profiles')
+                .select('id, full_name, username, avatar_url')
+                .filter('id', 'in', participantUserIds.toList());
+            for (final p in profs) {
+              final uid = p['id']?.toString();
+              if (uid != null) {
+                profMap[uid] = UserProfile.fromJson(p);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      final members = <ExpenseMember>[];
+      // Host first
+      if (hostId != null) {
+        final hostProf = profMap[hostId];
+        members.add(
+          ExpenseMember(
+            userId: hostId,
+            name: hostProf?.fullName ?? hostProf?.username ?? 'Host',
+            avatarUrl: hostProf?.avatarUrl,
+            amount: 0.0,
+            isPaid: false,
+          ),
+        );
+      }
+
+      // Accepted members
+      for (final r in reqsList) {
+        final uid = r['user_id']?.toString();
+        if (uid != null && uid != hostId) {
+          final prof =
+              profMap[uid] ??
+              (r['profiles_public'] != null
+                  ? UserProfile.fromJson(
+                      r['profiles_public'] as Map<String, dynamic>,
+                    )
+                  : null);
+          members.add(
+            ExpenseMember(
+              userId: uid,
+              name: prof?.fullName ?? prof?.username ?? 'Squad Member',
+              avatarUrl: prof?.avatarUrl,
+              amount: 0.0,
+              isPaid: false,
+            ),
+          );
+        }
+      }
+
+      _squadMembersByActivity[activityId] = members;
+      if (!_isDisposed) notifyListeners();
+      return members;
+    } catch (e) {
+      debugPrint('fetchSquadMembers error: $e');
+      return _squadMembersByActivity[activityId] ?? const [];
+    }
+  }
+
+  /// Loads all chats the user hosts or joined, regardless of Explore screen location/radius.
+  Future<void> fetchUserChats(String userId) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return;
+
+    _isLoadingUserChats = true;
+    if (!_isDisposed) notifyListeners();
+
+    try {
+      // 1. Hosted activities
+      dynamic hostedRes;
+      try {
+        hostedRes = await client
+            .from('activities')
+            .select('*, profiles_public(*)')
+            .eq('host_id', userId)
+            .filter('deleted_at', 'is', null)
+            .order('date_time', ascending: false);
+      } catch (_) {
+        hostedRes = await client
+            .from('activities')
+            .select('*')
+            .eq('host_id', userId)
+            .filter('deleted_at', 'is', null)
+            .order('date_time', ascending: false);
+      }
+
+      // 2. Joined activities (status = 'accepted')
+      final joinedReqs = await client
+          .from('join_requests')
+          .select('activity_id')
+          .eq('user_id', userId)
+          .eq('status', 'accepted');
+
+      final joinedActivityIds = ((joinedReqs as List<dynamic>?) ?? [])
+          .map((r) => r['activity_id']?.toString())
+          .whereType<String>()
+          .toSet()
+          .toList();
+
+      final List<Activity> combined = [];
+      if (hostedRes is List<dynamic>) {
+        combined.addAll(
+          hostedRes.map((j) => Activity.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+
+      if (joinedActivityIds.isNotEmpty) {
+        dynamic joinedRes;
+        try {
+          joinedRes = await client
+              .from('activities')
+              .select('*, profiles_public(*)')
+              .filter('id', 'in', joinedActivityIds)
+              .filter('deleted_at', 'is', null);
+        } catch (_) {
+          joinedRes = await client
+              .from('activities')
+              .select('*')
+              .filter('id', 'in', joinedActivityIds)
+              .filter('deleted_at', 'is', null);
+        }
+
+        if (joinedRes is List<dynamic>) {
+          for (final j in joinedRes) {
+            final act = Activity.fromJson(j as Map<String, dynamic>);
+            if (!combined.any((a) => a.id == act.id)) {
+              combined.add(act);
+            }
+          }
+        }
+      }
+
+      // Sort by date_time descending
+      combined.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+      _userChats = combined;
+
+      // Pre-fetch latest messages for previews in background
+      for (final chat in combined.take(15)) {
+        if (!_messagesByActivity.containsKey(chat.id)) {
+          unawaited(fetchMessagesForActivity(chat.id));
+        }
+      }
+    } catch (e) {
+      debugPrint('fetchUserChats error: $e');
+    } finally {
+      if (!_isDisposed) {
+        _isLoadingUserChats = false;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<bool> sendMessage({
     required String activityId,
     required String senderId,
@@ -294,6 +557,8 @@ class ChatState extends ChangeNotifier {
       text: text,
       createdAt: DateTime.now(),
       sender: sender,
+      isSending: true,
+      isFailed: false,
     );
 
     final currentList = _messagesByActivity.putIfAbsent(activityId, () => []);
@@ -341,14 +606,86 @@ class ChatState extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('sendMessage error: $e');
-      // Revert optimistic message on error
-      currentList.removeWhere((m) => m.id == tempId);
+      // DO NOT delete optimistic message. Mark it failed so user can safely retry!
+      final idx = currentList.indexWhere((m) => m.id == tempId);
+      if (idx != -1) {
+        currentList[idx] = currentList[idx].copyWith(
+          isSending: false,
+          isFailed: true,
+        );
+      }
       if (!_isDisposed) notifyListeners();
       return false;
     }
   }
 
-  Future<void> createExpense({
+  /// Retries sending a previously failed message without losing text or creating duplicates.
+  Future<bool> retrySendMessage(Message failedMsg) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
+
+    final currentList = _messagesByActivity[failedMsg.activityId];
+    if (currentList == null) return false;
+
+    final idx = currentList.indexWhere((m) => m.id == failedMsg.id);
+    if (idx != -1) {
+      currentList[idx] = currentList[idx].copyWith(
+        isSending: true,
+        isFailed: false,
+      );
+      notifyListeners();
+    }
+
+    try {
+      dynamic inserted;
+      try {
+        inserted = await client
+            .from('messages')
+            .insert({
+              'activity_id': failedMsg.activityId,
+              'sender_id': failedMsg.senderId,
+              'text': failedMsg.text,
+            })
+            .select('*, profiles_public(*)')
+            .maybeSingle();
+      } catch (_) {
+        inserted = await client
+            .from('messages')
+            .insert({
+              'activity_id': failedMsg.activityId,
+              'sender_id': failedMsg.senderId,
+              'text': failedMsg.text,
+            })
+            .select('*, profiles(*)')
+            .maybeSingle();
+      }
+
+      if (inserted != null && !_isDisposed) {
+        final realMsg = Message.fromJson(inserted as Map<String, dynamic>);
+        final currentIdx = currentList.indexWhere((m) => m.id == failedMsg.id);
+        if (currentIdx != -1) {
+          currentList[currentIdx] = realMsg;
+        } else if (!currentList.any((m) => m.id == realMsg.id)) {
+          currentList.add(realMsg);
+        }
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      debugPrint('retrySendMessage error: $e');
+      final currentIdx = currentList.indexWhere((m) => m.id == failedMsg.id);
+      if (currentIdx != -1) {
+        currentList[currentIdx] = currentList[currentIdx].copyWith(
+          isSending: false,
+          isFailed: true,
+        );
+      }
+      if (!_isDisposed) notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> createExpense({
     required String activityId,
     required String creatorId,
     required String creatorName,
@@ -359,7 +696,7 @@ class ChatState extends ChangeNotifier {
     UserProfile? creator,
   }) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return;
+    if (client == null || _isDisposed) return false;
 
     try {
       final expRes = await client
@@ -367,7 +704,7 @@ class ChatState extends ChangeNotifier {
           .insert({
             'activity_id': activityId,
             'created_by': creatorId,
-            'description': description,
+            'description': description.trim(),
             'total_amount': totalAmount,
             'upi_id': upiId,
           })
@@ -395,41 +732,48 @@ class ChatState extends ChangeNotifier {
 
       await fetchExpense(expId);
 
+      // TanStack-compatible format: [[expense:<uuid>]] <description> · ₹<amount>
+      final formattedText =
+          '[[expense:$expId]] ${description.trim()} · ₹${totalAmount.toStringAsFixed(2)}';
+
       await sendMessage(
         activityId: activityId,
         senderId: creatorId,
-        text: 'EXPENSE:$expId',
+        text: formattedText,
         sender: creator,
       );
+      return true;
     } catch (e) {
       debugPrint('createExpense error: $e');
+      return false;
     }
   }
 
-  Future<void> toggleMemberPaid(String expenseId, String userId) async {
+  Future<bool> toggleMemberPaid(String expenseId, String userId) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return;
+    if (client == null || _isDisposed) return false;
 
     final exp = _expenses[expenseId];
-    if (exp != null) {
-      final member = exp.members.where((m) => m.userId == userId).firstOrNull;
-      if (member == null) return;
-      final nextPaid = !member.isPaid;
+    if (exp == null) return false;
+    final member = exp.members.where((m) => m.userId == userId).firstOrNull;
+    if (member == null) return false;
+    final nextPaid = !member.isPaid;
 
-      try {
-        await client
-            .from('expense_shares')
-            .update({
-              'status': nextPaid ? 'paid' : 'pending',
-              'paid_at': nextPaid ? DateTime.now().toIso8601String() : null,
-            })
-            .eq('expense_id', expenseId)
-            .eq('user_id', userId);
+    try {
+      await client
+          .from('expense_shares')
+          .update({
+            'status': nextPaid ? 'paid' : 'pending',
+            'paid_at': nextPaid ? DateTime.now().toIso8601String() : null,
+          })
+          .eq('expense_id', expenseId)
+          .eq('user_id', userId);
 
-        await fetchExpense(expenseId);
-      } catch (e) {
-        debugPrint('toggleMemberPaid error: $e');
-      }
+      await fetchExpense(expenseId);
+      return true;
+    } catch (e) {
+      debugPrint('toggleMemberPaid error: $e');
+      return false;
     }
   }
 
@@ -449,7 +793,7 @@ class ChatState extends ChangeNotifier {
           .insert({
             'activity_id': activityId,
             'created_by': creatorId,
-            'question': question,
+            'question': question.trim(),
             'options': optionTexts,
           })
           .select()
@@ -459,10 +803,13 @@ class ChatState extends ChangeNotifier {
 
       await fetchPoll(pollId);
 
+      // TanStack-compatible format: [[poll:<uuid>]] <question>
+      final formattedText = '[[poll:$pollId]] ${question.trim()}';
+
       await sendMessage(
         activityId: activityId,
         senderId: creatorId,
-        text: 'POLL:$pollId',
+        text: formattedText,
         sender: creator,
       );
       return true;

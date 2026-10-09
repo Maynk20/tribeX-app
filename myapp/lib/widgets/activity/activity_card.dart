@@ -38,6 +38,7 @@ class ActivityCard extends StatelessWidget {
   final VoidCallback? onReport;
   final bool isFemale;
   final bool isVerified;
+  final double? distanceKm;
 
   /// Whether the viewer's profile has the verified GPS location required by
   /// the join RLS policy. When false the Join button becomes an
@@ -62,6 +63,7 @@ class ActivityCard extends StatelessWidget {
     this.onReport,
     this.isFemale = true,
     this.isVerified = true,
+    this.distanceKm,
     this.hasProfileGpsLocation = true,
     this.onAddGpsLocation,
   });
@@ -253,6 +255,27 @@ class ActivityCard extends StatelessWidget {
                             : AppColors.mutedForegroundLight,
                       ),
                       const SizedBox(width: 4),
+                      if (distanceKm != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryMuted,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${distanceKm!.toStringAsFixed(1)} km away',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Expanded(
                         child: Text(
                           activity.location,

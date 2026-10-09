@@ -1,4 +1,5 @@
 class ExpenseMember {
+  final String? shareId;
   final String userId;
   final String name;
   final String? avatarUrl;
@@ -6,6 +7,7 @@ class ExpenseMember {
   final bool isPaid;
 
   ExpenseMember({
+    this.shareId,
     required this.userId,
     required this.name,
     this.avatarUrl,
@@ -21,6 +23,7 @@ class ExpenseMember {
         .toDouble();
 
     return ExpenseMember(
+      shareId: json['id'] as String?,
       userId: (json['user_id'] ?? '') as String,
       name:
           (profile?['full_name'] ?? profile?['username'] ?? 'Squad Member')
@@ -33,6 +36,7 @@ class ExpenseMember {
 
   Map<String, dynamic> toJson() {
     return {
+      if (shareId != null) 'id': shareId,
       'user_id': userId,
       'amount': amount,
       'status': isPaid ? 'paid' : 'pending',
@@ -40,6 +44,7 @@ class ExpenseMember {
   }
 
   ExpenseMember copyWith({
+    String? shareId,
     String? userId,
     String? name,
     String? avatarUrl,
@@ -47,6 +52,7 @@ class ExpenseMember {
     bool? isPaid,
   }) {
     return ExpenseMember(
+      shareId: shareId ?? this.shareId,
       userId: userId ?? this.userId,
       name: name ?? this.name,
       avatarUrl: avatarUrl ?? this.avatarUrl,
@@ -141,5 +147,40 @@ class Expense {
       members: members ?? this.members,
       createdAt: createdAt ?? this.createdAt,
     );
+  }
+
+  /// Distributes [totalAmount] equally among [participants] down to the exact paisa (cents),
+  /// distributing any remainder paise among the first members so the sum of all shares matches [totalAmount] exactly.
+  static List<ExpenseMember> calculateEqualSplit({
+    required List<ExpenseMember> participants,
+    required double totalAmount,
+    String? payerId,
+  }) {
+    if (participants.isEmpty) return const [];
+    if (totalAmount <= 0) {
+      return participants
+          .map(
+            (m) => m.copyWith(
+              amount: 0.0,
+              isPaid: payerId != null && m.userId == payerId,
+            ),
+          )
+          .toList();
+    }
+
+    final totalPaise = (totalAmount * 100).round();
+    final count = participants.length;
+    final basePaise = totalPaise ~/ count;
+    final remainderPaise = totalPaise % count;
+
+    final result = <ExpenseMember>[];
+    for (int i = 0; i < count; i++) {
+      final sharePaise = i < remainderPaise ? basePaise + 1 : basePaise;
+      final shareAmount = sharePaise / 100.0;
+      final m = participants[i];
+      final isPaid = payerId != null ? (m.userId == payerId) : m.isPaid;
+      result.add(m.copyWith(amount: shareAmount, isPaid: isPaid));
+    }
+    return result;
   }
 }

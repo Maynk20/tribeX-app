@@ -197,22 +197,33 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
     });
 
     try {
-      final isPincode = RegExp(r'^\d{6}$').hasMatch(q);
+      final pinMatch = RegExp(r'\b\d{6}\b').firstMatch(q);
       final List<PlaceItem> items = [];
 
-      if (isPincode) {
-        final pinResults = await _searchNominatimPincode(q);
+      // 1. If query contains a 6-digit PIN code, query Nominatim postal code endpoint first
+      if (pinMatch != null) {
+        final pinResults = await _searchNominatimPincode(pinMatch.group(0)!);
         items.addAll(pinResults);
       }
 
+      // 2. Query Photon with strict India bounding box
       final photonResults = await _searchPhoton(q);
       items.addAll(photonResults);
 
-      // Remove duplicates by title & lat/lon proximity
+      // 3. If results are still sparse (< 3) or empty, fall back to Nominatim freeform search for India
+      if (items.length < 3) {
+        final nominatimResults = await _searchNominatimFreeform(q);
+        items.addAll(nominatimResults);
+      }
+
+      // 4. Remove duplicates by title & lat/lon proximity (within India only)
       final Map<String, PlaceItem> uniqueMap = {};
       for (final item in items) {
+        if (!LocationService.isInIndia(item.lat, item.lon)) {
+          continue;
+        }
         final key =
-            '${item.title.toLowerCase()}_${item.lat.toStringAsFixed(3)}';
+            '${item.title.trim().toLowerCase()}_${item.lat.toStringAsFixed(3)}_${item.lon.toStringAsFixed(3)}';
         if (!uniqueMap.containsKey(key)) {
           uniqueMap[key] = item;
         }
@@ -228,13 +239,14 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
         setState(() {
           _searchResults = results;
           _isLoading = false;
+          _error = results.isEmpty ? null : null;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = "Couldn't reach place search service.";
+          _error = "Couldn't reach place search service. Tap to retry.";
         });
       }
     }
@@ -279,116 +291,238 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
   }
 
   Future<List<PlaceItem>> _searchPhoton(String q) async {
-    final uri = Uri.parse(
-      'https://photon.komoot.io/api/?q=${Uri.encodeComponent(q)}&lang=en&limit=12&lat=22.35&lon=78.66&location_bias_scale=0.4',
-    );
-    final response = await http
-        .get(uri, headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 4));
+    try {
+      final uri = Uri.parse(
+        'https://photon.komoot.io/api/?q=${Uri.encodeComponent(q)}&lang=en&limit=15&lat=22.35&lon=78.66&bbox=68.0,6.5,97.5,37.5',
+      );
+      final response = await http
+          .get(uri, headers: {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 4));
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final features = (data['features'] as List<dynamic>?) ?? [];
-      final List<PlaceItem> list = [];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final features = (data['features'] as List<dynamic>?) ?? [];
+        final List<PlaceItem> list = [];
 
-      for (final f in features) {
-        final props = f['properties'] as Map<String, dynamic>? ?? {};
-        final coords = (f['geometry']['coordinates'] as List<dynamic>);
-        final lon = (coords[0] as num).toDouble();
-        final lat = (coords[1] as num).toDouble();
+        for (final f in features) {
+          final props = f['properties'] as Map<String, dynamic>? ?? {};
+          final coords = (f['geometry']['coordinates'] as List<dynamic>);
+          final lon = (coords[0] as num).toDouble();
+          final lat = (coords[1] as num).toDouble();
 
-        final locality =
-            props['suburb'] ??
-            props['locality'] ??
-            props['district'] ??
-            props['village'] ??
-            props['hamlet'] ??
-            props['town'] ??
-            '';
-        final city =
-            props['city'] ??
-            props['town'] ??
-            props['village'] ??
-            props['county'] ??
-            props['state'] ??
-            '';
-        final title = props['name'] ?? props['street'] ?? locality ?? city ?? q;
+          final countryCode = props['countrycode']?.toString();
+          final country = props['country']?.toString();
 
-        final subtitleParts = [
-          if (locality.toString().isNotEmpty && locality != title)
-            locality.toString(),
-          if (city.toString().isNotEmpty && city != locality) city.toString(),
-          if (props['state'] != null && props['state'] != city)
-            props['state'].toString(),
-        ];
-        final subtitle = subtitleParts.join(', ');
+          if (!LocationService.isInIndia(
+            lat,
+            lon,
+            countryCode: countryCode,
+            country: country,
+          )) {
+            continue;
+          }
 
-        list.add(
-          PlaceItem(
-            title: title.toString(),
-            subtitle: subtitle.isNotEmpty
-                ? subtitle
-                : (props['country']?.toString() ?? 'India'),
-            lat: lat,
-            lon: lon,
-          ),
-        );
+          final locality =
+              props['suburb'] ??
+              props['locality'] ??
+              props['district'] ??
+              props['village'] ??
+              props['hamlet'] ??
+              props['town'] ??
+              '';
+          final city =
+              props['city'] ??
+              props['town'] ??
+              props['village'] ??
+              props['county'] ??
+              props['district'] ??
+              '';
+          final state = props['state']?.toString() ?? '';
+          final postcode = props['postcode']?.toString() ?? '';
+          final name = props['name']?.toString() ?? props['street']?.toString();
+
+          final title = (name != null && name.trim().isNotEmpty)
+              ? name.trim()
+              : (locality.toString().isNotEmpty
+                    ? locality.toString()
+                    : (city.toString().isNotEmpty ? city.toString() : q));
+
+          final subtitleParts = <String>[];
+          if (locality.toString().isNotEmpty && locality.toString() != title) {
+            subtitleParts.add(locality.toString());
+          }
+          if (city.toString().isNotEmpty &&
+              city.toString() != locality.toString() &&
+              city.toString() != title) {
+            subtitleParts.add(city.toString());
+          }
+          if (state.isNotEmpty && state != city.toString()) {
+            subtitleParts.add(state);
+          }
+          if (postcode.isNotEmpty) {
+            subtitleParts.add(postcode);
+          }
+
+          final subtitle = subtitleParts.isNotEmpty
+              ? subtitleParts.join(', ')
+              : (state.isNotEmpty ? state : 'India');
+
+          list.add(
+            PlaceItem(title: title, subtitle: subtitle, lat: lat, lon: lon),
+          );
+        }
+
+        return list;
       }
-
-      return list;
-    }
+    } catch (_) {}
     return [];
   }
 
   Future<List<PlaceItem>> _searchNominatimPincode(String pin) async {
-    final uri = Uri.parse(
-      'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=in&limit=8&accept-language=en&postalcode=${Uri.encodeComponent(pin)}',
-    );
-    final response = await http
-        .get(
-          uri,
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'tribeX-app/1.0.0 (contact@tribex.app)',
-          },
-        )
-        .timeout(const Duration(seconds: 4));
+    try {
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=in&limit=10&accept-language=en&postalcode=${Uri.encodeComponent(pin)}',
+      );
+      final response = await http
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'tribeX-app/1.0.0 (contact@tribex.app)',
+            },
+          )
+          .timeout(const Duration(seconds: 4));
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body) as List<dynamic>;
-      final List<PlaceItem> list = [];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        final List<PlaceItem> list = [];
 
-      for (final item in data) {
-        final map = item as Map<String, dynamic>;
-        final address = map['address'] as Map<String, dynamic>? ?? {};
-        final locality =
-            address['suburb'] ??
-            address['village'] ??
-            address['hamlet'] ??
-            address['town'] ??
-            '';
-        final city =
-            address['city'] ??
-            address['town'] ??
-            address['village'] ??
-            address['state'] ??
-            '';
+        for (final item in data) {
+          final map = item as Map<String, dynamic>;
+          final lat = double.tryParse(map['lat']?.toString() ?? '0') ?? 0.0;
+          final lon = double.tryParse(map['lon']?.toString() ?? '0') ?? 0.0;
 
-        final title = locality.toString().isNotEmpty
-            ? '${locality.toString()} ($pin)'
-            : (city.toString().isNotEmpty ? '${city.toString()} ($pin)' : pin);
+          if (!LocationService.isInIndia(lat, lon)) continue;
 
-        list.add(
-          PlaceItem(
-            title: title,
-            subtitle: map['display_name']?.toString() ?? '',
-            lat: double.tryParse(map['lat']?.toString() ?? '0') ?? 0.0,
-            lon: double.tryParse(map['lon']?.toString() ?? '0') ?? 0.0,
-          ),
-        );
+          final address = map['address'] as Map<String, dynamic>? ?? {};
+          final locality =
+              address['suburb'] ??
+              address['neighbourhood'] ??
+              address['village'] ??
+              address['hamlet'] ??
+              address['town'] ??
+              '';
+          final city =
+              address['city'] ?? address['town'] ?? address['village'] ?? '';
+          final district = address['state_district'] ?? address['county'] ?? '';
+          final state = address['state']?.toString() ?? '';
+          final displayName = map['display_name']?.toString() ?? '';
+          final firstPart = displayName.split(',').first.trim();
+
+          final title = locality.toString().isNotEmpty
+              ? locality.toString()
+              : (city.toString().isNotEmpty
+                    ? city.toString()
+                    : (firstPart.isNotEmpty ? firstPart : 'PIN $pin'));
+
+          final subtitleParts = <String>[];
+          if (district.toString().isNotEmpty && district.toString() != title) {
+            subtitleParts.add(district.toString());
+          }
+          if (city.toString().isNotEmpty && city.toString() != title) {
+            subtitleParts.add(city.toString());
+          }
+          if (state.isNotEmpty) subtitleParts.add(state);
+          subtitleParts.add(pin);
+
+          list.add(
+            PlaceItem(
+              title: title,
+              subtitle: subtitleParts.join(', '),
+              lat: lat,
+              lon: lon,
+            ),
+          );
+        }
+        return list;
       }
-      return list;
-    }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<PlaceItem>> _searchNominatimFreeform(String q) async {
+    try {
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=in&limit=10&accept-language=en&q=${Uri.encodeComponent(q)}',
+      );
+      final response = await http
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'tribeX-app/1.0.0 (contact@tribex.app)',
+            },
+          )
+          .timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        final List<PlaceItem> list = [];
+
+        for (final item in data) {
+          final map = item as Map<String, dynamic>;
+          final lat = double.tryParse(map['lat']?.toString() ?? '0') ?? 0.0;
+          final lon = double.tryParse(map['lon']?.toString() ?? '0') ?? 0.0;
+
+          if (!LocationService.isInIndia(lat, lon)) continue;
+
+          final address = map['address'] as Map<String, dynamic>? ?? {};
+          final locality =
+              address['suburb'] ??
+              address['neighbourhood'] ??
+              address['village'] ??
+              address['hamlet'] ??
+              address['town'] ??
+              '';
+          final city =
+              address['city'] ?? address['town'] ?? address['village'] ?? '';
+          final district = address['state_district'] ?? address['county'] ?? '';
+          final state = address['state']?.toString() ?? '';
+          final postcode = address['postcode']?.toString() ?? '';
+          final displayName = map['display_name']?.toString() ?? '';
+          final firstPart = displayName.split(',').first.trim();
+
+          final title = firstPart.isNotEmpty
+              ? firstPart
+              : (locality.toString().isNotEmpty
+                    ? locality.toString()
+                    : (city.toString().isNotEmpty ? city.toString() : q));
+
+          final subtitleParts = <String>[];
+          if (district.toString().isNotEmpty && district.toString() != title) {
+            subtitleParts.add(district.toString());
+          }
+          if (city.toString().isNotEmpty &&
+              city.toString() != district.toString() &&
+              city.toString() != title) {
+            subtitleParts.add(city.toString());
+          }
+          if (state.isNotEmpty && state != city.toString()) {
+            subtitleParts.add(state);
+          }
+          if (postcode.isNotEmpty) subtitleParts.add(postcode);
+
+          final subtitle = subtitleParts.isNotEmpty
+              ? subtitleParts.join(', ')
+              : displayName;
+
+          list.add(
+            PlaceItem(title: title, subtitle: subtitle, lat: lat, lon: lon),
+          );
+        }
+        return list;
+      }
+    } catch (_) {}
     return [];
   }
 
@@ -580,12 +714,20 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
                   children: [
                     Row(
                       children: [
-                        const Icon(LucideIcons.alertCircle, size: 16, color: Colors.red),
+                        const Icon(
+                          LucideIcons.alertCircle,
+                          size: 16,
+                          color: Colors.red,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _error!,
-                            style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -597,25 +739,74 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
                         child: TextButton(
                           onPressed: () => LocationService.openAppSettings(),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: const Text('Open Settings', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          child: const Text(
+                            'Open Settings',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
-                    ] else if (_error == LocationService.msgServiceDisabled) ...[
+                    ] else if (_error ==
+                        LocationService.msgServiceDisabled) ...[
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () => LocationService.openLocationSettings(),
+                          onPressed: () =>
+                              LocationService.openLocationSettings(),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: const Text('Turn on GPS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          child: const Text(
+                            'Turn on GPS',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => _performLiveSearch(_query.trim()),
+                          icon: const Icon(
+                            LucideIcons.refreshCw,
+                            size: 12,
+                            color: Colors.red,
+                          ),
+                          label: const Text(
+                            'Retry',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ),
                     ],

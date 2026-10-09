@@ -159,14 +159,22 @@ class _PollCardWidgetState extends State<PollCardWidget> {
             return GestureDetector(
               onTap: () async {
                 if (widget.currentUserId == null) {
-                  AppToast.show(context, 'Please sign in to vote on this poll', isError: true);
+                  AppToast.show(
+                    context,
+                    'Please sign in to vote on this poll',
+                    isError: true,
+                  );
                   return;
                 }
                 if (isSelected || _isVoting) return;
 
                 setState(() => _isVoting = true);
                 try {
-                  await chatState.votePoll(poll.id, opt.id, widget.currentUserId!);
+                  await chatState.votePoll(
+                    poll.id,
+                    opt.id,
+                    widget.currentUserId!,
+                  );
                 } finally {
                   if (mounted) {
                     setState(() => _isVoting = false);

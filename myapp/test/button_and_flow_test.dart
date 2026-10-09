@@ -23,7 +23,9 @@ void main() {
   });
 
   group('tribeX Button, Widget & Flow Verification Tests', () {
-    testWidgets('CustomBottomNav buttons change tabs on tap', (WidgetTester tester) async {
+    testWidgets('CustomBottomNav buttons change tabs on tap', (
+      WidgetTester tester,
+    ) async {
       int selectedIndex = 0;
 
       await tester.pumpWidget(
@@ -72,52 +74,53 @@ void main() {
       expect(selectedIndex, 0);
     });
 
-    testWidgets('PlaceSearchDialog input search, clear button and selection callback', (
-      WidgetTester tester,
-    ) async {
-      PlaceItem? selectedPlace;
+    testWidgets(
+      'PlaceSearchDialog input search, clear button and selection callback',
+      (WidgetTester tester) async {
+        PlaceItem? selectedPlace;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (ctx) {
-                return ElevatedButton(
-                  onPressed: () {
-                    PlaceSearchDialog.show(
-                      ctx,
-                      initialValue: '',
-                      onSelect: (item) {
-                        selectedPlace = item;
-                      },
-                    );
-                  },
-                  child: const Text('Open Search'),
-                );
-              },
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (ctx) {
+                  return ElevatedButton(
+                    onPressed: () {
+                      PlaceSearchDialog.show(
+                        ctx,
+                        initialValue: '',
+                        onSelect: (item) {
+                          selectedPlace = item;
+                        },
+                      );
+                    },
+                    child: const Text('Open Search'),
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      // Open dialog
-      await tester.tap(find.text('Open Search'));
-      await tester.pumpAndSettle();
+        // Open dialog
+        await tester.tap(find.text('Open Search'));
+        await tester.pumpAndSettle();
 
-      // Verify dialog header and popular places
-      expect(find.text('POPULAR CITIES & HUB LOCATIONS'), findsOneWidget);
-      expect(find.text('Indiranagar'), findsOneWidget);
-      expect(find.text('Use Current GPS Location'), findsOneWidget);
+        // Verify dialog header and popular places
+        expect(find.text('POPULAR CITIES & HUB LOCATIONS'), findsOneWidget);
+        expect(find.text('Indiranagar'), findsOneWidget);
+        expect(find.text('Use Current GPS Location'), findsOneWidget);
 
-      // Select popular place: Indiranagar
-      await tester.tap(find.text('Indiranagar'));
-      await tester.pumpAndSettle();
+        // Select popular place: Indiranagar
+        await tester.tap(find.text('Indiranagar'));
+        await tester.pumpAndSettle();
 
-      expect(selectedPlace, isNotNull);
-      expect(selectedPlace!.title, 'Indiranagar');
-      expect(selectedPlace!.lat, 12.9784);
-      expect(selectedPlace!.lon, 77.6408);
-    });
+        expect(selectedPlace, isNotNull);
+        expect(selectedPlace!.title, 'Indiranagar');
+        expect(selectedPlace!.lat, 12.9784);
+        expect(selectedPlace!.lon, 77.6408);
+      },
+    );
 
     testWidgets('PollCardWidget renders options and handles vote interaction', (
       WidgetTester tester,
@@ -292,10 +295,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: MemoryBannerWidget(
-              activity: activity,
-              canUpload: true,
-            ),
+            body: MemoryBannerWidget(activity: activity, canUpload: true),
           ),
         ),
       );
