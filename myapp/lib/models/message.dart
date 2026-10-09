@@ -88,12 +88,13 @@ class Message {
 
   /// Check if text is encoded expense card `[[expense:<id>]]` or `EXPENSE:<id>`
   String? get expenseId {
-    final webMatch = RegExp(r'^\[\[expense:([0-9a-fA-F-]{36})\]\]')
-        .firstMatch(text);
+    final trimmed = text.trim();
+    final webMatch = RegExp(r'\[\[expense:([a-zA-Z0-9_-]+)\]\]')
+        .firstMatch(trimmed);
     if (webMatch != null) return webMatch.group(1);
 
-    if (text.startsWith('EXPENSE:')) {
-      final raw = text.substring('EXPENSE:'.length).trim();
+    if (trimmed.startsWith('EXPENSE:')) {
+      final raw = trimmed.substring('EXPENSE:'.length).trim();
       return raw.split(' ').first;
     }
     return null;
@@ -101,12 +102,13 @@ class Message {
 
   /// Check if text is encoded poll card `[[poll:<id>]]` or `POLL:<id>`
   String? get pollId {
-    final webMatch = RegExp(r'^\[\[poll:([0-9a-fA-F-]{36})\]\]')
-        .firstMatch(text);
+    final trimmed = text.trim();
+    final webMatch = RegExp(r'\[\[poll:([a-zA-Z0-9_-]+)\]\]')
+        .firstMatch(trimmed);
     if (webMatch != null) return webMatch.group(1);
 
-    if (text.startsWith('POLL:')) {
-      final raw = text.substring('POLL:'.length).trim();
+    if (trimmed.startsWith('POLL:')) {
+      final raw = trimmed.substring('POLL:'.length).trim();
       return raw.split(' ').first;
     }
     return null;

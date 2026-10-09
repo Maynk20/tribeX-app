@@ -554,8 +554,8 @@ class ActivitiesState extends ChangeNotifier {
       if (_modeFilter == ModeFilter.inPerson && a.isOnline) return false;
       if (_modeFilter == ModeFilter.online && !a.isOnline) return false;
 
-      // 15 KM Default Radius Filtering (applies to discover feed when location is known):
-      if (_scope == FeedScope.discover && _place != null) {
+      // 15 KM Default Radius Filtering (applies to in-person plans in discover feed when location is known):
+      if (_scope == FeedScope.discover && _place != null && !a.isOnline) {
         if (a.latitude != null && a.longitude != null) {
           final dist = LocationService.haversineKm(
             _place!.lat,
@@ -568,7 +568,7 @@ class ActivitiesState extends ChangeNotifier {
           if (dist > _radiusKm + 0.001) {
             return false;
           }
-        } else if (!a.isOnline) {
+        } else {
           // In-person physical plans with no coordinates cannot be confirmed within 15 km
           return false;
         }
@@ -736,6 +736,30 @@ class ActivitiesState extends ChangeNotifier {
     }
   }
 
+  final Map<String, String?> _meetingLinks = {};
+
+  /// Retrieves the meeting link from in-memory activity or cache if available.
+  String? getMeetingLink(String activityId) {
+    final act = _activities.where((a) => a.id == activityId).firstOrNull;
+    if (act?.meetingLink != null && act!.meetingLink!.trim().isNotEmpty) {
+      return act.meetingLink!.trim();
+    }
+    return _meetingLinks[activityId];
+  }
+
+  /// Securely fetches meeting link from backend via get_meeting_link RPC.
+  Future<String?> fetchMeetingLink(String activityId) async {
+    final cached = getMeetingLink(activityId);
+    if (cached != null) return cached;
+
+    final link = await SupabaseService.getMeetingLink(activityId);
+    if (link != null) {
+      _meetingLinks[activityId] = link;
+      if (!_isDisposed) notifyListeners();
+    }
+    return link;
+  }
+
   /// True when the profile has the verified GPS location that the backend
   /// RLS policy "Users can request to join with verified profile location"
   /// requires (city + latitude + longitude). Same check as TanStack.
@@ -748,14 +772,11 @@ class ActivitiesState extends ChangeNotifier {
   /// Sends a join request. Returns `null` on success or a user-facing error
   /// message. Pre-checks and error mapping mirror TanStack `requestToJoin`.
   Future<String?> requestToJoin(String activityId, UserProfile user) async {
-    final client = SupabaseService.client;
-    if (client == null || _isDisposed) {
-      return 'The service is temporarily unavailable.';
-    }
-    if (!profileHasGpsLocation(user)) {
+    final act = _activities.where((a) => a.id == activityId).firstOrNull;
+    final isOnline = act?.isOnline ?? false;
+    if (!isOnline && !profileHasGpsLocation(user)) {
       return 'Add your GPS profile location before requesting to join.';
     }
-    final act = _activities.where((a) => a.id == activityId).firstOrNull;
     if (act != null && act.hostId == user.id) {
       return "You're the host of this plan.";
     }
@@ -764,6 +785,10 @@ class ActivitiesState extends ChangeNotifier {
       return existing.status == JoinStatus.accepted
           ? "You've already joined this plan!"
           : "You've already requested to join this plan!";
+    }
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) {
+      return 'The service is temporarily unavailable.';
     }
     final key = '$activityId:${user.id}';
     if (_pendingJoinRequests.contains(key)) return null;

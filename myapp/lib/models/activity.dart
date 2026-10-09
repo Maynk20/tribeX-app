@@ -139,14 +139,14 @@ class Activity {
       'slots_left': slotsLeft,
       'cost_per_head': costPerHead,
       'image_url': imageUrl,
-      'latitude': latitude,
-      'longitude': longitude,
+      'latitude': isOnline ? null : latitude,
+      'longitude': isOnline ? null : longitude,
       'women_only': womenOnly,
       'verified_only': verifiedOnly,
       'is_urgent': isUrgent,
       'urgent_until': urgentUntil?.toIso8601String(),
       'is_online': isOnline,
-      'meeting_link': meetingLink,
+      'meeting_link': isOnline ? meetingLink : null,
       'amenities': amenities,
       'topic_tags': topicTags,
     };
@@ -174,17 +174,20 @@ class Activity {
     String? imageUrl,
     double? latitude,
     double? longitude,
+    bool clearCoordinates = false,
     bool? womenOnly,
     bool? verifiedOnly,
     bool? isUrgent,
     DateTime? urgentUntil,
     bool? isOnline,
     String? meetingLink,
+    bool clearMeetingLink = false,
     List<String>? amenities,
     List<String>? topicTags,
     UserProfile? host,
     List<String>? photoMemories,
   }) {
+    final nextIsOnline = isOnline ?? this.isOnline;
     return Activity(
       id: id ?? this.id,
       hostId: hostId ?? this.hostId,
@@ -197,14 +200,20 @@ class Activity {
       slotsLeft: slotsLeft ?? this.slotsLeft,
       costPerHead: costPerHead ?? this.costPerHead,
       imageUrl: imageUrl ?? this.imageUrl,
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
+      latitude: (nextIsOnline || clearCoordinates)
+          ? null
+          : (latitude ?? this.latitude),
+      longitude: (nextIsOnline || clearCoordinates)
+          ? null
+          : (longitude ?? this.longitude),
       womenOnly: womenOnly ?? this.womenOnly,
       verifiedOnly: verifiedOnly ?? this.verifiedOnly,
       isUrgent: isUrgent ?? this.isUrgent,
       urgentUntil: urgentUntil ?? this.urgentUntil,
-      isOnline: isOnline ?? this.isOnline,
-      meetingLink: meetingLink ?? this.meetingLink,
+      isOnline: nextIsOnline,
+      meetingLink: (!nextIsOnline || clearMeetingLink)
+          ? null
+          : (meetingLink ?? this.meetingLink),
       amenities: amenities ?? this.amenities,
       topicTags: topicTags ?? this.topicTags,
       host: host ?? this.host,

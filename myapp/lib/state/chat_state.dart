@@ -138,29 +138,105 @@ class ChatState extends ChangeNotifier {
     if (client == null || _isDisposed) return;
 
     try {
-      dynamic res;
+      // 1. Fetch expense row
+      final expRes = await client
+          .from('expenses')
+          .select('*')
+          .eq('id', expenseId)
+          .maybeSingle();
+
+      if (expRes == null) return;
+      final expData = Map<String, dynamic>.from(expRes);
+      final activityId = expData['activity_id']?.toString() ?? '';
+
+      // 2. Fetch expense shares
+      List<dynamic> sharesList = [];
       try {
-        res = await client
-            .from('expenses')
-            .select(
-              '*, profiles_public(*), expense_shares(*, profiles_public(*))',
-            )
-            .eq('id', expenseId)
-            .maybeSingle();
-      } catch (_) {
-        res = await client
-            .from('expenses')
-            .select('*, profiles(*), expense_shares(*, profiles(*))')
-            .eq('id', expenseId)
-            .maybeSingle();
+        final sharesRes = await client
+            .from('expense_shares')
+            .select('*')
+            .eq('expense_id', expenseId)
+            .order('created_at', ascending: true);
+        sharesList = (sharesRes as List<dynamic>?) ?? [];
+      } catch (e) {
+        debugPrint('fetchExpense shares query error: $e');
       }
 
-      if (res != null && !_isDisposed) {
-        final exp = Expense.fromJson(res);
+      // 3. Collect all user IDs involved
+      final Set<String> userIds = {};
+      final creatorUid = expData['created_by']?.toString();
+      if (creatorUid != null && creatorUid.isNotEmpty) {
+        userIds.add(creatorUid);
+      }
+      for (final s in sharesList) {
+        final uid = s['user_id']?.toString();
+        if (uid != null && uid.isNotEmpty) {
+          userIds.add(uid);
+        }
+      }
+
+      // 4. Batch query profiles for all involved members
+      final Map<String, Map<String, dynamic>> profilesMap = {};
+      if (userIds.isNotEmpty) {
+        try {
+          final profRes = await client
+              .from('profiles')
+              .select('id, full_name, username, avatar_url')
+              .inFilter('id', userIds.toList());
+
+          for (final p in (profRes as List<dynamic>)) {
+            final pid = p['id']?.toString();
+            if (pid != null) {
+              profilesMap[pid] = Map<String, dynamic>.from(p);
+            }
+          }
+        } catch (e) {
+          debugPrint('fetchExpense profiles query error: $e');
+        }
+      }
+
+      // Fallback to cached squad members for any missing profiles
+      if (activityId.isNotEmpty &&
+          _squadMembersByActivity.containsKey(activityId)) {
+        for (final m in _squadMembersByActivity[activityId]!) {
+          if (!profilesMap.containsKey(m.userId) ||
+              (profilesMap[m.userId]?['full_name'] == null &&
+                  profilesMap[m.userId]?['username'] == null)) {
+            profilesMap[m.userId] = {
+              'id': m.userId,
+              'full_name': m.name,
+              'username': m.name,
+              'avatar_url': m.avatarUrl,
+            };
+          }
+        }
+      }
+
+      // 5. Attach creator profile
+      if (creatorUid != null && profilesMap.containsKey(creatorUid)) {
+        expData['profiles'] = profilesMap[creatorUid];
+      }
+
+      // 6. Enrich shares with profile data
+      final List<Map<String, dynamic>> enrichedShares = [];
+      for (final s in sharesList) {
+        final shareMap = Map<String, dynamic>.from(s as Map<String, dynamic>);
+        final uid = shareMap['user_id']?.toString();
+        if (uid != null && profilesMap.containsKey(uid)) {
+          shareMap['profiles'] = profilesMap[uid];
+        }
+        enrichedShares.add(shareMap);
+      }
+      expData['expense_shares'] = enrichedShares;
+
+      if (!_isDisposed) {
+        final exp = Expense.fromJson(expData);
         _expenses[exp.id] = exp;
         notifyListeners();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('fetchExpense fatal error: $e');
+    }
   }
 
   Future<void> fetchPoll(String pollId) async {
@@ -168,18 +244,37 @@ class ChatState extends ChangeNotifier {
     if (client == null || _isDisposed) return;
 
     try {
-      final res = await client
+      // 1. Fetch poll row
+      final pollRes = await client
           .from('polls')
-          .select('*, poll_votes(*)')
+          .select('*')
           .eq('id', pollId)
           .maybeSingle();
 
-      if (res != null && !_isDisposed) {
-        final poll = Poll.fromJson(res);
+      if (pollRes == null) return;
+      final pollData = Map<String, dynamic>.from(pollRes);
+
+      // 2. Fetch votes reliably without depending on schema cache foreign key embedding
+      try {
+        final votesRes = await client
+            .from('poll_votes')
+            .select('*')
+            .eq('poll_id', pollId)
+            .order('created_at', ascending: true);
+        pollData['poll_votes'] = votesRes;
+      } catch (e) {
+        debugPrint('fetchPoll votes query error: $e');
+        pollData['poll_votes'] = [];
+      }
+
+      if (!_isDisposed) {
+        final poll = Poll.fromJson(pollData);
         _polls[poll.id] = poll;
         notifyListeners();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('fetchPoll fatal error: $e');
+    }
   }
 
   void _subscribeActivityChat(String activityId) {
@@ -730,7 +825,20 @@ class ChatState extends ChangeNotifier {
             );
       }
 
-      await fetchExpense(expId);
+      // Immediately store in local state with the exact member names and amounts passed in
+      final initialExpense = Expense(
+        id: expId,
+        activityId: activityId,
+        creatorId: creatorId,
+        creatorName: creatorName,
+        description: description.trim(),
+        totalAmount: totalAmount,
+        upiId: upiId,
+        members: members,
+        createdAt: DateTime.now(),
+      );
+      _expenses[expId] = initialExpense;
+      notifyListeners();
 
       // TanStack-compatible format: [[expense:<uuid>]] <description> · ₹<amount>
       final formattedText =
@@ -742,6 +850,9 @@ class ChatState extends ChangeNotifier {
         text: formattedText,
         sender: creator,
       );
+
+      // Sync to ensure server consistency
+      await fetchExpense(expId);
       return true;
     } catch (e) {
       debugPrint('createExpense error: $e');
@@ -759,6 +870,16 @@ class ChatState extends ChangeNotifier {
     if (member == null) return false;
     final nextPaid = !member.isPaid;
 
+    // Optimistic local update
+    final updatedMembers = exp.members.map((m) {
+      if (m.userId == userId) {
+        return m.copyWith(isPaid: nextPaid);
+      }
+      return m;
+    }).toList();
+    _expenses[expenseId] = exp.copyWith(members: updatedMembers);
+    notifyListeners();
+
     try {
       await client
           .from('expense_shares')
@@ -773,6 +894,9 @@ class ChatState extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('toggleMemberPaid error: $e');
+      // Revert optimistic update
+      _expenses[expenseId] = exp;
+      if (!_isDisposed) notifyListeners();
       return false;
     }
   }
@@ -801,7 +925,27 @@ class ChatState extends ChangeNotifier {
 
       final pollId = pollRes['id'] as String;
 
-      await fetchPoll(pollId);
+      // Optimistically store poll immediately so it renders in 0 ms
+      final initialPoll = Poll(
+        id: pollId,
+        activityId: activityId,
+        creatorId: creatorId,
+        question: question.trim(),
+        options: optionTexts
+            .asMap()
+            .entries
+            .map(
+              (e) => PollOption(
+                id: e.key.toString(),
+                text: e.value,
+                voterIds: const [],
+              ),
+            )
+            .toList(),
+        createdAt: DateTime.now(),
+      );
+      _polls[pollId] = initialPoll;
+      notifyListeners();
 
       // TanStack-compatible format: [[poll:<uuid>]] <question>
       final formattedText = '[[poll:$pollId]] ${question.trim()}';
@@ -812,6 +956,9 @@ class ChatState extends ChangeNotifier {
         text: formattedText,
         sender: creator,
       );
+
+      // Sync to ensure server consistency
+      await fetchPoll(pollId);
       return true;
     } catch (e) {
       debugPrint('createPoll error: $e');
@@ -839,14 +986,7 @@ class ChatState extends ChangeNotifier {
         return opt.copyWith(voterIds: newVoters);
       }).toList();
 
-      _polls[pollId] = Poll(
-        id: currentPoll.id,
-        activityId: currentPoll.activityId,
-        creatorId: currentPoll.creatorId,
-        question: currentPoll.question,
-        options: updatedOptions,
-        createdAt: currentPoll.createdAt,
-      );
+      _polls[pollId] = currentPoll.copyWith(options: updatedOptions);
       if (!_isDisposed) notifyListeners();
     }
 
@@ -861,6 +1001,41 @@ class ChatState extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('votePoll error: $e');
+      if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        if (!_isDisposed) notifyListeners();
+      }
+      return false;
+    }
+  }
+
+  Future<bool> retractPollVote(String pollId, String userId) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
+
+    final currentPoll = _polls[pollId];
+    if (currentPoll != null) {
+      final updatedOptions = currentPoll.options.map((opt) {
+        final newVoters = List<String>.from(opt.voterIds);
+        newVoters.remove(userId);
+        return opt.copyWith(voterIds: newVoters);
+      }).toList();
+
+      _polls[pollId] = currentPoll.copyWith(options: updatedOptions);
+      if (!_isDisposed) notifyListeners();
+    }
+
+    try {
+      await client
+          .from('poll_votes')
+          .delete()
+          .eq('poll_id', pollId)
+          .eq('user_id', userId);
+
+      await fetchPoll(pollId);
+      return true;
+    } catch (e) {
+      debugPrint('retractPollVote error: $e');
       if (currentPoll != null) {
         _polls[pollId] = currentPoll;
         if (!_isDisposed) notifyListeners();

@@ -1103,7 +1103,8 @@ class _ExploreScreenState extends State<ExploreScreen>
                               );
                               return;
                             }
-                            if (!authState.hasProfileGpsLocation) {
+                            if (!act.isOnline &&
+                                !authState.hasProfileGpsLocation) {
                               _showAddGpsLocationPrompt();
                               return;
                             }

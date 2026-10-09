@@ -1,14 +1,18 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/categories.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/activity.dart';
 import '../../models/join_request.dart';
+import '../../state/activities_state.dart';
 
 /// ActivityCard matching the TanStack/React index.tsx ActivityCard component exactly.
 ///
@@ -86,7 +90,7 @@ class ActivityCard extends StatelessWidget {
       safetyBlock = 'Women Only Plan';
     } else if (blockedByVerified) {
       safetyBlock = 'Verification Required';
-    } else if (!hasProfileGpsLocation) {
+    } else if (!hasProfileGpsLocation && !activity.isOnline) {
       safetyBlock = 'Add GPS Location';
     }
     final isGpsBlock = safetyBlock == 'Add GPS Location';
@@ -248,14 +252,16 @@ class ActivityCard extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        LucideIcons.mapPin,
+                        activity.isOnline
+                            ? LucideIcons.video
+                            : LucideIcons.mapPin,
                         size: 12, // h-3 w-3
                         color: isDark
                             ? AppColors.mutedForegroundDark
                             : AppColors.mutedForegroundLight,
                       ),
                       const SizedBox(width: 4),
-                      if (distanceKm != null) ...[
+                      if (!activity.isOnline && distanceKm != null) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 5,
@@ -278,7 +284,12 @@ class ActivityCard extends StatelessWidget {
                       ],
                       Expanded(
                         child: Text(
-                          activity.location,
+                          activity.isOnline
+                              ? (activity.location.trim().isNotEmpty &&
+                                      activity.location.trim() != 'Online'
+                                  ? 'Virtual · ${activity.location.trim()}'
+                                  : 'Virtual Event · Online')
+                              : activity.location,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -315,6 +326,38 @@ class ActivityCard extends StatelessWidget {
                       ),
                     ],
                   ),
+
+                  // Virtual Plan Meeting Button or status note
+                  if (activity.isOnline) ...[
+                    const SizedBox(height: 8),
+                    if (myStatus == JoinStatus.accepted || isHost)
+                      _VirtualMeetingButton(activity: activity)
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(
+                              LucideIcons.lock,
+                              size: 11,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Meeting link visible once joined',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
 
                   // Amenities / Tags (if any)
                   if (activity.amenities.isNotEmpty ||
@@ -780,6 +823,7 @@ class _CoverImage extends StatelessWidget {
                       ? Image.memory(
                           _getDecodedBytes(imageUrl),
                           fit: BoxFit.cover,
+                          gaplessPlayback: true,
                           errorBuilder: (context, error, stackTrace) =>
                               Container(
                                 color: AppColors.primaryMuted,
@@ -796,6 +840,7 @@ class _CoverImage extends StatelessWidget {
                           fit: BoxFit.cover,
                           cacheWidth: 800,
                           cacheHeight: 400,
+                          gaplessPlayback: true,
                           loadingBuilder: (context, child, loadingProgress) {
                             if (loadingProgress == null) return child;
                             return Container(
@@ -1021,3 +1066,113 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
+
+class _VirtualMeetingButton extends StatefulWidget {
+  final Activity activity;
+  const _VirtualMeetingButton({required this.activity});
+
+  @override
+  State<_VirtualMeetingButton> createState() => _VirtualMeetingButtonState();
+}
+
+class _VirtualMeetingButtonState extends State<_VirtualMeetingButton> {
+  bool _isLoading = false;
+
+  Future<void> _handleJoinMeeting() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final link = widget.activity.meetingLink?.trim().isNotEmpty == true
+          ? widget.activity.meetingLink!.trim()
+          : await context
+              .read<ActivitiesState>()
+              .fetchMeetingLink(widget.activity.id);
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (link != null && link.isNotEmpty) {
+        final uri = Uri.tryParse(link);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
+        }
+        await Clipboard.setData(ClipboardData(text: link));
+        if (mounted) {
+          AppToast.show(context, 'Copied meeting link to clipboard: $link');
+        }
+      } else {
+        AppToast.show(
+          context,
+          'Meeting link will be shared by host shortly.',
+          isError: true,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        AppToast.show(context, 'Could not open meeting link', isError: true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: _handleJoinMeeting,
+      onLongPress: () async {
+        final link = widget.activity.meetingLink?.trim().isNotEmpty == true
+            ? widget.activity.meetingLink!.trim()
+            : await context
+                .read<ActivitiesState>()
+                .fetchMeetingLink(widget.activity.id);
+        if (link != null && link.isNotEmpty) {
+          await Clipboard.setData(ClipboardData(text: link));
+          if (context.mounted) {
+            AppToast.show(context, 'Meeting link copied to clipboard');
+          }
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.successMuted,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.success.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              LucideIcons.video,
+              size: 14,
+              color: AppColors.success,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _isLoading
+                    ? 'Opening meeting link…'
+                    : 'Join Meeting · Tap to open link',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.success,
+                ),
+              ),
+            ),
+            const Icon(
+              LucideIcons.externalLink,
+              size: 13,
+              color: AppColors.success,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
