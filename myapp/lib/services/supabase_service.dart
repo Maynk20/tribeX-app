@@ -36,7 +36,7 @@ class SupabaseService {
   static Future<List<dynamic>?> fetchNearbyActivities({
     required double lat,
     required double lng,
-    double radiusKm = 25.0,
+    double radiusKm = 15.0,
   }) async {
     final c = client;
     if (c == null) return null;

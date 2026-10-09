@@ -304,7 +304,8 @@ def create_pdf(filename):
         "24. Complete Final Change Summary Table",
         "25. Remaining Issues & Roadmap Classification",
         "26. Project Quick Guide ('5 Minutes mein Samjho')",
-        "27. Beginner-Friendly Technical Glossary"
+        "27. Beginner-Friendly Technical Glossary",
+        "28. 15 KM Nearby Discovery Engine & PostGIS Filtering"
     ]
 
     toc_data = []
@@ -1035,6 +1036,7 @@ myapp/
         [Paragraph("Build Setup", table_cell_bold), Paragraph("Generic package name", table_cell), Paragraph("Migrated build.gradle.kts to com.tribex.app", table_cell), Paragraph("Production ready Android build", table_cell), Paragraph("Fixed", table_cell)],
         [Paragraph("Branding", table_cell_bold), Paragraph("Default Flutter splash/icon", table_cell), Paragraph("Configured flutter_native_splash & launcher_icons", table_cell), Paragraph("Custom tribeX splash & icon", table_cell), Paragraph("Fixed", table_cell)],
         [Paragraph("Geocoding", table_cell_bold), Paragraph("Hanging on weak network", table_cell), Paragraph("Photon API integrated with 4s timeout fallback", table_cell), Paragraph("Fast geocoding response", table_cell), Paragraph("Fixed", table_cell)],
+        [Paragraph("Discovery Radius", table_cell_bold), Paragraph("Undefined discovery radius / generic nearby header", table_cell), Paragraph("Strict 15 km GPS/manual radius, 'Plans within 15 km' badge, dynamic distance calculation, get_nearby_activities RPC", table_cell), Paragraph("Rigorous 15 km spatial discovery & real distance badges", table_cell), Paragraph("Fixed & Tested", table_cell)],
     ]
 
     t_mat = Table(matrix_data, colWidths=[70, 110, 150, 150, 60])
@@ -1106,6 +1108,37 @@ myapp/
     for term, defn in glossary_items:
         story.append(Paragraph(f"<b>{term}:</b> {defn}", body_style))
         story.append(Spacer(1, 2))
+
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # PART 28 — 15 KM NEARBY PLANS DISCOVERY RADIUS ENGINE & POSTGIS FILTERING
+    # =========================================================================
+    story.append(PageBreak())
+    section_heading("15 KM NEARBY PLANS DISCOVERY RADIUS & POSTGIS FILTERING", "PART 28 —")
+    story.append(Paragraph("<b>15 KM Default Discovery Radius Architecture:</b>", h2_style))
+    story.append(Paragraph(
+        "tribeX mein default nearby plans discovery radius ko exactly <b>15 Kilometers (15 KM)</b> par standardize kiya gaya hai. "
+        "Yeh user ke current GPS coordinates ko center point man kar filter karta hai. Agar user manually koi dusri location choose karta hai (jaise Delhi ya Mumbai), "
+        "toh radius dynamically us manually selected location se 15 km calculate hota hai.",
+        body_style
+    ))
+
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("<b>Key Engineering Implementations:</b>", h2_style))
+    story.append(Paragraph("• <b>PostGIS & PostgreSQL RPC (get_nearby_activities):</b> Safe database migration <code>20261009140000_get_nearby_activities_15km.sql</code> create ki gayi jo spherical trigonometry <code>haversine_m</code> use karke activities ko <code>radius_km * 1000.0</code> meters ke andar filter karti hai.", bullet_style))
+    story.append(Paragraph("• <b>Client-Side Strict Boundary Filtering:</b> <code>ActivitiesState.getFilteredActivities()</code> mein double-checked Haversine math integrate kiya gaya jo <code>dist <= radiusKm + 0.001</code> check karta hai.", bullet_style))
+    story.append(Paragraph("• <b>Rigorous Boundary Verification:</b> Automated tests (<code>nearby_radius_15km_test.dart</code>) se verify kiya gaya:<br/>"
+                           "  - <b>5.0 km plan:</b> INCLUDED in discovery feed.<br/>"
+                           "  - <b>14.9 km plan:</b> INCLUDED in discovery feed.<br/>"
+                           "  - <b>15.0 km plan:</b> INCLUDED in discovery feed.<br/>"
+                           "  - <b>15.1 km plan:</b> EXCLUDED from discovery feed.<br/>"
+                           "  - <b>Null coordinate plan:</b> EXCLUDED from nearby GPS feed.", bullet_style))
+    story.append(Paragraph("• <b>Explore Screen UI Enhancements:</b><br/>"
+                           "  - Jab location coordinates available hote hain: Section header par <b>'Plans within 15 km'</b> aur <b>'15 km radius'</b> badge display hota hai.<br/>"
+                           "  - Jab GPS/location unavailable hota hai: Misleading distance labels ke bajaye helpful <b>'Location unavailable: Enable GPS or select your city'</b> banner with 'Use GPS' button show hota hai.<br/>"
+                           "  - Har plan card par actual calculated distance display hoti hai (jaise <b>'3.5 km away'</b>) jo user ke real coordinates se calculate hoti hai, koi hardcoded placeholder nahi.", bullet_style))
+    story.append(Paragraph("• <b>Join Rules Preserved:</b> 15 km limit sirf initial discovery feed ke liye hai. Agar user kisi door ke plan (e.g., 25 km ya 140 km) ko direct link, host profile, ya search se open kare, toh use join karne se block nahi kiya jata. Join permissions aur host approval rules fully intact hain.", bullet_style))
 
     story.append(Spacer(1, 20))
     story.append(make_callout("DOCUMENTATION END — tribeX Complete Engineering & Audit Reference", "success"))

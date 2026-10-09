@@ -8,12 +8,14 @@ class MessageBubbleWidget extends StatelessWidget {
   final Message message;
   final bool isMine;
   final VoidCallback? onReport;
+  final VoidCallback? onRetry;
 
   const MessageBubbleWidget({
     super.key,
     required this.message,
     required this.isMine,
     this.onReport,
+    this.onRetry,
   });
 
   @override
@@ -33,14 +35,20 @@ class MessageBubbleWidget extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 3),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isMine ? AppColors.primary : otherBg,
+            color: isMine
+                ? (message.isFailed ? Colors.red.shade700 : AppColors.primary)
+                : otherBg,
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(18),
               topRight: const Radius.circular(18),
               bottomLeft: Radius.circular(isMine ? 18 : 4),
               bottomRight: Radius.circular(isMine ? 4 : 18),
             ),
-            border: isMine ? null : Border.all(color: border),
+            border: isMine
+                ? (message.isFailed
+                      ? Border.all(color: Colors.red.shade300)
+                      : null)
+                : Border.all(color: border),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.03),
@@ -78,16 +86,54 @@ class MessageBubbleWidget extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                DateFormatter.formatTime(message.createdAt),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isMine
-                      ? Colors.white.withValues(alpha: 0.7)
-                      : (isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    DateFormatter.formatTime(message.createdAt),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isMine
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : (isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight),
+                    ),
+                  ),
+                  if (isMine && message.isSending) ...[
+                    const SizedBox(width: 6),
+                    const SizedBox(
+                      width: 10,
+                      height: 10,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                  if (isMine && message.isFailed) ...[
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: onRetry,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.refresh, size: 12, color: Colors.white),
+                          SizedBox(width: 2),
+                          Text(
+                            'Retry',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),

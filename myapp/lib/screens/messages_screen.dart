@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/date_formatter.dart';
+import '../models/activity.dart';
 import '../models/join_request.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
@@ -21,6 +22,22 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   String _query = "";
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadChats();
+    });
+  }
+
+  Future<void> _loadChats() async {
+    final authState = context.read<AuthState>();
+    final user = authState.currentUser;
+    if (user != null) {
+      await context.read<ChatState>().fetchUserChats(user.id);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,18 +101,26 @@ class _MessagesScreenState extends State<MessagesScreen> {
       );
     }
 
-    // User's active chats (plans hosted or joined)
+    // User's active chats (plans hosted or joined across all locations)
+    final chatStateChats = chatState.userChats;
+    final Set<String> knownIds = chatStateChats.map((a) => a.id).toSet();
+
     final myJoinedIds = actState.joinRequests
         .where((r) => r.userId == user.id && r.status == JoinStatus.accepted)
         .map((r) => r.activityId)
         .toSet();
 
-    final myChats = actState.activities.where((a) {
-      final isHost = a.hostId == user.id;
-      final isJoined = myJoinedIds.contains(a.id);
-      if (!isHost && !isJoined) return false;
+    final allUserActivities = <Activity>[...chatStateChats];
+    for (final a in actState.activities) {
+      if (!knownIds.contains(a.id) &&
+          (a.hostId == user.id || myJoinedIds.contains(a.id))) {
+        allUserActivities.add(a);
+        knownIds.add(a.id);
+      }
+    }
 
-      final q = _query.trim().toLowerCase();
+    final q = _query.trim().toLowerCase();
+    final myChats = allUserActivities.where((a) {
       if (q.isEmpty) return true;
       return a.title.toLowerCase().contains(q) ||
           a.location.toLowerCase().contains(q) ||
@@ -166,167 +191,209 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
               // Chat List: flat list with border-b separator as in TanStack
               Expanded(
-                child: myChats.isEmpty
-                    ? Center(
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: cardBg.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(28),
-                            border: Border.all(
-                              color: border.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                LucideIcons.messageCircle,
-                                size: 36,
-                                color: isDark
-                                    ? AppColors.mutedForegroundDark
-                                    : AppColors.mutedForegroundLight,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'No chats yet.\nJoin or host a plan to start a squad chat.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark
-                                      ? AppColors.mutedForegroundDark
-                                      : AppColors.mutedForegroundLight,
+                child: RefreshIndicator(
+                  onRefresh: _loadChats,
+                  color: AppColors.primary,
+                  child: chatState.isLoadingUserChats && myChats.isEmpty
+                      ? const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : myChats.isEmpty
+                      ? ListView(
+                          children: [
+                            const SizedBox(height: 80),
+                            Center(
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: cardBg.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(28),
+                                  border: Border.all(
+                                    color: border.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.messageCircle,
+                                      size: 36,
+                                      color: isDark
+                                          ? AppColors.mutedForegroundDark
+                                          : AppColors.mutedForegroundLight,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'No chats yet.\nJoin or host a plan to start a squad chat.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? AppColors.mutedForegroundDark
+                                            : AppColors.mutedForegroundLight,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
+                            ),
+                          ],
+                        )
+                      : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: myChats.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: border.withValues(alpha: 0.5),
                           ),
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: myChats.length,
-                        separatorBuilder: (_, _) => Divider(
-                          height: 1,
-                          color: border.withValues(alpha: 0.5),
-                        ),
-                        itemBuilder: (ctx, idx) {
-                          final chat = myChats[idx];
-                          final msgs = chatState.getMessagesForActivity(chat.id);
-                          final hasMsgs = msgs.isNotEmpty;
-                          final lastMsg = hasMsgs ? msgs.last : null;
+                          itemBuilder: (ctx, idx) {
+                            final chat = myChats[idx];
+                            final msgs = chatState.getMessagesForActivity(
+                              chat.id,
+                            );
+                            final hasMsgs = msgs.isNotEmpty;
+                            final lastMsg = hasMsgs ? msgs.last : null;
 
-                          String subtitleText = chat.location;
-                          DateTime displayTime = chat.dateTime;
+                            String subtitleText = chat.location;
+                            DateTime displayTime = chat.dateTime;
 
-                          if (lastMsg != null) {
-                            displayTime = lastMsg.createdAt;
-                            if (lastMsg.expenseId != null || lastMsg.text.startsWith('EXPENSE:')) {
-                              subtitleText = '💰 Split expense request';
-                            } else if (lastMsg.pollId != null || lastMsg.text.startsWith('POLL:')) {
-                              subtitleText = '📊 Group poll created';
-                            } else {
-                              final senderName = lastMsg.sender?.fullName ?? lastMsg.sender?.username;
-                              if (senderName != null && senderName.isNotEmpty && lastMsg.senderId != user.id) {
-                                subtitleText = '$senderName: ${lastMsg.text}';
-                              } else if (lastMsg.senderId == user.id) {
-                                subtitleText = 'You: ${lastMsg.text}';
+                            if (lastMsg != null) {
+                              displayTime = lastMsg.createdAt;
+                              if (lastMsg.expenseId != null ||
+                                  lastMsg.text.startsWith('EXPENSE:')) {
+                                subtitleText = '💰 Split expense request';
+                              } else if (lastMsg.pollId != null ||
+                                  lastMsg.text.startsWith('POLL:')) {
+                                subtitleText = '📊 Group poll created';
                               } else {
-                                subtitleText = lastMsg.text;
+                                final senderName =
+                                    lastMsg.sender?.fullName ??
+                                    lastMsg.sender?.username;
+                                if (senderName != null &&
+                                    senderName.isNotEmpty &&
+                                    lastMsg.senderId != user.id) {
+                                  subtitleText = '$senderName: ${lastMsg.text}';
+                                } else if (lastMsg.senderId == user.id) {
+                                  subtitleText = 'You: ${lastMsg.text}';
+                                } else {
+                                  subtitleText = lastMsg.text;
+                                }
                               }
                             }
-                          }
 
-                          return InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChatScreen(activity: chat),
+                            return InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ChatScreen(activity: chat),
+                                  ),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
                                 ),
-                              );
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppColors.mutedDark
-                                          : AppColors.mutedLight,
-                                      borderRadius: BorderRadius.circular(16),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 48,
+                                      height: 48,
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? AppColors.mutedDark
+                                            : AppColors.mutedLight,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        AppCategories.emojiFor(chat.category),
+                                        style: const TextStyle(fontSize: 22),
+                                      ),
                                     ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      AppCategories.emojiFor(chat.category),
-                                      style: const TextStyle(fontSize: 22),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                chat.title,
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isDark
-                                                      ? AppColors.foregroundDark
-                                                      : AppColors
-                                                            .foregroundLight,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  chat.title,
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isDark
+                                                        ? AppColors
+                                                              .foregroundDark
+                                                        : AppColors
+                                                              .foregroundLight,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                            ),
-                                            Text(
-                                              DateFormatter.formatChatDate(
-                                                displayTime,
+                                              Text(
+                                                DateFormatter.formatChatDate(
+                                                  displayTime,
+                                                ),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: isDark
+                                                      ? AppColors
+                                                            .mutedForegroundDark
+                                                      : AppColors
+                                                            .mutedForegroundLight,
+                                                ),
                                               ),
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: isDark
-                                                    ? AppColors
-                                                          .mutedForegroundDark
-                                                    : AppColors
-                                                          .mutedForegroundLight,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          subtitleText,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: hasMsgs ? FontWeight.w500 : FontWeight.normal,
-                                            color: isDark
-                                                ? (hasMsgs ? AppColors.foregroundDark.withValues(alpha: 0.85) : AppColors.mutedForegroundDark)
-                                                : (hasMsgs ? AppColors.foregroundLight.withValues(alpha: 0.85) : AppColors.mutedForegroundLight),
+                                            ],
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            subtitleText,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: hasMsgs
+                                                  ? FontWeight.w500
+                                                  : FontWeight.normal,
+                                              color: isDark
+                                                  ? (hasMsgs
+                                                        ? AppColors
+                                                              .foregroundDark
+                                                              .withValues(
+                                                                alpha: 0.85,
+                                                              )
+                                                        : AppColors
+                                                              .mutedForegroundDark)
+                                                  : (hasMsgs
+                                                        ? AppColors
+                                                              .foregroundLight
+                                                              .withValues(
+                                                                alpha: 0.85,
+                                                              )
+                                                        : AppColors
+                                                              .mutedForegroundLight),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
+                ),
               ),
             ],
           ),

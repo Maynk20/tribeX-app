@@ -259,9 +259,31 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
                 const SizedBox(height: 6),
                 ...expense.members.map((m) {
                   final isMe = m.userId == widget.currentUserId;
+                  final isCreator = widget.currentUserId == expense.creatorId;
+                  final isPayer = m.userId == expense.creatorId;
+                  final canToggle = isCreator || isMe;
+
                   return InkWell(
-                    onTap: () {
-                      chatState.toggleMemberPaid(expense.id, m.userId);
+                    onTap: () async {
+                      if (!canToggle) {
+                        AppToast.show(
+                          context,
+                          'Only the expense creator or this member can update payment status',
+                        );
+                        return;
+                      }
+
+                      final success = await chatState.toggleMemberPaid(
+                        expense.id,
+                        m.userId,
+                      );
+                      if (!success && context.mounted) {
+                        AppToast.show(
+                          context,
+                          'Failed to update payment status. Please try again.',
+                          isError: true,
+                        );
+                      }
                     },
                     borderRadius: BorderRadius.circular(10),
                     child: Padding(
@@ -281,7 +303,7 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
                                 ? Text(
                                     m.name.isNotEmpty
                                         ? m.name[0].toUpperCase()
-                                        : 'U',
+                                        : '?',
                                     style: const TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
@@ -292,20 +314,66 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              isMe ? '${m.name} (you)' : m.name,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: isMe
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        isMe ? '${m.name} (you)' : m.name,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: isMe || isPayer
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (isPayer)
+                                      Container(
+                                        margin: const EdgeInsets.only(left: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 1,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryMuted,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Payer',
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                Text(
+                                  '₹${m.amount.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? AppColors.mutedForegroundDark
+                                        : AppColors.mutedForegroundLight,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
-                              vertical: 3,
+                              vertical: 4,
                             ),
                             decoration: BoxDecoration(
                               color: m.isPaid
@@ -356,25 +424,48 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
             Divider(height: 1, color: border),
             Padding(
               padding: const EdgeInsets.all(12),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    AppToast.show(
-                      context,
-                      'Opening UPI payment to ${expense.upiId} for ₹${expense.perHead.toStringAsFixed(0)}',
-                    );
-                  },
-                  icon: const Icon(Icons.payment, size: 16),
-                  label: Text(
-                    'Pay ₹${expense.perHead.toStringAsFixed(0)} via UPI (${expense.upiId})',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
+              child: Builder(
+                builder: (ctx) {
+                  final myShare = expense.members
+                      .where((m) => m.userId == widget.currentUserId)
+                      .firstOrNull;
+                  final isAlreadyPaid = myShare?.isPaid ?? false;
+                  final shareAmount = myShare != null
+                      ? myShare.amount
+                      : expense.perHead;
+
+                  return SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: isAlreadyPaid
+                          ? null
+                          : () {
+                              AppToast.show(
+                                ctx,
+                                'Opening UPI payment to ${expense.upiId} for ₹${shareAmount.toStringAsFixed(2)}',
+                              );
+                            },
+                      icon: Icon(
+                        isAlreadyPaid ? Icons.check : Icons.payment,
+                        size: 16,
+                      ),
+                      label: Text(
+                        isAlreadyPaid
+                            ? 'Payment Completed (₹${shareAmount.toStringAsFixed(2)})'
+                            : 'Pay ₹${shareAmount.toStringAsFixed(2)} via UPI (${expense.upiId})',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isAlreadyPaid
+                            ? AppColors.successMuted
+                            : AppColors.success,
+                        foregroundColor: isAlreadyPaid
+                            ? AppColors.success
+                            : Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ],

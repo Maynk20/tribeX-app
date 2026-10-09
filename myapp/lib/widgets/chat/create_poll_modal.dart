@@ -80,7 +80,11 @@ class _CreatePollModalState extends State<CreatePollModal> {
         Navigator.of(context).pop();
         AppToast.show(context, 'Poll created');
       } else {
-        AppToast.show(context, 'Failed to create poll. Please try again.', isError: true);
+        AppToast.show(
+          context,
+          'Failed to create poll. Please try again.',
+          isError: true,
+        );
       }
     } catch (e) {
       if (!mounted) return;

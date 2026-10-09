@@ -5,7 +5,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
 import '../../models/expense.dart';
 import '../../models/user_profile.dart';
-import '../../state/activities_state.dart';
 import '../../state/auth_state.dart';
 import '../../state/chat_state.dart';
 
@@ -33,7 +32,60 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
   final _upiCtrl = TextEditingController();
   String _splitType = "equal"; // 'equal' or 'specific'
   final Set<String> _selectedUserIds = {};
+  String? _payerId;
+  List<ExpenseMember> _squadMembers = [];
+  bool _isLoadingMembers = true;
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSquadMembers();
+    });
+  }
+
+  Future<void> _loadSquadMembers() async {
+    final chatState = context.read<ChatState>();
+    final authState = context.read<AuthState>();
+    final me = authState.currentUser;
+
+    if (me != null && _payerId == null) {
+      _payerId = me.id;
+    }
+
+    final cached = chatState.getSquadMembers(widget.activityId);
+    if (cached != null && cached.isNotEmpty && mounted) {
+      setState(() {
+        _squadMembers = cached;
+        _isLoadingMembers = false;
+        if (_selectedUserIds.isEmpty) {
+          _selectedUserIds.addAll(cached.map((m) => m.userId));
+        }
+      });
+      return;
+    }
+
+    try {
+      final members = await chatState.fetchSquadMembers(widget.activityId);
+      if (mounted) {
+        setState(() {
+          _squadMembers = members;
+          _isLoadingMembers = false;
+          if (_selectedUserIds.isEmpty) {
+            _selectedUserIds.addAll(members.map((m) => m.userId));
+          }
+          if (_payerId == null && members.isNotEmpty) {
+            _payerId = me?.id ?? members.first.userId;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingMembers = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -44,8 +96,7 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
   }
 
   Future<void> _submit(
-    List<ExpenseMember> effectiveMembers,
-    double perHead,
+    List<ExpenseMember> calculatedShares,
     double total,
     UserProfile? me,
   ) async {
@@ -60,7 +111,7 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
       AppToast.show(context, 'Please enter a valid amount', isError: true);
       return;
     }
-    if (effectiveMembers.isEmpty) {
+    if (calculatedShares.isEmpty) {
       AppToast.show(
         context,
         'Please select at least one member',
@@ -72,23 +123,27 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
     setState(() => _isSubmitting = true);
 
     try {
-      final membersWithShare = effectiveMembers
-          .map((m) => m.copyWith(amount: perHead))
-          .toList();
-
-      await context.read<ChatState>().createExpense(
+      final success = await context.read<ChatState>().createExpense(
         activityId: widget.activityId,
-        creatorId: me?.id ?? "host",
+        creatorId: _payerId ?? me?.id ?? "host",
         creatorName: me?.fullName ?? "Host",
         description: desc,
         totalAmount: total,
         upiId: _upiCtrl.text.trim().isNotEmpty ? _upiCtrl.text.trim() : null,
-        members: membersWithShare,
+        members: calculatedShares,
         creator: me,
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      if (success) {
+        Navigator.of(context).pop();
+      } else {
+        AppToast.show(
+          context,
+          'Failed to split expense. Please try again.',
+          isError: true,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, 'Failed to split expense', isError: true);
@@ -101,55 +156,28 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
 
   @override
   Widget build(BuildContext context) {
-    final actState = context.watch<ActivitiesState>();
     final authState = context.watch<AuthState>();
     final me = authState.currentUser;
-    final requests = actState.getRequestsForActivity(widget.activityId);
-    final confirmedRequests = requests
-        .where((r) => r.status.name == 'accepted')
-        .toList();
-
-    // Include attendees and myself/host
-    final allParticipants = <ExpenseMember>[];
-    if (me != null) {
-      allParticipants.add(
-        ExpenseMember(
-          userId: me.id,
-          name: me.fullName,
-          avatarUrl: me.avatarUrl,
-          amount: 0,
-          isPaid: true,
-        ),
-      );
-    }
-    for (final req in confirmedRequests) {
-      if (req.user != null && req.user!.id != me?.id) {
-        allParticipants.add(
-          ExpenseMember(
-            userId: req.user!.id,
-            name: req.user!.fullName,
-            avatarUrl: req.user!.avatarUrl,
-            amount: 0,
-            isPaid: false,
-          ),
-        );
-      }
-    }
-
-    final total = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
-    final effectiveMembers = _splitType == "equal"
-        ? allParticipants
-        : allParticipants
-              .where((m) => _selectedUserIds.contains(m.userId))
-              .toList();
-
-    final perHead = effectiveMembers.isEmpty
-        ? 0.0
-        : total / effectiveMembers.length;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
+
+    // Filter participants based on equal or selective mode
+    final participants = _splitType == "equal"
+        ? _squadMembers
+        : _squadMembers
+              .where((m) => _selectedUserIds.contains(m.userId))
+              .toList();
+
+    final total = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
+    final calculatedShares = Expense.calculateEqualSplit(
+      participants: participants,
+      totalAmount: total,
+      payerId: _payerId ?? me?.id,
+    );
+
+    final perHead = participants.isEmpty ? 0.0 : total / participants.length;
 
     return Container(
       decoration: BoxDecoration(
@@ -266,7 +294,7 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Members (${effectiveMembers.length})',
+                          'Squad Members (${participants.length}/${_squadMembers.length})',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -277,7 +305,7 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
                         ),
                         if (perHead > 0)
                           Text(
-                            '₹${perHead.toStringAsFixed(0)} / person',
+                            '≈ ₹${perHead.toStringAsFixed(2)} / head',
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -288,52 +316,137 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
                     ),
                   ),
                   Divider(height: 1, color: border),
-                  ...allParticipants.map((m) {
-                    final isChecked =
-                        _splitType == "equal" ||
-                        _selectedUserIds.contains(m.userId);
-                    return CheckboxListTile(
-                      value: isChecked,
-                      onChanged: _splitType == "equal"
-                          ? null
-                          : (val) {
-                              setState(() {
-                                if (val == true) {
-                                  _selectedUserIds.add(m.userId);
-                                } else {
-                                  _selectedUserIds.remove(m.userId);
-                                }
-                              });
-                            },
-                      title: Text(
-                        m.userId == me?.id ? '${m.name} (you)' : m.name,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                  if (_isLoadingMembers)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
-                      secondary: CircleAvatar(
-                        radius: 12,
-                        backgroundColor: AppColors.primaryMuted,
-                        backgroundImage: m.avatarUrl != null
-                            ? NetworkImage(m.avatarUrl!)
-                            : null,
-                        child: m.avatarUrl == null
-                            ? Text(
-                                m.name[0].toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
+                    )
+                  else if (_squadMembers.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'No other squad members yet. You will be assigned the full amount.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 240),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _squadMembers.length,
+                        itemBuilder: (ctx, idx) {
+                          final m = _squadMembers[idx];
+                          final isSelected =
+                              _splitType == "equal" ||
+                              _selectedUserIds.contains(m.userId);
+                          final isPayer = m.userId == _payerId;
+
+                          // Find calculated share if selected
+                          final share = calculatedShares
+                              .where((s) => s.userId == m.userId)
+                              .firstOrNull;
+
+                          return CheckboxListTile(
+                            value: isSelected,
+                            onChanged: _splitType == "equal"
+                                ? null
+                                : (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedUserIds.add(m.userId);
+                                      } else {
+                                        _selectedUserIds.remove(m.userId);
+                                      }
+                                    });
+                                  },
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    m.userId == me?.id
+                                        ? '${m.name} (you)'
+                                        : m.name,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: isPayer
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              )
-                            : null,
+                                if (isPayer)
+                                  Container(
+                                    margin: const EdgeInsets.only(left: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryMuted,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'Payer',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            subtitle: share != null && total > 0
+                                ? Text(
+                                    'Share: ₹${share.amount.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  )
+                                : null,
+                            secondary: CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.primaryMuted,
+                              backgroundImage: m.avatarUrl != null
+                                  ? NetworkImage(m.avatarUrl!)
+                                  : null,
+                              child: m.avatarUrl == null
+                                  ? Text(
+                                      m.name.isNotEmpty
+                                          ? m.name[0].toUpperCase()
+                                          : '?',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                            ),
+                          );
+                        },
                       ),
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                      ),
-                    );
-                  }),
+                    ),
                 ],
               ),
             ),
@@ -345,7 +458,7 @@ class _SplitExpenseModalState extends State<SplitExpenseModal> {
               child: ElevatedButton(
                 onPressed: _isSubmitting
                     ? null
-                    : () => _submit(effectiveMembers, perHead, total, me),
+                    : () => _submit(calculatedShares, total, me),
                 child: _isSubmitting
                     ? const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
