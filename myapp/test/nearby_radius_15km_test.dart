@@ -484,5 +484,96 @@ void main() {
         authState.dispose();
       },
     );
+
+    testWidgets(
+      'ExploreScreen automatically transitions from "Plans within 15 km" to Normal page after 10 seconds',
+      (tester) async {
+        final actState = ActivitiesState();
+        actState.setPlace(
+          const SavedPlace(
+            displayName: 'Indiranagar, Bengaluru',
+            short: 'Indiranagar',
+            lat: 12.9784,
+            lon: 77.6408,
+          ),
+        );
+
+        final authState = AuthState();
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<ActivitiesState>.value(value: actState),
+              ChangeNotifierProvider<AuthState>.value(value: authState),
+            ],
+            child: const MaterialApp(home: ExploreScreen()),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // 1. Initial State (<10 seconds): 15km bar is active
+        expect(find.text('Plans within 15 km'), findsOneWidget);
+        expect(find.text('15 km radius'), findsOneWidget);
+
+        // 2. Advance time by 10 seconds
+        await tester.pump(const Duration(seconds: 10));
+        await tester.pump();
+
+        // 3. Normal page: 15km bar is removed, section title is "Nearby plans"
+        expect(find.text('Nearby plans'), findsOneWidget);
+        expect(find.text('Plans within 15 km'), findsNothing);
+        expect(find.text('15 km radius'), findsNothing);
+
+        actState.dispose();
+        authState.dispose();
+      },
+    );
+
+    testWidgets(
+      'ExploreScreen hides location unavailable 15km banner after 10 seconds to show clean Normal page',
+      (tester) async {
+        final actState = ActivitiesState();
+        actState.clearLocation();
+
+        final authState = AuthState();
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<ActivitiesState>.value(value: actState),
+              ChangeNotifierProvider<AuthState>.value(value: authState),
+            ],
+            child: const MaterialApp(home: ExploreScreen()),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // Initial State (<10 seconds): Banner is active
+        expect(
+          find.text(
+            'Enable GPS or select your city to filter plans within 15 km of you.',
+          ),
+          findsOneWidget,
+        );
+
+        // Advance time by 10 seconds
+        await tester.pump(const Duration(seconds: 10));
+        await tester.pump();
+
+        // Banner disappears on Normal page
+        expect(
+          find.text(
+            'Enable GPS or select your city to filter plans within 15 km of you.',
+          ),
+          findsNothing,
+        );
+        expect(find.text('Nearby plans'), findsOneWidget);
+
+        actState.dispose();
+        authState.dispose();
+      },
+    );
   });
 }
