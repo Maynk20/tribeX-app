@@ -189,7 +189,7 @@ class StorageService {
     String? category,
     required ValueChanged<String> onImageSelected,
     void Function(Uint8List bytes, Future<String> uploadFuture)?
-        onLocalPreviewReady,
+    onLocalPreviewReady,
   }) {
     showModalBottomSheet(
       context: context,
@@ -216,7 +216,7 @@ class _CoverPickerSheet extends StatefulWidget {
   final String category;
   final ValueChanged<String> onImageSelected;
   final void Function(Uint8List bytes, Future<String> uploadFuture)?
-      onLocalPreviewReady;
+  onLocalPreviewReady;
 
   const _CoverPickerSheet({
     required this.category,

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
+import '../../services/supabase_service.dart';
 import '../../state/auth_state.dart';
 import '../../state/chat_state.dart';
 
@@ -58,8 +59,12 @@ class _CreatePollModalState extends State<CreatePollModal> {
       }
     }
 
-    final me = context.read<AuthState>().currentUser;
-    if (me == null) {
+    final client = SupabaseService.client;
+    final authState = context.read<AuthState>();
+    final me = authState.currentUser;
+    final rawUid = client?.auth.currentUser?.id ?? me?.id;
+    final uid = rawUid?.trim().toLowerCase();
+    if (uid == null || uid.isEmpty) {
       AppToast.show(context, 'Please sign in to create a poll', isError: true);
       return;
     }
@@ -69,7 +74,7 @@ class _CreatePollModalState extends State<CreatePollModal> {
     try {
       final success = await context.read<ChatState>().createPoll(
         activityId: widget.activityId,
-        creatorId: me.id,
+        creatorId: uid,
         question: q,
         optionTexts: opts,
         creator: me,

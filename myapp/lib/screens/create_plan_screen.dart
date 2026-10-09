@@ -61,17 +61,19 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
           _previewBytes = bytes;
           _isUploadingCover = true;
         });
-        uploadFuture.then((url) {
-          if (!mounted) return;
-          setState(() {
-            _imageUrl = url;
-            _isUploadingCover = false;
-          });
-        }).catchError((_) {
-          if (!mounted) return;
-          setState(() => _isUploadingCover = false);
-          AppToast.show(context, 'Cover upload failed', isError: true);
-        });
+        uploadFuture
+            .then((url) {
+              if (!mounted) return;
+              setState(() {
+                _imageUrl = url;
+                _isUploadingCover = false;
+              });
+            })
+            .catchError((_) {
+              if (!mounted) return;
+              setState(() => _isUploadingCover = false);
+              AppToast.show(context, 'Cover upload failed', isError: true);
+            });
       },
       onImageSelected: (url) {
         if (url.startsWith('data:image')) {
@@ -202,8 +204,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     final desc = _descCtrl.text.trim();
     final loc = _isOnline
         ? (_locCtrl.text.trim().isNotEmpty
-            ? _locCtrl.text.trim()
-            : "Online Event")
+              ? _locCtrl.text.trim()
+              : "Online Event")
         : _locCtrl.text.trim();
     final slots = int.tryParse(_slotsCtrl.text.trim()) ?? 8;
     final cost = double.tryParse(_costCtrl.text.trim()) ?? 0.0;
@@ -243,7 +245,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
         return;
       }
       final uri = Uri.tryParse(meetingLink);
-      final isWebUrl = uri != null &&
+      final isWebUrl =
+          uri != null &&
           (uri.scheme == 'http' || uri.scheme == 'https') &&
           uri.hasAuthority;
       if (!isWebUrl) {

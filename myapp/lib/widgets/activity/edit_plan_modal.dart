@@ -109,17 +109,19 @@ class _EditPlanModalState extends State<EditPlanModal> {
           _previewBytes = bytes;
           _isUploadingCover = true;
         });
-        uploadFuture.then((url) {
-          if (!mounted) return;
-          setState(() {
-            _imageUrl = url;
-            _isUploadingCover = false;
-          });
-        }).catchError((_) {
-          if (!mounted) return;
-          setState(() => _isUploadingCover = false);
-          AppToast.show(context, 'Cover upload failed', isError: true);
-        });
+        uploadFuture
+            .then((url) {
+              if (!mounted) return;
+              setState(() {
+                _imageUrl = url;
+                _isUploadingCover = false;
+              });
+            })
+            .catchError((_) {
+              if (!mounted) return;
+              setState(() => _isUploadingCover = false);
+              AppToast.show(context, 'Cover upload failed', isError: true);
+            });
       },
       onImageSelected: (url) {
         if (url.startsWith('data:image')) {
@@ -185,7 +187,8 @@ class _EditPlanModalState extends State<EditPlanModal> {
         return;
       }
       final uri = Uri.tryParse(meetingLink);
-      final isWebUrl = uri != null &&
+      final isWebUrl =
+          uri != null &&
           (uri.scheme == 'http' || uri.scheme == 'https') &&
           uri.hasAuthority;
       if (!isWebUrl) {
@@ -203,9 +206,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
 
     setState(() => _isSaving = true);
 
-    final finalLoc = _isOnline
-        ? (loc.isNotEmpty ? loc : 'Online Event')
-        : loc;
+    final finalLoc = _isOnline ? (loc.isNotEmpty ? loc : 'Online Event') : loc;
 
     final updated = widget.activity.copyWith(
       title: title,
@@ -628,7 +629,9 @@ class _EditPlanModalState extends State<EditPlanModal> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: !_isOnline ? AppColors.primary : Colors.transparent,
+                          color: !_isOnline
+                              ? AppColors.primary
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         alignment: Alignment.center,
@@ -640,8 +643,8 @@ class _EditPlanModalState extends State<EditPlanModal> {
                             color: !_isOnline
                                 ? Colors.white
                                 : (isDark
-                                    ? AppColors.foregroundDark
-                                    : AppColors.foregroundLight),
+                                      ? AppColors.foregroundDark
+                                      : AppColors.foregroundLight),
                           ),
                         ),
                       ),
@@ -654,7 +657,9 @@ class _EditPlanModalState extends State<EditPlanModal> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _isOnline ? AppColors.primary : Colors.transparent,
+                          color: _isOnline
+                              ? AppColors.primary
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         alignment: Alignment.center,
@@ -666,8 +671,8 @@ class _EditPlanModalState extends State<EditPlanModal> {
                             color: _isOnline
                                 ? Colors.white
                                 : (isDark
-                                    ? AppColors.foregroundDark
-                                    : AppColors.foregroundLight),
+                                      ? AppColors.foregroundDark
+                                      : AppColors.foregroundLight),
                           ),
                         ),
                       ),
@@ -693,11 +698,7 @@ class _EditPlanModalState extends State<EditPlanModal> {
                 padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Row(
                   children: [
-                    Icon(
-                      LucideIcons.lock,
-                      size: 11,
-                      color: AppColors.primary,
-                    ),
+                    Icon(LucideIcons.lock, size: 11, color: AppColors.primary),
                     SizedBox(width: 4),
                     Text(
                       'Kept private — only accepted squad members can see this',

@@ -496,8 +496,8 @@ class _CheckInPanelState extends State<CheckInPanel> {
                 child: ElevatedButton.icon(
                   onPressed: () async {
                     try {
-                      final link = widget.activity.meetingLink?.trim().isNotEmpty ==
-                              true
+                      final link =
+                          widget.activity.meetingLink?.trim().isNotEmpty == true
                           ? widget.activity.meetingLink!.trim()
                           : await state.fetchMeetingLink(widget.activity.id);
 
@@ -555,8 +555,8 @@ class _CheckInPanelState extends State<CheckInPanel> {
               OutlinedButton.icon(
                 onPressed: () async {
                   try {
-                    final link = widget.activity.meetingLink?.trim().isNotEmpty ==
-                            true
+                    final link =
+                        widget.activity.meetingLink?.trim().isNotEmpty == true
                         ? widget.activity.meetingLink!.trim()
                         : await state.fetchMeetingLink(widget.activity.id);
                     if (link != null && link.isNotEmpty) {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class PollOption {
   final String id;
   final String text;
@@ -8,7 +10,8 @@ class PollOption {
   factory PollOption.fromJson(Map<String, dynamic> json) {
     final voters =
         (json['voter_ids'] as List<dynamic>?)
-            ?.map((e) => e.toString())
+            ?.map((e) => e.toString().trim().toLowerCase())
+            .where((e) => e.isNotEmpty)
             .toList() ??
         const [];
     return PollOption(
@@ -53,22 +56,48 @@ class Poll {
   });
 
   factory Poll.fromJson(Map<String, dynamic> json) {
-    final optsRaw = (json['options'] as List<dynamic>?) ?? [];
-    final votesRaw =
-        (json['poll_votes'] as List<dynamic>?) ??
-        (json['votes'] as List<dynamic>?) ??
-        [];
+    List<dynamic> optsRaw = const [];
+    if (json['options'] is List) {
+      optsRaw = json['options'] as List<dynamic>;
+    } else if (json['options'] is String) {
+      try {
+        final decoded = jsonDecode(json['options'] as String);
+        if (decoded is List) optsRaw = decoded;
+      } catch (_) {}
+    }
 
-    // Map votes by option index
+    List<dynamic> votesRaw = const [];
+    if (json['poll_votes'] is List) {
+      votesRaw = json['poll_votes'] as List<dynamic>;
+    } else if (json['votes'] is List) {
+      votesRaw = json['votes'] as List<dynamic>;
+    } else if (json['poll_votes'] is String) {
+      try {
+        final decoded = jsonDecode(json['poll_votes'] as String);
+        if (decoded is List) votesRaw = decoded;
+      } catch (_) {}
+    }
+
+    // Map votes by option index, guaranteeing strictly 1 active vote per user
     final Map<int, List<String>> votesByIndex = {};
     final Map<String, List<String>> votesByStrId = {};
-    for (final v in votesRaw) {
-      final uId = v['user_id']?.toString() ?? '';
-      if (uId.isEmpty) continue;
+    final Set<String> countedUserIds = {};
+
+    // Iterate votes in reverse to retain the latest vote cast per user
+    for (final v in votesRaw.reversed) {
+      if (v is! Map) continue;
+      final uId = v['user_id']?.toString().trim().toLowerCase() ?? '';
+      if (uId.isEmpty || countedUserIds.contains(uId)) continue;
+      countedUserIds.add(uId);
 
       if (v['option_index'] != null) {
-        final idx = (v['option_index'] as num).toInt();
-        votesByIndex.putIfAbsent(idx, () => []).add(uId);
+        final rawIdx = v['option_index'];
+        final int? idx = rawIdx is num
+            ? rawIdx.toInt()
+            : int.tryParse(rawIdx.toString());
+        if (idx != null) {
+          votesByIndex.putIfAbsent(idx, () => []).add(uId);
+        }
       }
       final optId = v['option_id']?.toString() ?? '';
       if (optId.isNotEmpty) {
@@ -79,7 +108,9 @@ class Poll {
     final List<PollOption> optionsList = [];
     for (int i = 0; i < optsRaw.length; i++) {
       final item = optsRaw[i];
-      final text = item is String ? item : (item['text'] ?? '').toString();
+      final text = item is String
+          ? item
+          : (item is Map ? (item['text'] ?? '').toString() : item.toString());
       final optId = item is Map ? (item['id'] ?? text).toString() : text;
       final voters =
           votesByIndex[i] ??
@@ -127,12 +158,18 @@ class Poll {
   bool get isClosed => closedAt != null;
 
   bool hasVoted(String userId) {
-    return options.any((opt) => opt.voterIds.contains(userId));
+    final normalized = userId.trim().toLowerCase();
+    return options.any(
+      (opt) => opt.voterIds.any((v) => v.trim().toLowerCase() == normalized),
+    );
   }
 
   String? userVotedOptionId(String userId) {
+    final normalized = userId.trim().toLowerCase();
     for (final opt in options) {
-      if (opt.voterIds.contains(userId)) return opt.id;
+      if (opt.voterIds.any((v) => v.trim().toLowerCase() == normalized)) {
+        return opt.id;
+      }
     }
     return null;
   }

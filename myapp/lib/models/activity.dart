@@ -160,6 +160,8 @@ class Activity {
 
   bool get hasSafetyShield => womenOnly || verifiedOnly;
 
+  bool get isVirtual => isOnline;
+
   Activity copyWith({
     String? id,
     String? hostId,

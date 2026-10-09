@@ -42,10 +42,16 @@ void main() {
       final json = virtualPlan.toJson();
       expect(json['is_online'], isTrue);
       expect(json['meeting_link'], 'https://meet.google.com/abc-defg-hij');
-      expect(json['latitude'], isNull,
-          reason: 'Virtual plans must serialize null coordinates');
-      expect(json['longitude'], isNull,
-          reason: 'Virtual plans must serialize null coordinates');
+      expect(
+        json['latitude'],
+        isNull,
+        reason: 'Virtual plans must serialize null coordinates',
+      );
+      expect(
+        json['longitude'],
+        isNull,
+        reason: 'Virtual plans must serialize null coordinates',
+      );
     });
 
     test('In-person activity clears meeting_link on serialization', () {
@@ -70,8 +76,11 @@ void main() {
       expect(json['is_online'], isFalse);
       expect(json['latitude'], 12.9716);
       expect(json['longitude'], 77.5946);
-      expect(json['meeting_link'], isNull,
-          reason: 'In-person activities must have null meeting_link in JSON');
+      expect(
+        json['meeting_link'],
+        isNull,
+        reason: 'In-person activities must have null meeting_link in JSON',
+      );
     });
 
     test('Activity.copyWith properly handles switching online modes', () {
@@ -119,9 +128,7 @@ void main() {
   });
 
   group('2. ActivitiesState Virtual Plan Discovery & Filtering Tests', () {
-    test(
-        'Virtual plans are NOT filtered out by physical 15km radius when place is set',
-        () {
+    test('Virtual plans are NOT filtered out by physical 15km radius when place is set', () {
       final state = ActivitiesState();
 
       const originPlace = SavedPlace(
@@ -187,13 +194,22 @@ void main() {
       final discoverFeed = state.getFilteredActivities(null, {});
       final ids = discoverFeed.map((a) => a.id).toList();
 
-      expect(ids, contains('near_1'),
-          reason: 'In-person plan within 15 km should appear');
-      expect(ids, isNot(contains('far_1')),
-          reason: 'In-person plan 130 km away must be excluded by 15 km radius');
-      expect(ids, contains('virtual_1'),
-          reason:
-              'Virtual plans must NEVER be excluded by physical distance radius');
+      expect(
+        ids,
+        contains('near_1'),
+        reason: 'In-person plan within 15 km should appear',
+      );
+      expect(
+        ids,
+        isNot(contains('far_1')),
+        reason: 'In-person plan 130 km away must be excluded by 15 km radius',
+      );
+      expect(
+        ids,
+        contains('virtual_1'),
+        reason:
+            'Virtual plans must NEVER be excluded by physical distance radius',
+      );
     });
 
     test('ModeFilter.online and ModeFilter.inPerson filter correctly', () {
@@ -249,63 +265,78 @@ void main() {
     });
 
     test(
-        'requestToJoin allows users without profile GPS to request virtual plans',
-        () async {
-      final state = ActivitiesState();
+      'requestToJoin allows users without profile GPS to request virtual plans',
+      () async {
+        final state = ActivitiesState();
 
-      final virtualPlan = Activity(
-        id: 'virtual_meetup',
-        hostId: 'host_user',
-        title: 'Virtual Book Club',
-        description: 'Discussion on sci-fi books',
-        category: 'Book Club',
-        dateTime: DateTime.now().add(const Duration(days: 1)),
-        location: 'Online',
-        totalSlots: 10,
-        slotsLeft: 5,
-        costPerHead: 0,
-        isOnline: true,
-        meetingLink: 'https://meet.google.com/book-club',
-      );
+        final virtualPlan = Activity(
+          id: 'virtual_meetup',
+          hostId: 'host_user',
+          title: 'Virtual Book Club',
+          description: 'Discussion on sci-fi books',
+          category: 'Book Club',
+          dateTime: DateTime.now().add(const Duration(days: 1)),
+          location: 'Online',
+          totalSlots: 10,
+          slotsLeft: 5,
+          costPerHead: 0,
+          isOnline: true,
+          meetingLink: 'https://meet.google.com/book-club',
+        );
 
-      final inPersonPlan = Activity(
-        id: 'in_person_match',
-        hostId: 'host_user',
-        title: 'Local Chess Match',
-        description: 'In-person chess board match',
-        category: 'Chess',
-        dateTime: DateTime.now().add(const Duration(days: 1)),
-        location: 'Cafe Chess',
-        totalSlots: 2,
-        slotsLeft: 1,
-        costPerHead: 0,
-        latitude: 12.9716,
-        longitude: 77.5946,
-        isOnline: false,
-      );
+        final inPersonPlan = Activity(
+          id: 'in_person_match',
+          hostId: 'host_user',
+          title: 'Local Chess Match',
+          description: 'In-person chess board match',
+          category: 'Chess',
+          dateTime: DateTime.now().add(const Duration(days: 1)),
+          location: 'Cafe Chess',
+          totalSlots: 2,
+          slotsLeft: 1,
+          costPerHead: 0,
+          latitude: 12.9716,
+          longitude: 77.5946,
+          isOnline: false,
+        );
 
-      state.setActivitiesForTesting([virtualPlan, inPersonPlan]);
+        state.setActivitiesForTesting([virtualPlan, inPersonPlan]);
 
-      // User with NO GPS profile coordinates
-      final remoteUser = UserProfile(
-        id: 'remote_user_1',
-        fullName: 'Remote Learner',
-        username: 'remote_learner',
-        city: null,
-        latitude: null,
-        longitude: null,
-      );
+        // User with NO GPS profile coordinates
+        final remoteUser = UserProfile(
+          id: 'remote_user_1',
+          fullName: 'Remote Learner',
+          username: 'remote_learner',
+          city: null,
+          latitude: null,
+          longitude: null,
+        );
 
-      // For in-person plan: blocked because GPS is required
-      final inPersonError = await state.requestToJoin(inPersonPlan.id, remoteUser);
-      expect(inPersonError,
-          contains('Add your GPS profile location before requesting to join.'));
+        // For in-person plan: blocked because GPS is required
+        final inPersonError = await state.requestToJoin(
+          inPersonPlan.id,
+          remoteUser,
+        );
+        expect(
+          inPersonError,
+          contains('Add your GPS profile location before requesting to join.'),
+        );
 
-      // For virtual plan: GPS is NOT required
-      final virtualError = await state.requestToJoin(virtualPlan.id, remoteUser);
-      expect(virtualError,
-          isNot(contains('Add your GPS profile location before requesting to join.')));
-    });
+        // For virtual plan: GPS is NOT required
+        final virtualError = await state.requestToJoin(
+          virtualPlan.id,
+          remoteUser,
+        );
+        expect(
+          virtualError,
+          isNot(
+            contains(
+              'Add your GPS profile location before requesting to join.',
+            ),
+          ),
+        );
+      },
+    );
 
     test('getMeetingLink returns link from in-memory activity or cache', () {
       final state = ActivitiesState();
@@ -334,104 +365,106 @@ void main() {
 
   group('3. ActivityCard Virtual Plan UI Verification Tests', () {
     testWidgets(
-        'ActivityCard displays VIRTUAL badge and video icon without physical distance badge',
-        (tester) async {
-      final virtualAct = Activity(
-        id: 'v_card_1',
-        hostId: 'host_xyz',
-        title: 'Virtual Yoga & Meditation',
-        description: 'Morning peaceful session',
-        category: 'Meditation',
-        dateTime: DateTime.now().add(const Duration(hours: 4)),
-        location: 'Zoom Call',
-        totalSlots: 20,
-        slotsLeft: 12,
-        costPerHead: 0,
-        isOnline: true,
-        meetingLink: 'https://zoom.us/j/987654321',
-      );
+      'ActivityCard displays VIRTUAL badge and video icon without physical distance badge',
+      (tester) async {
+        final virtualAct = Activity(
+          id: 'v_card_1',
+          hostId: 'host_xyz',
+          title: 'Virtual Yoga & Meditation',
+          description: 'Morning peaceful session',
+          category: 'Meditation',
+          dateTime: DateTime.now().add(const Duration(hours: 4)),
+          location: 'Zoom Call',
+          totalSlots: 20,
+          slotsLeft: 12,
+          costPerHead: 0,
+          isOnline: true,
+          meetingLink: 'https://zoom.us/j/987654321',
+        );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ActivityCard(
-              activity: virtualAct,
-              distanceKm: 5.2, // Even if distanceKm is passed, online plans shouldn't show it
-              isHost: false,
-              myStatus: null,
-              hasProfileGpsLocation: false, // Should NOT block virtual plans
-              onJoin: () {},
-              onChat: () {},
-            ),
-          ),
-        ),
-      );
-
-      await tester.pump();
-
-      // Check VIRTUAL badge
-      expect(find.text('VIRTUAL'), findsOneWidget);
-      expect(find.byIcon(LucideIcons.globe), findsOneWidget);
-
-      // Check video icon is used for location row
-      expect(find.byIcon(LucideIcons.video), findsAtLeastNWidgets(1));
-
-      // Physical distance text should NOT be rendered for online events
-      expect(find.text('5.2 km away'), findsNothing);
-
-      // Check location label
-      expect(find.text('Virtual · Zoom Call'), findsOneWidget);
-
-      // Non-joined guest sees private notice
-      expect(find.text('Meeting link visible once joined'), findsOneWidget);
-      expect(find.byIcon(LucideIcons.lock), findsOneWidget);
-    });
-
-    testWidgets(
-        'ActivityCard displays Join Meeting button for confirmed attendee or host',
-        (tester) async {
-      final virtualAct = Activity(
-        id: 'v_card_confirmed',
-        hostId: 'host_xyz',
-        title: 'Virtual Music Jam',
-        description: 'Acoustic jam session online',
-        category: 'Music Jam',
-        dateTime: DateTime.now().add(const Duration(hours: 2)),
-        location: 'Google Meet',
-        totalSlots: 8,
-        slotsLeft: 2,
-        costPerHead: 0,
-        isOnline: true,
-        meetingLink: 'https://meet.google.com/music-jam',
-      );
-
-      final state = ActivitiesState();
-      state.setActivitiesForTesting([virtualAct]);
-
-      await tester.pumpWidget(
-        ChangeNotifierProvider<ActivitiesState>.value(
-          value: state,
-          child: MaterialApp(
+        await tester.pumpWidget(
+          MaterialApp(
             home: Scaffold(
               body: ActivityCard(
                 activity: virtualAct,
+                distanceKm: 5.2, // Even if distanceKm is passed, online plans shouldn't show it
                 isHost: false,
-                myStatus: JoinStatus.accepted, // Confirmed squad attendee
-                hasProfileGpsLocation: false,
+                myStatus: null,
+                hasProfileGpsLocation: false, // Should NOT block virtual plans
                 onJoin: () {},
                 onChat: () {},
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.pump();
+        await tester.pump();
 
-      // Confirmed attendee sees "Join Meeting · Tap to open link"
-      expect(find.text('Join Meeting · Tap to open link'), findsOneWidget);
-      expect(find.byIcon(LucideIcons.externalLink), findsOneWidget);
-    });
+        // Check VIRTUAL badge
+        expect(find.text('VIRTUAL'), findsOneWidget);
+        expect(find.byIcon(LucideIcons.globe), findsOneWidget);
+
+        // Check video icon is used for location row
+        expect(find.byIcon(LucideIcons.video), findsAtLeastNWidgets(1));
+
+        // Physical distance text should NOT be rendered for online events
+        expect(find.text('5.2 km away'), findsNothing);
+
+        // Check location label
+        expect(find.text('Virtual · Zoom Call'), findsOneWidget);
+
+        // Non-joined guest sees private notice
+        expect(find.text('Meeting link visible once joined'), findsOneWidget);
+        expect(find.byIcon(LucideIcons.lock), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'ActivityCard displays Join Meeting button for confirmed attendee or host',
+      (tester) async {
+        final virtualAct = Activity(
+          id: 'v_card_confirmed',
+          hostId: 'host_xyz',
+          title: 'Virtual Music Jam',
+          description: 'Acoustic jam session online',
+          category: 'Music Jam',
+          dateTime: DateTime.now().add(const Duration(hours: 2)),
+          location: 'Google Meet',
+          totalSlots: 8,
+          slotsLeft: 2,
+          costPerHead: 0,
+          isOnline: true,
+          meetingLink: 'https://meet.google.com/music-jam',
+        );
+
+        final state = ActivitiesState();
+        state.setActivitiesForTesting([virtualAct]);
+
+        await tester.pumpWidget(
+          ChangeNotifierProvider<ActivitiesState>.value(
+            value: state,
+            child: MaterialApp(
+              home: Scaffold(
+                body: ActivityCard(
+                  activity: virtualAct,
+                  isHost: false,
+                  myStatus: JoinStatus.accepted, // Confirmed squad attendee
+                  hasProfileGpsLocation: false,
+                  onJoin: () {},
+                  onChat: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pump();
+
+        // Confirmed attendee sees "Join Meeting · Tap to open link"
+        expect(find.text('Join Meeting · Tap to open link'), findsOneWidget);
+        expect(find.byIcon(LucideIcons.externalLink), findsOneWidget);
+      },
+    );
   });
 
   group('4. Image Preview & Flickering Prevention Tests', () {
@@ -443,61 +476,72 @@ void main() {
       final bytes2 = base64Decode(sampleBase64.split(',').last);
 
       // Decoding repeatedly produces different object references
-      expect(identical(bytes1, bytes2), isFalse,
-          reason: 'Repeated base64Decode allocates distinct memory buffers');
+      expect(
+        identical(bytes1, bytes2),
+        isFalse,
+        reason: 'Repeated base64Decode allocates distinct memory buffers',
+      );
 
       // But caching the decoded bytes maintains identical object identity
       final cachedBytes = bytes1;
-      expect(identical(bytes1, cachedBytes), isTrue,
-          reason: 'Cached preview bytes preserve memory reference identity');
+      expect(
+        identical(bytes1, cachedBytes),
+        isTrue,
+        reason: 'Cached preview bytes preserve memory reference identity',
+      );
     });
 
     testWidgets(
-        'Stable preview bytes widget renders with gaplessPlayback without crashing',
-        (tester) async {
-      final sampleBytes = Uint8List.fromList(
-        base64Decode(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
-      );
+      'Stable preview bytes widget renders with gaplessPlayback without crashing',
+      (tester) async {
+        final sampleBytes = Uint8List.fromList(
+          base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+          ),
+        );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                Image.memory(
-                  sampleBytes,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                ),
-                Positioned(
-                  bottom: 10,
-                  left: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: const Row(
-                      children: [
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 6),
-                        Text('Uploading cover…'),
-                      ],
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Stack(
+                children: [
+                  Image.memory(
+                    sampleBytes,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  ),
+                  Positioned(
+                    bottom: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      child: const Row(
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 6),
+                          Text('Uploading cover…'),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.pump();
+        await tester.pump();
 
-      expect(find.byType(Image), findsOneWidget);
-      expect(find.text('Uploading cover…'), findsOneWidget);
-    });
+        expect(find.byType(Image), findsOneWidget);
+        expect(find.text('Uploading cover…'), findsOneWidget);
+      },
+    );
   });
 }
