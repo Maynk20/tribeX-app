@@ -47,7 +47,6 @@ class _PollCardWidgetState extends State<PollCardWidget> {
     if (poll == null) {
       return Container(
         width: double.infinity,
-        height: 64,
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -66,15 +65,23 @@ class _PollCardWidgetState extends State<PollCardWidget> {
               ),
             ),
             const SizedBox(width: 12),
-            Text(
-              'Loading poll details…',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
+            Expanded(
+              child: Text(
+                'Loading poll details…',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
+                ),
               ),
+            ),
+            TextButton(
+              onPressed: () {
+                context.read<ChatState>().fetchPoll(widget.pollId);
+              },
+              child: const Text('Retry', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -85,6 +92,7 @@ class _PollCardWidgetState extends State<PollCardWidget> {
     final userVotedOptId = widget.currentUserId != null
         ? poll.userVotedOptionId(widget.currentUserId!)
         : null;
+    final isClosed = poll.isClosed;
 
     return Container(
       width: double.infinity,
@@ -135,14 +143,39 @@ class _PollCardWidgetState extends State<PollCardWidget> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      '$totalVotes ${totalVotes == 1 ? "vote" : "votes"} total',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          '$totalVotes ${totalVotes == 1 ? "vote" : "votes"} total',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight,
+                          ),
+                        ),
+                        if (isClosed) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.warningMuted,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Closed',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -158,6 +191,10 @@ class _PollCardWidgetState extends State<PollCardWidget> {
 
             return GestureDetector(
               onTap: () async {
+                if (isClosed) {
+                  AppToast.show(context, 'This poll is closed');
+                  return;
+                }
                 if (widget.currentUserId == null) {
                   AppToast.show(
                     context,
@@ -166,15 +203,24 @@ class _PollCardWidgetState extends State<PollCardWidget> {
                   );
                   return;
                 }
-                if (isSelected || _isVoting) return;
+                if (_isVoting) return;
 
                 setState(() => _isVoting = true);
                 try {
-                  await chatState.votePoll(
-                    poll.id,
-                    opt.id,
-                    widget.currentUserId!,
-                  );
+                  if (isSelected) {
+                    // Tap again to unvote / retract
+                    await chatState.retractPollVote(
+                      poll.id,
+                      widget.currentUserId!,
+                    );
+                  } else {
+                    // Vote or switch vote
+                    await chatState.votePoll(
+                      poll.id,
+                      opt.id,
+                      widget.currentUserId!,
+                    );
+                  }
                 } finally {
                   if (mounted) {
                     setState(() => _isVoting = false);

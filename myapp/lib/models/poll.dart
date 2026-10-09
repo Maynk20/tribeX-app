@@ -39,6 +39,7 @@ class Poll {
   final String creatorId;
   final String question;
   final List<PollOption> options;
+  final DateTime? closedAt;
   final DateTime createdAt;
 
   Poll({
@@ -47,12 +48,16 @@ class Poll {
     required this.creatorId,
     required this.question,
     required this.options,
+    this.closedAt,
     required this.createdAt,
   });
 
   factory Poll.fromJson(Map<String, dynamic> json) {
     final optsRaw = (json['options'] as List<dynamic>?) ?? [];
-    final votesRaw = (json['poll_votes'] as List<dynamic>?) ?? [];
+    final votesRaw =
+        (json['poll_votes'] as List<dynamic>?) ??
+        (json['votes'] as List<dynamic>?) ??
+        [];
 
     // Map votes by option index
     final Map<int, List<String>> votesByIndex = {};
@@ -87,12 +92,18 @@ class Poll {
       );
     }
 
+    DateTime? closedDate;
+    if (json['closed_at'] != null) {
+      closedDate = DateTime.tryParse(json['closed_at'].toString());
+    }
+
     return Poll(
       id: (json['id'] ?? '') as String,
       activityId: (json['activity_id'] ?? '') as String,
       creatorId: (json['created_by'] ?? json['creator_id'] ?? '') as String,
       question: (json['question'] ?? '') as String,
       options: optionsList,
+      closedAt: closedDate,
       createdAt: json['created_at'] != null
           ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
@@ -106,11 +117,14 @@ class Poll {
       'created_by': creatorId,
       'question': question,
       'options': options.map((o) => o.text).toList(),
+      if (closedAt != null) 'closed_at': closedAt!.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
     };
   }
 
   int get totalVotes => options.fold(0, (sum, opt) => sum + opt.votes);
+
+  bool get isClosed => closedAt != null;
 
   bool hasVoted(String userId) {
     return options.any((opt) => opt.voterIds.contains(userId));
@@ -129,6 +143,7 @@ class Poll {
     String? creatorId,
     String? question,
     List<PollOption>? options,
+    DateTime? closedAt,
     DateTime? createdAt,
   }) {
     return Poll(
@@ -137,6 +152,7 @@ class Poll {
       creatorId: creatorId ?? this.creatorId,
       question: question ?? this.question,
       options: options ?? this.options,
+      closedAt: closedAt ?? this.closedAt,
       createdAt: createdAt ?? this.createdAt,
     );
   }

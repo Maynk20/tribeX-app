@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
@@ -102,6 +105,16 @@ class _CheckInPanelState extends State<CheckInPanel> {
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
     final attendees = state.getRequestsForActivity(widget.activity.id);
+
+    if (widget.activity.isOnline) {
+      return _buildVirtualMeetingPanel(
+        context,
+        attendees,
+        isDark,
+        cardBg,
+        border,
+      );
+    }
 
     final isCheckedIn = widget.myRequest?.isCheckedIn ?? false;
     final hasPin =
@@ -389,6 +402,216 @@ class _CheckInPanelState extends State<CheckInPanel> {
               );
             }),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVirtualMeetingPanel(
+    BuildContext context,
+    List<JoinRequest> attendees,
+    bool isDark,
+    Color cardBg,
+    Color border,
+  ) {
+    final state = context.read<ActivitiesState>();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: AppColors.successMuted,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  LucideIcons.video,
+                  size: 16,
+                  color: AppColors.success,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'VIRTUAL MEETING HUB',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                        color: AppColors.success,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.activity.location.trim().isNotEmpty &&
+                              widget.activity.location.trim() != 'Online'
+                          ? widget.activity.location.trim()
+                          : 'Online Video Call',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.successMuted,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'ONLINE',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: AppColors.success,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Join Meeting & Copy Link Action Buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    try {
+                      final link = widget.activity.meetingLink?.trim().isNotEmpty ==
+                              true
+                          ? widget.activity.meetingLink!.trim()
+                          : await state.fetchMeetingLink(widget.activity.id);
+
+                      if (link != null && link.isNotEmpty) {
+                        final uri = Uri.tryParse(link);
+                        if (uri != null && await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                          return;
+                        }
+                        await Clipboard.setData(ClipboardData(text: link));
+                        if (context.mounted) {
+                          AppToast.show(
+                            context,
+                            'Meeting link copied to clipboard: $link',
+                          );
+                        }
+                      } else {
+                        if (context.mounted) {
+                          AppToast.show(
+                            context,
+                            'Meeting link will be shared by host shortly.',
+                            isError: true,
+                          );
+                        }
+                      }
+                    } catch (_) {
+                      if (context.mounted) {
+                        AppToast.show(
+                          context,
+                          'Could not open meeting link',
+                          isError: true,
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(LucideIcons.video, size: 14),
+                  label: const Text(
+                    'Join Meeting',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  try {
+                    final link = widget.activity.meetingLink?.trim().isNotEmpty ==
+                            true
+                        ? widget.activity.meetingLink!.trim()
+                        : await state.fetchMeetingLink(widget.activity.id);
+                    if (link != null && link.isNotEmpty) {
+                      await Clipboard.setData(ClipboardData(text: link));
+                      if (context.mounted) {
+                        AppToast.show(context, 'Link copied to clipboard!');
+                      }
+                    } else if (context.mounted) {
+                      AppToast.show(
+                        context,
+                        'No meeting link available yet',
+                        isError: true,
+                      );
+                    }
+                  } catch (_) {}
+                },
+                icon: const Icon(LucideIcons.copy, size: 13),
+                label: const Text('Copy', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Attendees in Virtual Squad
+          Row(
+            children: [
+              Icon(
+                LucideIcons.users,
+                size: 12,
+                color: isDark
+                    ? AppColors.mutedForegroundDark
+                    : AppColors.mutedForegroundLight,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Squad Members (${attendees.where((r) => r.status.name == 'accepted').length + 1})',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

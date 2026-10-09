@@ -49,7 +49,6 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
     if (expense == null) {
       return Container(
         width: double.infinity,
-        height: 64,
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -68,15 +67,23 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
               ),
             ),
             const SizedBox(width: 12),
-            Text(
-              'Loading expense details…',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isDark
-                    ? AppColors.mutedForegroundDark
-                    : AppColors.mutedForegroundLight,
+            Expanded(
+              child: Text(
+                'Loading expense details…',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
+                ),
               ),
+            ),
+            TextButton(
+              onPressed: () {
+                context.read<ChatState>().fetchExpense(widget.expenseId);
+              },
+              child: const Text('Retry', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -173,6 +180,55 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
               ],
             ),
           ),
+
+          // Participants Banner showing all names together ("saath saath mein")
+          if (expense.members.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.backgroundDark
+                      : AppColors.primaryMuted.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark
+                        ? AppColors.borderDark
+                        : AppColors.borderLight,
+                    width: 0.5,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.people_alt_outlined,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Split between: ${expense.members.map((m) => m.userId == widget.currentUserId ? "${m.name} (you)" : m.name).join(" · ")}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? AppColors.foregroundDark
+                              : AppColors.foregroundLight,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // Amount Row
           Padding(

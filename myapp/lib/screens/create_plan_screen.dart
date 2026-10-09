@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -45,9 +46,53 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
   bool _verifiedOnly = false;
   final List<String> _selectedAmenities = [];
   String? _imageUrl;
+  Uint8List? _previewBytes;
+  bool _isUploadingCover = false;
   PlaceItem? _pinnedPlace;
   bool _isPublishing = false;
   bool _isLocating = false;
+
+  void _openCoverPicker() {
+    StorageService.showCoverPickerModal(
+      context,
+      category: _selectedCategory,
+      onLocalPreviewReady: (bytes, uploadFuture) {
+        setState(() {
+          _previewBytes = bytes;
+          _isUploadingCover = true;
+        });
+        uploadFuture.then((url) {
+          if (!mounted) return;
+          setState(() {
+            _imageUrl = url;
+            _isUploadingCover = false;
+          });
+        }).catchError((_) {
+          if (!mounted) return;
+          setState(() => _isUploadingCover = false);
+          AppToast.show(context, 'Cover upload failed', isError: true);
+        });
+      },
+      onImageSelected: (url) {
+        if (url.startsWith('data:image')) {
+          try {
+            final decoded = base64Decode(url.split(',').last);
+            setState(() {
+              _previewBytes = decoded;
+              _imageUrl = url;
+              _isUploadingCover = false;
+            });
+            return;
+          } catch (_) {}
+        }
+        setState(() {
+          _previewBytes = null;
+          _imageUrl = url;
+          _isUploadingCover = false;
+        });
+      },
+    );
+  }
 
   Future<void> _useCurrentLocation() async {
     if (_isLocating) return;
@@ -144,9 +189,22 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       return;
     }
 
+    if (_isUploadingCover) {
+      AppToast.show(
+        context,
+        'Please wait for cover photo upload to finish',
+        isError: true,
+      );
+      return;
+    }
+
     final title = _titleCtrl.text.trim();
     final desc = _descCtrl.text.trim();
-    final loc = _isOnline ? "Online" : _locCtrl.text.trim();
+    final loc = _isOnline
+        ? (_locCtrl.text.trim().isNotEmpty
+            ? _locCtrl.text.trim()
+            : "Online Event")
+        : _locCtrl.text.trim();
     final slots = int.tryParse(_slotsCtrl.text.trim()) ?? 8;
     final cost = double.tryParse(_costCtrl.text.trim()) ?? 0.0;
     final meetingLink = _isOnline ? _meetingLinkCtrl.text.trim() : null;
@@ -175,9 +233,27 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       );
       return;
     }
-    if (_isOnline && (meetingLink == null || meetingLink.isEmpty)) {
-      AppToast.show(context, 'Please add a valid meeting URL', isError: true);
-      return;
+    if (_isOnline) {
+      if (meetingLink == null || meetingLink.isEmpty) {
+        AppToast.show(
+          context,
+          'Please add a valid meeting URL (Google Meet, Discord, Zoom…)',
+          isError: true,
+        );
+        return;
+      }
+      final uri = Uri.tryParse(meetingLink);
+      final isWebUrl = uri != null &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.hasAuthority;
+      if (!isWebUrl) {
+        AppToast.show(
+          context,
+          'Meeting link must be a valid URL starting with https:// or http://',
+          isError: true,
+        );
+        return;
+      }
     }
 
     setState(() => _isPublishing = true);
@@ -386,32 +462,26 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
 
               // Cover photo picker: h-36 w-full rounded-3xl border border-dashed border-border
               GestureDetector(
-                onTap: () {
-                  StorageService.showCoverPickerModal(
-                    context,
-                    category: _selectedCategory,
-                    onImageSelected: (url) {
-                      setState(() => _imageUrl = url);
-                    },
-                  );
-                },
+                onTap: _openCoverPicker,
                 child: Container(
                   height: 148,
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: _imageUrl == null
+                    color: (_imageUrl == null && _previewBytes == null)
                         ? cardBg.withValues(alpha: 0.5)
                         : null,
                     borderRadius: BorderRadius.circular(28),
                     border: Border.all(
-                      color: _imageUrl != null
+                      color: (_imageUrl != null || _previewBytes != null)
                           ? AppColors.primary.withValues(alpha: 0.5)
                           : border.withValues(alpha: 0.8),
-                      width: _imageUrl != null ? 1.5 : 1,
+                      width: (_imageUrl != null || _previewBytes != null)
+                          ? 1.5
+                          : 1,
                     ),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: _imageUrl == null
+                  child: (_imageUrl == null && _previewBytes == null)
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -454,26 +524,66 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                       : Stack(
                           fit: StackFit.expand,
                           children: [
-                            _imageUrl!.startsWith('data:image')
-                                ? Image.memory(
-                                    base64Decode(_imageUrl!.split(',').last),
-                                    fit: BoxFit.cover,
-                                  )
-                                : Image.network(
-                                    _imageUrl!,
-                                    fit: BoxFit.cover,
-                                    cacheWidth: 800,
-                                    cacheHeight: 400,
-                                    errorBuilder: (_, _, _) => Container(
-                                      color: AppColors.primaryMuted,
-                                      child: const Center(
-                                        child: Icon(
-                                          LucideIcons.image,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
+                            if (_previewBytes != null)
+                              Image.memory(
+                                _previewBytes!,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                              )
+                            else if (_imageUrl != null)
+                              Image.network(
+                                _imageUrl!,
+                                fit: BoxFit.cover,
+                                cacheWidth: 800,
+                                cacheHeight: 400,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, _, _) => Container(
+                                  color: AppColors.primaryMuted,
+                                  child: const Center(
+                                    child: Icon(
+                                      LucideIcons.image,
+                                      color: AppColors.primary,
                                     ),
                                   ),
+                                ),
+                              ),
+                            if (_isUploadingCover)
+                              Positioned(
+                                bottom: 10,
+                                left: 10,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Uploading cover…',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             // Top overlay with Change & Remove buttons
                             Positioned(
                               top: 10,
@@ -482,15 +592,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   GestureDetector(
-                                    onTap: () {
-                                      StorageService.showCoverPickerModal(
-                                        context,
-                                        category: _selectedCategory,
-                                        onImageSelected: (url) {
-                                          setState(() => _imageUrl = url);
-                                        },
-                                      );
-                                    },
+                                    onTap: _openCoverPicker,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,
@@ -527,8 +629,13 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                                   ),
                                   const SizedBox(width: 6),
                                   GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _imageUrl = null),
+                                    onTap: () {
+                                      setState(() {
+                                        _imageUrl = null;
+                                        _previewBytes = null;
+                                        _isUploadingCover = false;
+                                      });
+                                    },
                                     child: Container(
                                       width: 28,
                                       height: 28,
@@ -851,6 +958,22 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
+                const SizedBox(height: 10),
+                _FormFieldWrapper(
+                  label: 'PLATFORM NAME (OPTIONAL)',
+                  hint: 'e.g. Google Meet, Discord, Zoom',
+                  child: TextField(
+                    controller: _locCtrl,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. Google Meet or Discord Server',
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
@@ -861,7 +984,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Link stays private — only accepted attendees can see it.',
+                      'Link stays private — only accepted squad members can see it.',
                       style: TextStyle(
                         fontSize: 11,
                         color: isDark

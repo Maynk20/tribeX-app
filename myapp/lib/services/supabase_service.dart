@@ -32,7 +32,7 @@ class SupabaseService {
   }
 
   /// Perform PostGIS spatial distance query for activities near (lat, lng) within radiusKm.
-  /// Attempts PostGIS RPC `get_nearby_activities` first; falls back to indexed bounding-box query.
+  /// Attempts PostGIS RPC `get_nearby_activities` first; falls back to indexed bounding-box query + virtual activities.
   static Future<List<dynamic>?> fetchNearbyActivities({
     required double lat,
     required double lng,
@@ -52,7 +52,7 @@ class SupabaseService {
         final double latDelta = radiusKm / 111.0;
         final double lngDelta = radiusKm / (111.0 * 0.7);
 
-        final res = await c
+        final nearbyRes = await c
             .from('activities')
             .select('*, profiles_public(*)')
             .filter('deleted_at', 'is', null)
@@ -62,9 +62,49 @@ class SupabaseService {
             .lte('longitude', lng + lngDelta)
             .order('date_time', ascending: true);
 
-        return res as List<dynamic>;
+        final onlineRes = await c
+            .from('activities')
+            .select('*, profiles_public(*)')
+            .filter('deleted_at', 'is', null)
+            .eq('is_online', true)
+            .order('date_time', ascending: true);
+
+        final combined = <dynamic>[];
+        final seenIds = <dynamic>{};
+
+        for (final item in nearbyRes) {
+          if (item['id'] != null && seenIds.add(item['id'])) {
+            combined.add(item);
+          }
+        }
+        for (final item in onlineRes) {
+          if (item['id'] != null && seenIds.add(item['id'])) {
+            combined.add(item);
+          }
+        }
+
+        return combined;
       } catch (_) {}
     }
     return null;
+  }
+
+  /// Securely retrieves the meeting link for an online activity via security-definer RPC.
+  /// Returns the link if the caller is the host or an accepted attendee; null otherwise.
+  static Future<String?> getMeetingLink(String activityId) async {
+    final c = client;
+    if (c == null) return null;
+    try {
+      final res = await c.rpc(
+        'get_meeting_link',
+        params: {'_activity_id': activityId},
+      );
+      if (res is String && res.trim().isNotEmpty) {
+        return res.trim();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }

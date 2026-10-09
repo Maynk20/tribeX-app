@@ -188,6 +188,8 @@ class StorageService {
     BuildContext context, {
     String? category,
     required ValueChanged<String> onImageSelected,
+    void Function(Uint8List bytes, Future<String> uploadFuture)?
+        onLocalPreviewReady,
   }) {
     showModalBottomSheet(
       context: context,
@@ -199,6 +201,12 @@ class StorageService {
           Navigator.of(ctx).pop();
           onImageSelected(url);
         },
+        onLocalPreviewReady: onLocalPreviewReady != null
+            ? (bytes, future) {
+                Navigator.of(ctx).pop();
+                onLocalPreviewReady(bytes, future);
+              }
+            : null,
       ),
     );
   }
@@ -207,10 +215,13 @@ class StorageService {
 class _CoverPickerSheet extends StatefulWidget {
   final String category;
   final ValueChanged<String> onImageSelected;
+  final void Function(Uint8List bytes, Future<String> uploadFuture)?
+      onLocalPreviewReady;
 
   const _CoverPickerSheet({
     required this.category,
     required this.onImageSelected,
+    this.onLocalPreviewReady,
   });
 
   @override
@@ -237,13 +248,51 @@ class _CoverPickerSheetState extends State<_CoverPickerSheet> {
     });
 
     try {
-      final url = await StorageService.pickAndUploadImage(source: source);
-      if (!mounted) return;
+      final XFile? file = await StorageService._picker.pickImage(
+        source: source,
+        maxWidth: 1200,
+        maxHeight: 800,
+        imageQuality: 82,
+      );
 
-      if (url != null) {
-        AppToast.show(context, 'Photo selected successfully!');
-        widget.onImageSelected(url);
+      if (file == null) {
+        if (mounted) {
+          setState(() {
+            _isUploading = false;
+            _uploadStatus = null;
+          });
+        }
+        return;
       }
+
+      final Uint8List bytes = await file.readAsBytes();
+      if (bytes.lengthInBytes > 5 * 1024 * 1024) {
+        if (mounted) {
+          AppToast.show(context, 'Image exceeds 5MB limit', isError: true);
+          setState(() {
+            _isUploading = false;
+            _uploadStatus = null;
+          });
+        }
+        return;
+      }
+
+      final filename = '${const Uuid().v4()}.jpg';
+      final uploadFuture = StorageService.uploadBytes(
+        bytes: bytes,
+        filename: filename,
+        folder: 'activity_covers',
+      );
+
+      if (widget.onLocalPreviewReady != null) {
+        widget.onLocalPreviewReady!(bytes, uploadFuture);
+        return;
+      }
+
+      setState(() => _uploadStatus = 'Uploading…');
+      final url = await uploadFuture;
+      if (!mounted) return;
+      widget.onImageSelected(url);
     } catch (_) {
       if (mounted) {
         AppToast.show(context, 'Failed to pick image', isError: true);
