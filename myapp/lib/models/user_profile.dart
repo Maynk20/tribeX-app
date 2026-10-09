@@ -64,11 +64,11 @@ class UserProfile {
       hasCompletedProfile:
           json['has_completed_profile'] as bool? ??
           json['hasCompletedProfile'] as bool? ??
-          true,
+          false,
       hasCompletedOnboarding:
           json['has_completed_onboarding'] as bool? ??
           json['hasCompletedOnboarding'] as bool? ??
-          true,
+          false,
       interests:
           (json['interests'] as List<dynamic>?)
               ?.map((e) => e.toString())

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../state/chat_state.dart';
 
 class PollCardWidget extends StatefulWidget {
@@ -15,6 +16,8 @@ class PollCardWidget extends StatefulWidget {
 }
 
 class _PollCardWidgetState extends State<PollCardWidget> {
+  bool _isVoting = false;
+
   @override
   void initState() {
     super.initState();
@@ -154,9 +157,20 @@ class _PollCardWidgetState extends State<PollCardWidget> {
             final pct = totalVotes > 0 ? (opt.votes / totalVotes) : 0.0;
 
             return GestureDetector(
-              onTap: () {
-                if (widget.currentUserId != null) {
-                  chatState.votePoll(poll.id, opt.id, widget.currentUserId!);
+              onTap: () async {
+                if (widget.currentUserId == null) {
+                  AppToast.show(context, 'Please sign in to vote on this poll', isError: true);
+                  return;
+                }
+                if (isSelected || _isVoting) return;
+
+                setState(() => _isVoting = true);
+                try {
+                  await chatState.votePoll(poll.id, opt.id, widget.currentUserId!);
+                } finally {
+                  if (mounted) {
+                    setState(() => _isVoting = false);
+                  }
                 }
               },
               child: Container(

@@ -133,6 +133,24 @@ class LocationService {
     if (!kIsWeb) 'User-Agent': 'tribeX-app/1.0.0 (contact@tribex.app)',
   };
 
+  // Cache structures with TTL (15 minutes) to avoid repeated hits to OSM/Photon
+  static final Map<String, ({SavedPlace place, DateTime timestamp})> _resolvedPlaceCache = {};
+  static final Map<String, ({String city, DateTime timestamp})> _cityCache = {};
+  static final Map<String, ({Map<String, String> data, DateTime timestamp})> _reverseCache = {};
+  static final Map<String, ({Map<String, dynamic> data, DateTime timestamp})> _forwardCache = {};
+  static const Duration _cacheTtl = Duration(minutes: 15);
+
+  /// Clears in-memory geocoding and position caches (useful on logout / testing)
+  static void clearCache() {
+    _resolvedPlaceCache.clear();
+    _cityCache.clear();
+    _reverseCache.clear();
+    _forwardCache.clear();
+  }
+
+  static String _roundCoordKey(double lat, double lon) =>
+      '${lat.toStringAsFixed(3)},${lon.toStringAsFixed(3)}';
+
   /// JS-style `a || b || c` over strings: first non-empty (trimmed) value.
   static String firstNonEmpty(Iterable<String?> values) {
     for (final v in values) {
@@ -227,7 +245,7 @@ class LocationService {
   }
 
   /// Request location permission (if needed) and return the device's current
-  /// GPS position.  Returns [LocationResult.failure] with a user-friendly
+  /// GPS position. Returns [LocationResult.failure] with a user-friendly
   /// message when the location cannot be obtained.
   ///
   /// [maxAge] mirrors the browser `maximumAge` option: a cached fix younger
@@ -305,6 +323,15 @@ class LocationService {
       );
       return LocationResult.success(position.latitude, position.longitude);
     } on TimeoutException {
+      // Graceful fallback: If fresh satellite acquisition timed out, try last known position
+      if (!kIsWeb) {
+        try {
+          final last = await Geolocator.getLastKnownPosition();
+          if (last != null) {
+            return LocationResult.success(last.latitude, last.longitude);
+          }
+        } catch (_) {}
+      }
       return LocationResult.failure(
         msgTimeout,
         reason: LocationFailure.timeout,
@@ -320,6 +347,15 @@ class LocationService {
         reason: LocationFailure.permissionDenied,
       );
     } catch (_) {
+      // Attempt last known fix as fallback on unexpected platform failure
+      if (!kIsWeb) {
+        try {
+          final last = await Geolocator.getLastKnownPosition();
+          if (last != null) {
+            return LocationResult.success(last.latitude, last.longitude);
+          }
+        } catch (_) {}
+      }
       return LocationResult.failure(
         msgUnavailable,
         reason: LocationFailure.unavailable,
@@ -351,9 +387,7 @@ class LocationService {
   }
 
   /// Resolve the device location into a [SavedPlace] for the Explore header.
-  /// Port of TanStack `requestBrowserLocation`: balanced accuracy, 8 s timeout,
-  /// 60 s maximum age, Nominatim reverse geocode, and a `Near lat, lon`
-  /// fallback label when geocoding fails (network error / bad response).
+  /// Uses cached reverse geocode if queried within 15 minutes for similar coords.
   static Future<({SavedPlace? place, LocationResult result})>
   resolveCurrentPlace() async {
     final result = await getCurrentPosition(
@@ -365,6 +399,12 @@ class LocationService {
 
     final lat = result.latitude!;
     final lon = result.longitude!;
+    final cacheKey = _roundCoordKey(lat, lon);
+    final cached = _resolvedPlaceCache[cacheKey];
+    if (cached != null && DateTime.now().difference(cached.timestamp) < _cacheTtl) {
+      return (place: cached.place, result: result);
+    }
+
     try {
       final uri = Uri.parse(
         'https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=$lat&lon=$lon&accept-language=en',
@@ -376,16 +416,18 @@ class LocationService {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final a = (data['address'] as Map?)?.cast<String, dynamic>() ?? {};
         final built = feedLabelFromAddress(a);
+        final place = SavedPlace(
+          displayName: data['display_name']?.toString() ?? built.label,
+          short: built.label,
+          lat: lat,
+          lon: lon,
+          city: built.city,
+          state: a['state']?.toString(),
+          postcode: a['postcode']?.toString(),
+        );
+        _resolvedPlaceCache[cacheKey] = (place: place, timestamp: DateTime.now());
         return (
-          place: SavedPlace(
-            displayName: data['display_name']?.toString() ?? built.label,
-            short: built.label,
-            lat: lat,
-            lon: lon,
-            city: built.city,
-            state: a['state']?.toString(),
-            postcode: a['postcode']?.toString(),
-          ),
+          place: place,
           result: result,
         );
       }
@@ -393,13 +435,15 @@ class LocationService {
       // fall through to coordinate label
     }
     final fallback = coordinateFallbackLabel(lat, lon);
+    final place = SavedPlace(
+      displayName: fallback,
+      short: fallback,
+      lat: lat,
+      lon: lon,
+    );
+    _resolvedPlaceCache[cacheKey] = (place: place, timestamp: DateTime.now());
     return (
-      place: SavedPlace(
-        displayName: fallback,
-        short: fallback,
-        lat: lat,
-        lon: lon,
-      ),
+      place: place,
       result: result,
     );
   }
@@ -407,6 +451,12 @@ class LocationService {
   /// Reverse geocode for the profile `city` column, capped at 3 s exactly like
   /// TanStack so the save flow never hangs; falls back to `Near lat, lon`.
   static Future<String> resolveProfileCity(double lat, double lon) async {
+    final cacheKey = _roundCoordKey(lat, lon);
+    final cached = _cityCache[cacheKey];
+    if (cached != null && DateTime.now().difference(cached.timestamp) < _cacheTtl) {
+      return cached.city;
+    }
+
     final fallback = coordinateFallbackLabel(lat, lon);
     try {
       final uri = Uri.parse(
@@ -418,15 +468,18 @@ class LocationService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final a = (data['address'] as Map?)?.cast<String, dynamic>() ?? {};
-        return profileCityFromAddress(
+        final city = profileCityFromAddress(
           a,
           displayName: data['display_name']?.toString(),
           fallback: fallback,
         );
+        _cityCache[cacheKey] = (city: city, timestamp: DateTime.now());
+        return city;
       }
     } catch (_) {
       // keep coordinate fallback
     }
+    _cityCache[cacheKey] = (city: fallback, timestamp: DateTime.now());
     return fallback;
   }
 
@@ -453,6 +506,12 @@ class LocationService {
     double lat,
     double lon,
   ) async {
+    final cacheKey = _roundCoordKey(lat, lon);
+    final cached = _reverseCache[cacheKey];
+    if (cached != null && DateTime.now().difference(cached.timestamp) < _cacheTtl) {
+      return cached.data;
+    }
+
     // 1. Try Photon reverse geocoding
     try {
       final uri = Uri.parse(
@@ -499,7 +558,9 @@ class LocationService {
               ? subtitleParts.join(', ')
               : 'Near ${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}';
 
-          return {'title': title, 'subtitle': subtitle};
+          final result = {'title': title, 'subtitle': subtitle};
+          _reverseCache[cacheKey] = (data: result, timestamp: DateTime.now());
+          return result;
         }
       }
     } catch (_) {}
@@ -554,7 +615,9 @@ class LocationService {
             : (data['display_name']?.toString() ??
                   'Near ${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}');
 
-        return {'title': title, 'subtitle': subtitle};
+        final result = {'title': title, 'subtitle': subtitle};
+        _reverseCache[cacheKey] = (data: result, timestamp: DateTime.now());
+        return result;
       }
     } catch (_) {}
 
@@ -564,8 +627,13 @@ class LocationService {
   /// Forward geocode an address/place name string to coordinates.
   /// Returns a map with 'title', 'subtitle', 'lat', 'lon' or null if not found.
   static Future<Map<String, dynamic>?> geocodeAddress(String query) async {
-    final q = query.trim();
+    final q = query.trim().toLowerCase();
     if (q.length < 2) return null;
+
+    final cached = _forwardCache[q];
+    if (cached != null && DateTime.now().difference(cached.timestamp) < _cacheTtl) {
+      return cached.data;
+    }
 
     // 1. Try Photon forward search
     try {
@@ -588,12 +656,14 @@ class LocationService {
               props['name']?.toString() ?? props['street']?.toString() ?? q;
           final city =
               props['city']?.toString() ?? props['state']?.toString() ?? '';
-          return {
+          final result = {
             'title': name,
             'subtitle': city.isNotEmpty ? city : 'India',
             'lat': lat,
             'lon': lon,
           };
+          _forwardCache[q] = (data: result, timestamp: DateTime.now());
+          return result;
         }
       }
     } catch (_) {}
@@ -619,13 +689,15 @@ class LocationService {
           final lat = double.tryParse(item['lat']?.toString() ?? '');
           final lon = double.tryParse(item['lon']?.toString() ?? '');
           if (lat != null && lon != null) {
-            return {
+            final result = {
               'title':
                   item['display_name']?.toString().split(',').first.trim() ?? q,
               'subtitle': item['display_name']?.toString() ?? '',
               'lat': lat,
               'lon': lon,
             };
+            _forwardCache[q] = (data: result, timestamp: DateTime.now());
+            return result;
           }
         }
       }

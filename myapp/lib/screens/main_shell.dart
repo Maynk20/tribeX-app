@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
+import '../services/location_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/chat_state.dart';
@@ -45,6 +46,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       context.read<ActivitiesState>().reconnectRealtime();
+      context.read<ChatState>().reconnectActiveSubscriptions();
     }
   }
 
@@ -129,6 +131,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (mounted) {
           context.read<NotificationsState>().initUser(currentUserId);
           context.read<ChatState>().clear();
+          if (currentUserId == null) {
+            LocationService.clearCache();
+          }
         }
       });
     }
