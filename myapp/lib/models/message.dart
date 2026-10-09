@@ -1,3 +1,4 @@
+import '../core/utils/date_formatter.dart';
 import 'user_profile.dart';
 
 class Message {
@@ -45,9 +46,7 @@ class Message {
       senderId:
           json['sender_id'] as String? ?? json['senderId'] as String? ?? '',
       text: json['text'] as String? ?? json['message'] as String? ?? '',
-      createdAt: json['created_at'] != null
-          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
-          : DateTime.now(),
+      createdAt: DateFormatter.parseServerDateTime(json['created_at']),
       sender: senderObj,
       isSending: json['is_sending'] == true,
       isFailed: json['is_failed'] == true,
@@ -60,7 +59,7 @@ class Message {
       'activity_id': activityId,
       'sender_id': senderId,
       'text': text,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 
@@ -84,6 +83,27 @@ class Message {
       isSending: isSending ?? this.isSending,
       isFailed: isFailed ?? this.isFailed,
     );
+  }
+
+  /// Whether this message represents a plan/membership system event
+  bool get isSystemEvent {
+    final trimmed = text.trim();
+    return trimmed.startsWith('SYSTEM:') ||
+        trimmed.startsWith('EVENT:') ||
+        trimmed.startsWith('[SYSTEM]') ||
+        trimmed.contains(' joined the squad') ||
+        trimmed.contains(' left the squad') ||
+        trimmed.contains(' updated the plan details') ||
+        trimmed.contains(' created the plan');
+  }
+
+  /// Clean display text for system event chips
+  String get systemDisplayText {
+    final trimmed = text.trim();
+    if (trimmed.startsWith('SYSTEM:')) return trimmed.substring(7).trim();
+    if (trimmed.startsWith('EVENT:')) return trimmed.substring(6).trim();
+    if (trimmed.startsWith('[SYSTEM]')) return trimmed.substring(8).trim();
+    return trimmed;
   }
 
   /// Check if text is encoded expense card `[[expense:<id>]]` or `EXPENSE:<id>`

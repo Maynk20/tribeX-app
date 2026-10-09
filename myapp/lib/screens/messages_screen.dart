@@ -127,6 +127,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
           a.category.toLowerCase().contains(q);
     }).toList();
 
+    // Sort by latest message timestamp (or event dateTime fallback) descending
+    myChats.sort((a, b) {
+      final msgsA = chatState.getMessagesForActivity(a.id);
+      final msgsB = chatState.getMessagesForActivity(b.id);
+      final timeA = msgsA.isNotEmpty ? msgsA.last.createdAt : a.dateTime;
+      final timeB = msgsB.isNotEmpty ? msgsB.last.createdAt : b.dateTime;
+      return timeB.compareTo(timeA);
+    });
+
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -256,12 +265,17 @@ class _MessagesScreenState extends State<MessagesScreen> {
                             final hasMsgs = msgs.isNotEmpty;
                             final lastMsg = hasMsgs ? msgs.last : null;
 
-                            String subtitleText = chat.location;
+                            String subtitleText = chat.isVirtual
+                                ? '🌐 Virtual Event'
+                                : '📍 ${chat.location}';
                             DateTime displayTime = chat.dateTime;
 
                             if (lastMsg != null) {
                               displayTime = lastMsg.createdAt;
-                              if (lastMsg.expenseId != null ||
+                              if (lastMsg.isSystemEvent) {
+                                subtitleText =
+                                    '📢 ${lastMsg.systemDisplayText}';
+                              } else if (lastMsg.expenseId != null ||
                                   lastMsg.text.startsWith('EXPENSE:')) {
                                 subtitleText = '💰 Split expense request';
                               } else if (lastMsg.pollId != null ||
@@ -269,16 +283,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                 subtitleText = '📊 Group poll created';
                               } else {
                                 final senderName =
-                                    lastMsg.sender?.fullName ??
-                                    lastMsg.sender?.username;
-                                if (senderName != null &&
-                                    senderName.isNotEmpty &&
-                                    lastMsg.senderId != user.id) {
-                                  subtitleText = '$senderName: ${lastMsg.text}';
-                                } else if (lastMsg.senderId == user.id) {
+                                    lastMsg.sender?.fullName.isNotEmpty == true
+                                    ? lastMsg.sender!.fullName
+                                    : (lastMsg.sender?.username.isNotEmpty ==
+                                              true
+                                          ? lastMsg.sender!.username
+                                          : 'Squad Member');
+                                if (lastMsg.senderId == user.id) {
                                   subtitleText = 'You: ${lastMsg.text}';
                                 } else {
-                                  subtitleText = lastMsg.text;
+                                  subtitleText = '$senderName: ${lastMsg.text}';
                                 }
                               }
                             }
@@ -324,20 +338,67 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                                 MainAxisAlignment.spaceBetween,
                                             children: [
                                               Expanded(
-                                                child: Text(
-                                                  chat.title,
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: isDark
-                                                        ? AppColors
-                                                              .foregroundDark
-                                                        : AppColors
-                                                              .foregroundLight,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                                child: Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        chat.title,
+                                                        style: TextStyle(
+                                                          fontSize: 14,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: isDark
+                                                              ? AppColors
+                                                                    .foregroundDark
+                                                              : AppColors
+                                                                    .foregroundLight,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 4.5,
+                                                            vertical: 1,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: chat.isVirtual
+                                                            ? AppColors
+                                                                  .primaryMuted
+                                                            : (isDark
+                                                                  ? AppColors
+                                                                        .mutedDark
+                                                                  : AppColors
+                                                                        .mutedLight),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              4,
+                                                            ),
+                                                      ),
+                                                      child: Text(
+                                                        chat.isVirtual
+                                                            ? 'Virtual'
+                                                            : 'In-Person',
+                                                        style: TextStyle(
+                                                          fontSize: 8.5,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: chat.isVirtual
+                                                              ? AppColors
+                                                                    .primary
+                                                              : (isDark
+                                                                    ? AppColors
+                                                                          .mutedForegroundDark
+                                                                    : AppColors
+                                                                          .mutedForegroundLight),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                               Text(

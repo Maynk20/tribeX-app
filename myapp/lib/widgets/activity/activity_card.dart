@@ -286,9 +286,9 @@ class ActivityCard extends StatelessWidget {
                         child: Text(
                           activity.isOnline
                               ? (activity.location.trim().isNotEmpty &&
-                                      activity.location.trim() != 'Online'
-                                  ? 'Virtual · ${activity.location.trim()}'
-                                  : 'Virtual Event · Online')
+                                        activity.location.trim() != 'Online'
+                                    ? 'Virtual · ${activity.location.trim()}'
+                                    : 'Virtual Event · Online')
                               : activity.location,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1085,9 +1085,9 @@ class _VirtualMeetingButtonState extends State<_VirtualMeetingButton> {
     try {
       final link = widget.activity.meetingLink?.trim().isNotEmpty == true
           ? widget.activity.meetingLink!.trim()
-          : await context
-              .read<ActivitiesState>()
-              .fetchMeetingLink(widget.activity.id);
+          : await context.read<ActivitiesState>().fetchMeetingLink(
+              widget.activity.id,
+            );
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -1124,9 +1124,9 @@ class _VirtualMeetingButtonState extends State<_VirtualMeetingButton> {
       onLongPress: () async {
         final link = widget.activity.meetingLink?.trim().isNotEmpty == true
             ? widget.activity.meetingLink!.trim()
-            : await context
-                .read<ActivitiesState>()
-                .fetchMeetingLink(widget.activity.id);
+            : await context.read<ActivitiesState>().fetchMeetingLink(
+                widget.activity.id,
+              );
         if (link != null && link.isNotEmpty) {
           await Clipboard.setData(ClipboardData(text: link));
           if (context.mounted) {
@@ -1140,17 +1140,11 @@ class _VirtualMeetingButtonState extends State<_VirtualMeetingButton> {
         decoration: BoxDecoration(
           color: AppColors.successMuted,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppColors.success.withValues(alpha: 0.3),
-          ),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
-            const Icon(
-              LucideIcons.video,
-              size: 14,
-              color: AppColors.success,
-            ),
+            const Icon(LucideIcons.video, size: 14, color: AppColors.success),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -1175,4 +1169,3 @@ class _VirtualMeetingButtonState extends State<_VirtualMeetingButton> {
     );
   }
 }
-
