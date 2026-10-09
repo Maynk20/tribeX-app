@@ -70,7 +70,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _send() {
+  void _send() async {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty) return;
 
@@ -78,14 +78,21 @@ class _ChatScreenState extends State<ChatScreen> {
     final me = authState.currentUser;
 
     if (me != null) {
-      context.read<ChatState>().sendMessage(
+      _msgCtrl.clear();
+      _scrollToBottom();
+      final success = await context.read<ChatState>().sendMessage(
         activityId: widget.activity.id,
         senderId: me.id,
         text: text,
         sender: me,
       );
-      _msgCtrl.clear();
-      _scrollToBottom();
+      if (!success && mounted) {
+        AppToast.show(
+          context,
+          'Failed to send message. Please retry.',
+          isError: true,
+        );
+      }
     }
   }
 
@@ -213,7 +220,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 parent: BouncingScrollPhysics(),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              itemCount: messages.length + 2,
+              itemCount: messages.isEmpty ? 3 : messages.length + 2,
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return CheckInPanel(
@@ -226,6 +233,47 @@ class _ChatScreenState extends State<ChatScreen> {
                   return MemoryBannerWidget(
                     activity: widget.activity,
                     canUpload: isHost || myReq?.status.name == 'accepted',
+                  );
+                }
+
+                if (messages.isEmpty && index == 2) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 32,
+                            color: isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No messages yet',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Be the first to say hi to the squad!',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
 

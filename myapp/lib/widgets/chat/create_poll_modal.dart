@@ -50,20 +50,38 @@ class _CreatePollModalState extends State<CreatePollModal> {
       return;
     }
 
+    final uniqueOpts = <String>{};
+    for (final opt in opts) {
+      if (!uniqueOpts.add(opt.toLowerCase())) {
+        AppToast.show(context, 'Poll options must be unique', isError: true);
+        return;
+      }
+    }
+
+    final me = context.read<AuthState>().currentUser;
+    if (me == null) {
+      AppToast.show(context, 'Please sign in to create a poll', isError: true);
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
-      final me = context.read<AuthState>().currentUser;
-      await context.read<ChatState>().createPoll(
+      final success = await context.read<ChatState>().createPoll(
         activityId: widget.activityId,
-        creatorId: me?.id ?? "host",
+        creatorId: me.id,
         question: q,
         optionTexts: opts,
         creator: me,
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      if (success) {
+        Navigator.of(context).pop();
+        AppToast.show(context, 'Poll created');
+      } else {
+        AppToast.show(context, 'Failed to create poll. Please try again.', isError: true);
+      }
     } catch (e) {
       if (!mounted) return;
       AppToast.show(context, 'Failed to create poll', isError: true);

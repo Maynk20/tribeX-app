@@ -70,19 +70,51 @@ class ChatState extends ChangeNotifier {
     if (client == null || _isDisposed) return;
 
     try {
-      final res = await client
-          .from('messages')
-          .select('*, profiles_public(*)')
-          .eq('activity_id', activityId)
-          .order('created_at', ascending: true);
+      dynamic res;
+      try {
+        res = await client
+            .from('messages')
+            .select('*, profiles_public(*)')
+            .eq('activity_id', activityId)
+            .order('created_at', ascending: true);
+      } catch (_) {
+        res = await client
+            .from('messages')
+            .select('*, profiles(*)')
+            .eq('activity_id', activityId)
+            .order('created_at', ascending: true);
+      }
 
       if (_isDisposed) return;
 
       final msgs = (res as List<dynamic>)
           .map((json) => Message.fromJson(json as Map<String, dynamic>))
           .toList();
-      msgs.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      _messagesByActivity[activityId] = msgs;
+
+      final currentList = _messagesByActivity[activityId] ?? [];
+      final pendingTemp =
+          currentList.where((m) => m.id.startsWith('temp_')).toList();
+
+      final Map<String, Message> deduped = {};
+      for (final m in msgs) {
+        deduped[m.id] = m;
+      }
+      for (final temp in pendingTemp) {
+        final alreadyDelivered = msgs.any(
+          (m) =>
+              m.senderId == temp.senderId &&
+              m.text == temp.text &&
+              m.createdAt.difference(temp.createdAt).abs().inSeconds < 15,
+        );
+        if (!alreadyDelivered) {
+          deduped[temp.id] = temp;
+        }
+      }
+
+      final merged = deduped.values.toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+      _messagesByActivity[activityId] = merged;
 
       if (!_isDisposed) {
         notifyListeners();
@@ -146,7 +178,7 @@ class ChatState extends ChangeNotifier {
     if (client == null) return;
 
     final channel = client
-        .channel('public:messages:$activityId')
+        .channel('chat_activity_$activityId')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -162,23 +194,101 @@ class ChatState extends ChangeNotifier {
             }
           },
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'polls',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'activity_id',
+            value: activityId,
+          ),
+          callback: (payload) {
+            if (!_isDisposed) {
+              final pollId = payload.newRecord['id']?.toString() ??
+                  payload.oldRecord['id']?.toString();
+              if (pollId != null) {
+                fetchPoll(pollId);
+              }
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'poll_votes',
+          callback: (payload) {
+            if (!_isDisposed) {
+              final pollId = payload.newRecord['poll_id']?.toString() ??
+                  payload.oldRecord['poll_id']?.toString();
+              if (pollId != null && _polls.containsKey(pollId)) {
+                fetchPoll(pollId);
+              }
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'expenses',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'activity_id',
+            value: activityId,
+          ),
+          callback: (payload) {
+            if (!_isDisposed) {
+              final expId = payload.newRecord['id']?.toString() ??
+                  payload.oldRecord['id']?.toString();
+              if (expId != null) {
+                fetchExpense(expId);
+              }
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'expense_shares',
+          callback: (payload) {
+            if (!_isDisposed) {
+              final expId = payload.newRecord['expense_id']?.toString() ??
+                  payload.oldRecord['expense_id']?.toString();
+              if (expId != null && _expenses.containsKey(expId)) {
+                fetchExpense(expId);
+              }
+            }
+          },
+        )
         .subscribe();
 
     _activeChannels[activityId] = channel;
   }
 
-  Future<void> sendMessage({
+  void reconnectActiveSubscriptions() {
+    if (_isDisposed) return;
+    final activityIds = List<String>.from(_activeChannels.keys);
+    for (final id in activityIds) {
+      _activeChannels[id]?.unsubscribe();
+      _activeChannels.remove(id);
+      _subscribeActivityChat(id);
+      fetchMessagesForActivity(id);
+    }
+  }
+
+  Future<bool> sendMessage({
     required String activityId,
     required String senderId,
     required String text,
     UserProfile? sender,
   }) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return;
+    if (client == null || _isDisposed) return false;
 
     // Optimistic local update
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
     final optimisticMsg = Message(
-      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      id: tempId,
       activityId: activityId,
       senderId: senderId,
       text: text,
@@ -191,20 +301,50 @@ class ChatState extends ChangeNotifier {
     if (!_isDisposed) notifyListeners();
 
     try {
-      await client.from('messages').insert({
-        'activity_id': activityId,
-        'sender_id': senderId,
-        'text': text,
-      });
-      // Note: If realtime subscription is active, it will auto-refresh.
-      // In case realtime is not connected or delayed, fetch once after slight delay if needed.
+      dynamic inserted;
+      try {
+        inserted = await client
+            .from('messages')
+            .insert({
+              'activity_id': activityId,
+              'sender_id': senderId,
+              'text': text,
+            })
+            .select('*, profiles_public(*)')
+            .maybeSingle();
+      } catch (_) {
+        inserted = await client
+            .from('messages')
+            .insert({
+              'activity_id': activityId,
+              'sender_id': senderId,
+              'text': text,
+            })
+            .select('*, profiles(*)')
+            .maybeSingle();
+      }
+
+      if (inserted != null && !_isDisposed) {
+        final realMsg = Message.fromJson(inserted as Map<String, dynamic>);
+        final idx = currentList.indexWhere((m) => m.id == tempId);
+        if (idx != -1) {
+          currentList[idx] = realMsg;
+        } else if (!currentList.any((m) => m.id == realMsg.id)) {
+          currentList.add(realMsg);
+        }
+        notifyListeners();
+      }
+
       if (!_activeChannels.containsKey(activityId)) {
         await fetchMessagesForActivity(activityId);
       }
-    } catch (_) {
+      return true;
+    } catch (e) {
+      debugPrint('sendMessage error: $e');
       // Revert optimistic message on error
-      currentList.remove(optimisticMsg);
+      currentList.removeWhere((m) => m.id == tempId);
       if (!_isDisposed) notifyListeners();
+      return false;
     }
   }
 
@@ -293,7 +433,7 @@ class ChatState extends ChangeNotifier {
     }
   }
 
-  Future<void> createPoll({
+  Future<bool> createPoll({
     required String activityId,
     required String creatorId,
     required String question,
@@ -301,7 +441,7 @@ class ChatState extends ChangeNotifier {
     UserProfile? creator,
   }) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return;
+    if (client == null || _isDisposed) return false;
 
     try {
       final pollRes = await client
@@ -325,16 +465,43 @@ class ChatState extends ChangeNotifier {
         text: 'POLL:$pollId',
         sender: creator,
       );
+      return true;
     } catch (e) {
       debugPrint('createPoll error: $e');
+      return false;
     }
   }
 
-  Future<void> votePoll(String pollId, String optionId, String userId) async {
+  Future<bool> votePoll(String pollId, String optionId, String userId) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return;
+    if (client == null || _isDisposed) return false;
 
     final int optionIdx = int.tryParse(optionId) ?? 0;
+
+    // Optimistic local update
+    final currentPoll = _polls[pollId];
+    if (currentPoll != null) {
+      final updatedOptions = currentPoll.options.asMap().entries.map((entry) {
+        final idx = entry.key;
+        final opt = entry.value;
+        final newVoters = List<String>.from(opt.voterIds);
+        newVoters.remove(userId);
+        if (idx == optionIdx) {
+          newVoters.add(userId);
+        }
+        return opt.copyWith(voterIds: newVoters);
+      }).toList();
+
+      _polls[pollId] = Poll(
+        id: currentPoll.id,
+        activityId: currentPoll.activityId,
+        creatorId: currentPoll.creatorId,
+        question: currentPoll.question,
+        options: updatedOptions,
+        createdAt: currentPoll.createdAt,
+      );
+      if (!_isDisposed) notifyListeners();
+    }
 
     try {
       await client.from('poll_votes').upsert({
@@ -344,8 +511,14 @@ class ChatState extends ChangeNotifier {
       }, onConflict: 'poll_id,user_id');
 
       await fetchPoll(pollId);
+      return true;
     } catch (e) {
       debugPrint('votePoll error: $e');
+      if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        if (!_isDisposed) notifyListeners();
+      }
+      return false;
     }
   }
 

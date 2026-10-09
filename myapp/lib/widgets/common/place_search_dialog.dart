@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/location_feedback.dart';
 import '../../services/location_service.dart';
 
 class PlaceItem {
@@ -49,6 +50,7 @@ class PlaceSearchDialog extends StatefulWidget {
 }
 
 class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
+  static final Map<String, List<PlaceItem>> _searchCache = {};
   late TextEditingController _searchCtrl;
   String _query = "";
   List<PlaceItem> _searchResults = [];
@@ -161,12 +163,34 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
       return;
     }
 
+    final cacheKey = trimmed.toLowerCase();
+    if (_searchCache.containsKey(cacheKey)) {
+      setState(() {
+        _searchResults = _searchCache[cacheKey]!;
+        _isLoading = false;
+        _error = null;
+      });
+      return;
+    }
+
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
       _performLiveSearch(trimmed);
     });
   }
 
   Future<void> _performLiveSearch(String q) async {
+    final cacheKey = q.toLowerCase();
+    if (_searchCache.containsKey(cacheKey)) {
+      if (mounted) {
+        setState(() {
+          _searchResults = _searchCache[cacheKey]!;
+          _isLoading = false;
+          _error = null;
+        });
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -194,9 +218,15 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
         }
       }
 
+      final results = uniqueMap.values.toList();
+      if (_searchCache.length > 50) {
+        _searchCache.remove(_searchCache.keys.first);
+      }
+      _searchCache[cacheKey] = results;
+
       if (mounted) {
         setState(() {
-          _searchResults = uniqueMap.values.toList();
+          _searchResults = results;
           _isLoading = false;
         });
       }
@@ -221,10 +251,12 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
     if (!mounted) return;
 
     if (!res.isSuccess) {
+      final errorMsg = res.error ?? "Couldn't detect your GPS location.";
       setState(() {
         _isLocatingCurrent = false;
-        _error = res.error ?? "Couldn't detect your GPS location.";
+        _error = errorMsg;
       });
+      showLocationError(context, errorMsg);
       return;
     }
 
@@ -535,11 +567,59 @@ class _PlaceSearchDialogState extends State<PlaceSearchDialog> {
                 ),
               )
             else if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(fontSize: 12, color: Colors.red),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.alertCircle, size: 16, color: Colors.red),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_error == LocationService.msgDeniedForever) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => LocationService.openAppSettings(),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Open Settings', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ] else if (_error == LocationService.msgServiceDisabled) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => LocationService.openLocationSettings(),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Turn on GPS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               )
             else if (trimmed.length < 2)

@@ -8,6 +8,7 @@ import '../core/utils/date_formatter.dart';
 import '../models/join_request.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
+import '../state/chat_state.dart';
 import 'auth_screen.dart';
 import 'chat_screen.dart';
 
@@ -25,6 +26,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Widget build(BuildContext context) {
     final actState = context.watch<ActivitiesState>();
     final authState = context.watch<AuthState>();
+    final chatState = context.watch<ChatState>();
     final user = authState.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
@@ -210,6 +212,31 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         ),
                         itemBuilder: (ctx, idx) {
                           final chat = myChats[idx];
+                          final msgs = chatState.getMessagesForActivity(chat.id);
+                          final hasMsgs = msgs.isNotEmpty;
+                          final lastMsg = hasMsgs ? msgs.last : null;
+
+                          String subtitleText = chat.location;
+                          DateTime displayTime = chat.dateTime;
+
+                          if (lastMsg != null) {
+                            displayTime = lastMsg.createdAt;
+                            if (lastMsg.expenseId != null || lastMsg.text.startsWith('EXPENSE:')) {
+                              subtitleText = '💰 Split expense request';
+                            } else if (lastMsg.pollId != null || lastMsg.text.startsWith('POLL:')) {
+                              subtitleText = '📊 Group poll created';
+                            } else {
+                              final senderName = lastMsg.sender?.fullName ?? lastMsg.sender?.username;
+                              if (senderName != null && senderName.isNotEmpty && lastMsg.senderId != user.id) {
+                                subtitleText = '$senderName: ${lastMsg.text}';
+                              } else if (lastMsg.senderId == user.id) {
+                                subtitleText = 'You: ${lastMsg.text}';
+                              } else {
+                                subtitleText = lastMsg.text;
+                              }
+                            }
+                          }
+
                           return InkWell(
                             onTap: () {
                               Navigator.push(
@@ -265,7 +292,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                             ),
                                             Text(
                                               DateFormatter.formatChatDate(
-                                                chat.dateTime,
+                                                displayTime,
                                               ),
                                               style: TextStyle(
                                                 fontSize: 11,
@@ -280,13 +307,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          chat.location,
+                                          subtitleText,
                                           style: TextStyle(
                                             fontSize: 12,
+                                            fontWeight: hasMsgs ? FontWeight.w500 : FontWeight.normal,
                                             color: isDark
-                                                ? AppColors.mutedForegroundDark
-                                                : AppColors
-                                                      .mutedForegroundLight,
+                                                ? (hasMsgs ? AppColors.foregroundDark.withValues(alpha: 0.85) : AppColors.mutedForegroundDark)
+                                                : (hasMsgs ? AppColors.foregroundLight.withValues(alpha: 0.85) : AppColors.mutedForegroundLight),
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
