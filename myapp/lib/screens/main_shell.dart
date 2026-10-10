@@ -149,7 +149,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 onNavigateToProfile: _goToProfile,
               ),
               CreatePlanScreen(onPlanCreated: _goToExplore),
-              const MessagesScreen(),
+              MessagesScreen(
+                onNavigateToExplore: _goToExplore,
+                onNavigateToCreate: _goToCreate,
+              ),
               const ProfileScreen(),
             ],
           ),

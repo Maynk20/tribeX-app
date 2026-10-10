@@ -8,11 +8,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/categories.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_tokens.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/activity.dart';
 import '../../models/join_request.dart';
 import '../../state/activities_state.dart';
+import '../common/app_avatar.dart';
 
 /// ActivityCard matching the TanStack/React index.tsx ActivityCard component exactly.
 ///
@@ -114,14 +116,13 @@ class ActivityCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: cardBg,
-          // rounded-3xl = 28px radius
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: border.withValues(alpha: 0.6)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -515,27 +516,11 @@ class ActivityCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
 
-                      // Host avatar (h-4 w-4 = 16px circle)
-                      CircleAvatar(
-                        radius: 8,
-                        backgroundColor: AppColors.primaryMuted,
-                        backgroundImage: host?.avatarUrl != null
-                            ? NetworkImage(host!.avatarUrl!)
-                            : null,
-                        onBackgroundImageError: host?.avatarUrl != null
-                            ? (exception, stackTrace) {}
-                            : null,
-                        child: host?.avatarUrl == null
-                            ? Text(
-                                (hostName.isNotEmpty ? hostName[0] : 'H')
-                                    .toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              )
-                            : null,
+                      // Host avatar with robust fallback
+                      AppAvatar(
+                        name: hostName,
+                        imageUrl: host?.avatarUrl,
+                        radius: 9,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
@@ -611,6 +596,7 @@ class ActivityCard extends StatelessWidget {
                               ? AppColors.mutedForegroundDark
                               : AppColors.mutedForegroundLight,
                           borderColor: border.withValues(alpha: 0.6),
+                          tooltip: 'Open squad chat',
                         ),
                         const SizedBox(width: 6),
 
@@ -626,6 +612,7 @@ class ActivityCard extends StatelessWidget {
                               ? AppColors.mutedForegroundDark
                               : AppColors.mutedForegroundLight,
                           borderColor: border.withValues(alpha: 0.6),
+                          tooltip: 'Edit plan',
                         ),
                         const SizedBox(width: 6),
 
@@ -641,6 +628,7 @@ class ActivityCard extends StatelessWidget {
                               ? AppColors.mutedForegroundDark
                               : AppColors.mutedForegroundLight,
                           borderColor: border.withValues(alpha: 0.6),
+                          tooltip: 'Delete plan',
                         ),
                       ] else ...[
                         // Chat icon button (guest)
@@ -655,6 +643,7 @@ class ActivityCard extends StatelessWidget {
                               ? AppColors.mutedForegroundDark
                               : AppColors.mutedForegroundLight,
                           borderColor: border.withValues(alpha: 0.6),
+                          tooltip: 'Open squad chat',
                         ),
                         if (onReport != null) ...[
                           const SizedBox(width: 6),
@@ -987,18 +976,32 @@ class _CircleIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          shape: BoxShape.circle,
-          border: borderColor != null ? Border.all(color: borderColor!) : null,
-        ),
-        child: Center(
-          child: Icon(icon, size: size, color: iconColor),
+    final semanticLabel = tooltip ?? 'Action';
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: Tooltip(
+        message: semanticLabel,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: AppTouchTarget.minSize,
+            height: AppTouchTarget.minSize,
+            alignment: Alignment.center,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                shape: BoxShape.circle,
+                border: borderColor != null ? Border.all(color: borderColor!) : null,
+              ),
+              child: Center(
+                child: Icon(icon, size: size, color: iconColor),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1027,41 +1030,50 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget child = Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 8,
-      ), // px-3 py-2
-      child: Row(
-        mainAxisSize: flex ? MainAxisSize.max : MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 12, color: textColor),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12, // text-xs
-              fontWeight: FontWeight.w600, // font-semibold
-              color: textColor,
+    final Widget child = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: AppTouchTarget.minSize),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ), // px-3.5 py-2.5
+        child: Row(
+          mainAxisSize: flex ? MainAxisSize.max : MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: textColor),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12, // text-xs
+                fontWeight: FontWeight.w600, // font-semibold
+                color: textColor,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: onTap == null ? bgColor.withValues(alpha: 0.7) : bgColor,
-          borderRadius: BorderRadius.circular(999), // rounded-full
-          border: borderColor != null ? Border.all(color: borderColor!) : null,
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          decoration: BoxDecoration(
+            color: onTap == null ? bgColor.withValues(alpha: 0.7) : bgColor,
+            borderRadius: BorderRadius.circular(999), // rounded-full
+            border: borderColor != null ? Border.all(color: borderColor!) : null,
+          ),
+          child: child,
         ),
-        child: child,
       ),
     );
   }

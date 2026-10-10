@@ -104,62 +104,67 @@ class _NavItem extends StatelessWidget {
     const activeColor = AppColors.primary;
 
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Top active pill indicator: h-1 w-8 at top, rounded-full, bg-primary
-            Positioned(
-              top: 0,
-              child: AnimatedOpacity(
-                opacity: isActive ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: Container(
-                  width: 32,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: activeColor,
-                    borderRadius: BorderRadius.circular(999),
+      child: Semantics(
+        button: true,
+        selected: isActive,
+        label: '$label tab',
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Top active pill indicator: h-1 w-8 at top, rounded-full, bg-primary
+              Positioned(
+                top: 0,
+                child: AnimatedOpacity(
+                  opacity: isActive ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Container(
+                    width: 32,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: activeColor,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // Tab content: icon + label
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Icon with scale-110 when active
-                  AnimatedScale(
-                    scale: isActive ? 1.12 : 1.0,
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutBack,
-                    child: Icon(
-                      icon,
-                      size: 20,
-                      color: isActive ? activeColor : inactiveColor,
+              // Tab content: icon + label
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Icon with scale-110 when active
+                    AnimatedScale(
+                      scale: isActive ? 1.12 : 1.0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutBack,
+                      child: Icon(
+                        icon,
+                        size: 20,
+                        color: isActive ? activeColor : inactiveColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 180),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                      color: isActive ? activeColor : inactiveColor,
-                      letterSpacing: 0.3,
+                    const SizedBox(height: 4),
+                    AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 180),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                        color: isActive ? activeColor : inactiveColor,
+                        letterSpacing: 0.3,
+                      ),
+                      child: Text(label),
                     ),
-                    child: Text(label),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

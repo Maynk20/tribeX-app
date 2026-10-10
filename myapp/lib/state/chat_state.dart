@@ -67,7 +67,10 @@ class ChatState extends ChangeNotifier {
   }
 
   @visibleForTesting
-  void setSquadMembersForTesting(String activityId, List<ExpenseMember> members) {
+  void setSquadMembersForTesting(
+    String activityId,
+    List<ExpenseMember> members,
+  ) {
     _squadMembersByActivity[activityId] = members;
   }
 
@@ -167,8 +170,9 @@ class ChatState extends ChangeNotifier {
           for (final p in (profRes as List<dynamic>)) {
             final pid = p['id']?.toString();
             if (pid != null) {
-              _profileCache[pid] =
-                  UserProfile.fromJson(p as Map<String, dynamic>);
+              _profileCache[pid] = UserProfile.fromJson(
+                p as Map<String, dynamic>,
+              );
             }
           }
         } catch (e) {
@@ -325,8 +329,9 @@ class ChatState extends ChangeNotifier {
           for (final p in (profRes as List<dynamic>)) {
             final pid = p['id']?.toString();
             if (pid != null) {
-              _profileCache[pid] =
-                  UserProfile.fromJson(p as Map<String, dynamic>);
+              _profileCache[pid] = UserProfile.fromJson(
+                p as Map<String, dynamic>,
+              );
             }
           }
         } catch (_) {}
@@ -729,8 +734,9 @@ class ChatState extends ChangeNotifier {
       if (senderProfile == null) {
         final cachedMembers = _squadMembersByActivity[activityId];
         if (cachedMembers != null) {
-          final member =
-              cachedMembers.where((m) => m.userId == senderId).firstOrNull;
+          final member = cachedMembers
+              .where((m) => m.userId == senderId)
+              .firstOrNull;
           if (member != null &&
               member.name.isNotEmpty &&
               member.name != 'Squad Member') {
@@ -851,7 +857,8 @@ class ChatState extends ChangeNotifier {
       if (rpcRes is List<dynamic> && rpcRes.isNotEmpty) {
         final list = rpcRes.map((item) {
           final map = item as Map<String, dynamic>;
-          final name = map['full_name']?.toString() ??
+          final name =
+              map['full_name']?.toString() ??
               map['username']?.toString() ??
               'Squad Member';
           final uid = map['user_id']?.toString() ?? '';
@@ -1031,9 +1038,7 @@ class ChatState extends ChangeNotifier {
       try {
         hostedRes = await client
             .from('activities')
-            .select(
-              '*, profiles_public(id, full_name, username, avatar_url)',
-            )
+            .select('*, profiles_public(id, full_name, username, avatar_url)')
             .eq('host_id', userId)
             .filter('deleted_at', 'is', null)
             .order('date_time', ascending: false);
@@ -1041,9 +1046,7 @@ class ChatState extends ChangeNotifier {
         try {
           hostedRes = await client
               .from('activities')
-              .select(
-                '*, profiles(id, full_name, username, avatar_url)',
-              )
+              .select('*, profiles(id, full_name, username, avatar_url)')
               .eq('host_id', userId)
               .filter('deleted_at', 'is', null)
               .order('date_time', ascending: false);
@@ -1082,18 +1085,14 @@ class ChatState extends ChangeNotifier {
         try {
           joinedRes = await client
               .from('activities')
-              .select(
-                '*, profiles_public(id, full_name, username, avatar_url)',
-              )
+              .select('*, profiles_public(id, full_name, username, avatar_url)')
               .filter('id', 'in', joinedActivityIds)
               .filter('deleted_at', 'is', null);
         } catch (_) {
           try {
             joinedRes = await client
                 .from('activities')
-                .select(
-                  '*, profiles(id, full_name, username, avatar_url)',
-                )
+                .select('*, profiles(id, full_name, username, avatar_url)')
                 .filter('id', 'in', joinedActivityIds)
                 .filter('deleted_at', 'is', null);
           } catch (_) {
@@ -1165,37 +1164,27 @@ class ChatState extends ChangeNotifier {
     if (!_isDisposed) notifyListeners();
 
     try {
-      dynamic inserted;
-      try {
-        inserted = await client
-            .from('messages')
-            .insert({
-              'id': clientMsgId,
-              'activity_id': activityId,
-              'sender_id': verifiedSenderId,
-              'text': text,
-            })
-            .select(
-              'id, activity_id, sender_id, text, created_at, profiles_public(id, username, full_name, avatar_url)',
-            )
-            .maybeSingle();
-      } catch (_) {
-        inserted = await client
-            .from('messages')
-            .insert({
-              'id': clientMsgId,
-              'activity_id': activityId,
-              'sender_id': verifiedSenderId,
-              'text': text,
-            })
-            .select(
-              'id, activity_id, sender_id, text, created_at, profiles(id, username, full_name, avatar_url)',
-            )
-            .maybeSingle();
+      // Keep the message insert independent from optional profile relations.
+      // A relation-select can fail after the insert has already committed;
+      // retrying the same UUID would then turn a successful insert into a
+      // misleading duplicate-key failure.
+      final inserted = await client
+          .from('messages')
+          .insert({
+            'id': clientMsgId,
+            'activity_id': activityId,
+            'sender_id': verifiedSenderId,
+            'text': text,
+          })
+          .select('id, activity_id, sender_id, text, created_at')
+          .maybeSingle();
+
+      if (inserted == null) {
+        throw StateError('Message insert returned no row');
       }
 
-      if (inserted != null && !_isDisposed) {
-        final realMsg = Message.fromJson(inserted as Map<String, dynamic>);
+      if (!_isDisposed) {
+        final realMsg = Message.fromJson(inserted).copyWith(sender: sender);
         final idx = currentList.indexWhere((m) => m.id == clientMsgId);
         if (idx != -1) {
           currentList[idx] = realMsg;
@@ -1249,38 +1238,26 @@ class ChatState extends ChangeNotifier {
     final verifiedSenderId = client.auth.currentUser?.id ?? failedMsg.senderId;
 
     try {
-      dynamic inserted;
-      try {
-        // Upsert by primary key ID ensures absolute idempotency if previous insert succeeded on server
-        inserted = await client
-            .from('messages')
-            .upsert({
-              'id': failedMsg.id,
-              'activity_id': failedMsg.activityId,
-              'sender_id': verifiedSenderId,
-              'text': failedMsg.text,
-            }, onConflict: 'id')
-            .select(
-              'id, activity_id, sender_id, text, created_at, profiles_public(id, username, full_name, avatar_url)',
-            )
-            .maybeSingle();
-      } catch (_) {
-        inserted = await client
-            .from('messages')
-            .upsert({
-              'id': failedMsg.id,
-              'activity_id': failedMsg.activityId,
-              'sender_id': verifiedSenderId,
-              'text': failedMsg.text,
-            }, onConflict: 'id')
-            .select(
-              'id, activity_id, sender_id, text, created_at, profiles(id, username, full_name, avatar_url)',
-            )
-            .maybeSingle();
+      // Upsert by primary key is idempotent when retrying a message whose
+      // original insert may already have committed.
+      final inserted = await client
+          .from('messages')
+          .upsert({
+            'id': failedMsg.id,
+            'activity_id': failedMsg.activityId,
+            'sender_id': verifiedSenderId,
+            'text': failedMsg.text,
+          }, onConflict: 'id')
+          .select('id, activity_id, sender_id, text, created_at')
+          .maybeSingle();
+
+      if (inserted == null) {
+        throw StateError('Message retry returned no row');
       }
 
-      if (inserted != null && !_isDisposed) {
-        final realMsg = Message.fromJson(inserted as Map<String, dynamic>);
+      if (!_isDisposed) {
+        final realMsg = Message.fromJson(inserted)
+            .copyWith(sender: failedMsg.sender);
         final currentIdx = currentList.indexWhere((m) => m.id == failedMsg.id);
         if (currentIdx != -1) {
           currentList[currentIdx] = realMsg;
@@ -1437,8 +1414,7 @@ class ChatState extends ChangeNotifier {
 
     // Enforce server-side authenticated user identity
     final authUser = client.auth.currentUser;
-    final verifiedCreatorId =
-        (authUser?.id ?? creatorId).trim().toLowerCase();
+    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
     if (verifiedCreatorId.isEmpty) {
       debugPrint('createPoll error: Unauthenticated user');
       return false;
@@ -1481,12 +1457,19 @@ class ChatState extends ChangeNotifier {
       // TanStack-compatible format: [[poll:<uuid>]] <question>
       final formattedText = '[[poll:$pollId]] ${question.trim()}';
 
-      await sendMessage(
+      final messageSent = await sendMessage(
         activityId: activityId,
         senderId: verifiedCreatorId,
         text: formattedText,
         sender: creator,
       );
+
+      if (!messageSent) {
+        debugPrint(
+          'createPoll: poll $pollId was saved, but its chat message failed',
+        );
+        return false;
+      }
 
       // Sync to ensure server consistency
       await fetchPoll(pollId, force: true);

@@ -97,7 +97,10 @@ class AuthState extends ChangeNotifier {
     }
   }
 
+  bool _mockMode = false;
+
   void _handleSignedOut() {
+    if (_mockMode) return;
     _authRequestVersion++;
     _currentUser = null;
     _isLoading = false;
@@ -462,6 +465,14 @@ class AuthState extends ChangeNotifier {
   }
 
   bool isBlocked(String userId) => _blockedUserIds.contains(userId);
+
+  @visibleForTesting
+  void setMockUser(UserProfile? user) {
+    _mockMode = true;
+    _currentUser = user;
+    _isLoading = false;
+    if (!_isDisposed) notifyListeners();
+  }
 
   @override
   void dispose() {

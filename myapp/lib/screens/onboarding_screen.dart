@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_tokens.dart';
 import '../state/auth_state.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -51,7 +52,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xl, AppSpacing.lg, AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -97,7 +98,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   color: isValid
                       ? AppColors.successMuted
                       : AppColors.primaryMuted,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppRadius.full),
                 ),
                 child: Text(
                   '${_selected.length} selected (min 3)',
@@ -115,44 +116,55 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: SingleChildScrollView(
                   child: Wrap(
                     spacing: 8,
-                    runSpacing: 8,
+                    runSpacing: 10,
                     children: AppCategories.all.map((c) {
                       final isSelected = _selected.contains(c.key);
-                      return GestureDetector(
-                        onTap: () => _toggle(c.key),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primary : cardBg,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isSelected ? AppColors.primary : border,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                c.emoji,
-                                style: const TextStyle(fontSize: 16),
+                      return Semantics(
+                        button: true,
+                        selected: isSelected,
+                        label: '${c.label} category',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _toggle(c.key),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              constraints: const BoxConstraints(minHeight: 44),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                c.label,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : (isDark
-                                            ? AppColors.foregroundDark
-                                            : AppColors.foregroundLight),
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppColors.primary : cardBg,
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                                border: Border.all(
+                                  color: isSelected ? AppColors.primary : border,
                                 ),
                               ),
-                            ],
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    c.emoji,
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    c.label,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : (isDark
+                                                ? AppColors.foregroundDark
+                                                : AppColors.foregroundLight),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       );
@@ -167,6 +179,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: (isValid && !_isSaving) ? _submit : null,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                  ),
                   child: _isSaving
                       ? const Row(
                           mainAxisAlignment: MainAxisAlignment.center,

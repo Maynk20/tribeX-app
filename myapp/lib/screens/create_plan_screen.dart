@@ -9,12 +9,14 @@ import 'package:uuid/uuid.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_tokens.dart';
 import '../core/utils/app_toast.dart';
 import '../models/activity.dart';
 import '../services/location_service.dart';
 import '../services/storage_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
+import '../widgets/activity/activity_card.dart';
 import '../widgets/common/place_search_dialog.dart';
 import 'auth_screen.dart';
 
@@ -51,6 +53,64 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
   PlaceItem? _pinnedPlace;
   bool _isPublishing = false;
   bool _isLocating = false;
+
+  int _currentStep = 0;
+  String? _titleError;
+  String? _descError;
+  String? _locError;
+  String? _meetingLinkError;
+
+  bool _validateStep1() {
+    final title = _titleCtrl.text.trim();
+    final desc = _descCtrl.text.trim();
+    setState(() {
+      _titleError = title.length < 4
+          ? 'Title must be at least 4 characters'
+          : null;
+      _descError = desc.length < 10
+          ? 'Please add a bit more description (10+ characters)'
+          : null;
+    });
+    if (_titleError != null) {
+      AppToast.show(context, _titleError!, isError: true);
+      return false;
+    }
+    if (_descError != null) {
+      AppToast.show(context, _descError!, isError: true);
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateStep2() {
+    if (_isOnline) {
+      final link = _meetingLinkCtrl.text.trim();
+      if (link.isEmpty) {
+        setState(() => _meetingLinkError = 'Please add a valid meeting URL');
+        AppToast.show(context, 'Please add a valid meeting URL', isError: true);
+        return false;
+      }
+      final uri = Uri.tryParse(link);
+      final isWebUrl = uri != null &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.hasAuthority;
+      if (!isWebUrl) {
+        setState(() => _meetingLinkError = 'Meeting link must start with https:// or http://');
+        AppToast.show(context, 'Meeting link must start with https:// or http://', isError: true);
+        return false;
+      }
+      setState(() => _meetingLinkError = null);
+    } else {
+      final loc = _locCtrl.text.trim();
+      if (loc.isEmpty) {
+        setState(() => _locError = 'Please specify a location or venue');
+        AppToast.show(context, 'Please specify a location or venue', isError: true);
+        return false;
+      }
+      setState(() => _locError = null);
+    }
+    return true;
+  }
 
   void _openCoverPicker() {
     StorageService.showCoverPickerModal(
@@ -200,6 +260,15 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       return;
     }
 
+    if (!_validateStep1()) {
+      setState(() => _currentStep = 0);
+      return;
+    }
+    if (!_validateStep2()) {
+      setState(() => _currentStep = 1);
+      return;
+    }
+
     final title = _titleCtrl.text.trim();
     final desc = _descCtrl.text.trim();
     final loc = _isOnline
@@ -210,54 +279,6 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     final slots = int.tryParse(_slotsCtrl.text.trim()) ?? 8;
     final cost = double.tryParse(_costCtrl.text.trim()) ?? 0.0;
     final meetingLink = _isOnline ? _meetingLinkCtrl.text.trim() : null;
-
-    if (title.length < 4) {
-      AppToast.show(
-        context,
-        'Title must be at least 4 characters',
-        isError: true,
-      );
-      return;
-    }
-    if (desc.length < 10) {
-      AppToast.show(
-        context,
-        'Please add a bit more description (10+ chars)',
-        isError: true,
-      );
-      return;
-    }
-    if (!_isOnline && loc.isEmpty) {
-      AppToast.show(
-        context,
-        'Please specify a location or venue',
-        isError: true,
-      );
-      return;
-    }
-    if (_isOnline) {
-      if (meetingLink == null || meetingLink.isEmpty) {
-        AppToast.show(
-          context,
-          'Please add a valid meeting URL (Google Meet, Discord, Zoom…)',
-          isError: true,
-        );
-        return;
-      }
-      final uri = Uri.tryParse(meetingLink);
-      final isWebUrl =
-          uri != null &&
-          (uri.scheme == 'http' || uri.scheme == 'https') &&
-          uri.hasAuthority;
-      if (!isWebUrl) {
-        AppToast.show(
-          context,
-          'Meeting link must be a valid URL starting with https:// or http://',
-          isError: true,
-        );
-        return;
-      }
-    }
 
     setState(() => _isPublishing = true);
 
@@ -421,808 +442,354 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       backgroundColor: isDark
           ? AppColors.backgroundDark
           : AppColors.backgroundLight,
+      bottomNavigationBar: Container(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          MediaQuery.of(context).padding.bottom + 12,
+        ),
+        decoration: BoxDecoration(
+          color: cardBg,
+          border: Border(top: BorderSide(color: border.withValues(alpha: 0.6))),
+        ),
+        child: Row(
+          children: [
+            if (_currentStep > 0) ...[
+              OutlinedButton.icon(
+                onPressed: _isPublishing
+                    ? null
+                    : () => setState(() => _currentStep--),
+                icon: const Icon(LucideIcons.arrowLeft, size: 16),
+                label: const Text('Back'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(90, AppTouchTarget.minSize),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isPublishing
+                    ? null
+                    : () {
+                        if (_currentStep == 0) {
+                          if (_validateStep1()) {
+                            setState(() => _currentStep = 1);
+                          }
+                        } else if (_currentStep == 1) {
+                          if (_validateStep2()) {
+                            setState(() => _currentStep = 2);
+                          }
+                        } else {
+                          _publish();
+                        }
+                      },
+                icon: _isPublishing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        _currentStep == 2
+                            ? LucideIcons.check
+                            : LucideIcons.arrowRight,
+                        size: 16,
+                      ),
+                label: Text(
+                  _isPublishing
+                      ? 'Publishing…'
+                      : _currentStep == 2
+                          ? 'Publish plan'
+                          : 'Continue',
+                ),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(120, AppTouchTarget.minSize),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header matching TanStack: p.uppercase tracking-[0.18em] + h1 text-3xl font-bold
-              Text(
-                'NEW PLAN',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.8,
-                  color: isDark
-                      ? AppColors.mutedForegroundDark
-                      : AppColors.mutedForegroundLight,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Post a plan',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5,
-                  color: isDark
-                      ? AppColors.foregroundDark
-                      : AppColors.foregroundLight,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Fill in the essentials. Your squad will find you.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDark
-                      ? AppColors.mutedForegroundDark
-                      : AppColors.mutedForegroundLight,
-                ),
-              ),
-              const SizedBox(height: 18),
+              _buildStepHeader(isDark),
+              const SizedBox(height: 20),
+              if (_currentStep == 0) _buildStep1(cardBg, border, isDark),
+              if (_currentStep == 1) _buildStep2(cardBg, border, isDark),
+              if (_currentStep == 2)
+                _buildStep3(cardBg, border, isDark, authState.currentUser),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-              // Cover photo picker: h-36 w-full rounded-3xl border border-dashed border-border
-              GestureDetector(
-                onTap: _openCoverPicker,
-                child: Container(
-                  height: 148,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: (_imageUrl == null && _previewBytes == null)
-                        ? cardBg.withValues(alpha: 0.5)
-                        : null,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: (_imageUrl != null || _previewBytes != null)
-                          ? AppColors.primary.withValues(alpha: 0.5)
-                          : border.withValues(alpha: 0.8),
-                      width: (_imageUrl != null || _previewBytes != null)
-                          ? 1.5
-                          : 1,
+  Widget _buildStepHeader(bool isDark) {
+    final stepTitles = ['What & when', 'Where & who', 'Details & preview'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Host a plan',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: isDark ? AppColors.foregroundDark : AppColors.foregroundLight,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Step ${_currentStep + 1} of 3 · ${stepTitles[_currentStep]}',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: isDark
+                ? AppColors.mutedForegroundDark
+                : AppColors.mutedForegroundLight,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: List.generate(3, (idx) {
+            final isCompleted = idx < _currentStep;
+            final isCurrent = idx == _currentStep;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: idx < 2 ? 6.0 : 0.0),
+                child: GestureDetector(
+                  onTap: isCompleted
+                      ? () => setState(() => _currentStep = idx)
+                      : null,
+                  child: Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: (isCurrent || isCompleted)
+                          ? AppColors.primary
+                          : (isDark ? AppColors.borderDark : AppColors.borderLight),
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
                     ),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: (_imageUrl == null && _previewBytes == null)
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: const BoxDecoration(
-                                color: AppColors.primaryMuted,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                LucideIcons.imagePlus,
-                                size: 22,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Add a cover photo',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: isDark
-                                    ? AppColors.foregroundDark
-                                    : AppColors.foregroundLight,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Camera · Gallery · Curated Templates',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isDark
-                                    ? AppColors.mutedForegroundDark
-                                    : AppColors.mutedForegroundLight,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            if (_previewBytes != null)
-                              Image.memory(
-                                _previewBytes!,
-                                fit: BoxFit.cover,
-                                gaplessPlayback: true,
-                              )
-                            else if (_imageUrl != null)
-                              Image.network(
-                                _imageUrl!,
-                                fit: BoxFit.cover,
-                                cacheWidth: 800,
-                                cacheHeight: 400,
-                                gaplessPlayback: true,
-                                errorBuilder: (_, _, _) => Container(
-                                  color: AppColors.primaryMuted,
-                                  child: const Center(
-                                    child: Icon(
-                                      LucideIcons.image,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (_isUploadingCover)
-                              Positioned(
-                                bottom: 10,
-                                left: 10,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.7),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        'Uploading cover…',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            // Top overlay with Change & Remove buttons
-                            Positioned(
-                              top: 10,
-                              right: 10,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  GestureDetector(
-                                    onTap: _openCoverPicker,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          999,
-                                        ),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            LucideIcons.pencil,
-                                            color: Colors.white,
-                                            size: 12,
-                                          ),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            'Change',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _imageUrl = null;
-                                        _previewBytes = null;
-                                        _isUploadingCover = false;
-                                      });
-                                    },
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        LucideIcons.x,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
                 ),
               ),
-              const SizedBox(height: 16),
+            );
+          }),
+        ),
+      ],
+    );
+  }
 
-              // Title: rounded-2xl border bg-card px-4 py-3
-              _FormFieldWrapper(
-                label: 'TITLE',
-                hint: '${_titleCtrl.text.length}/80',
-                child: TextField(
-                  controller: _titleCtrl,
-                  maxLength: 80,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: 'Box cricket at Turf Arena',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    counterText: '',
-                  ),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+  Widget _buildStep1(Color cardBg, Color border, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Mode selector
+        Text(
+          'PLAN FORMAT',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+            color: isDark
+                ? AppColors.mutedForegroundDark
+                : AppColors.mutedForegroundLight,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ModeOptionCard(
+                label: 'In-Person Venue',
+                emoji: '📍',
+                isSelected: !_isOnline,
+                onTap: () => setState(() => _isOnline = false),
               ),
-              const SizedBox(height: 12),
-
-              // Description
-              _FormFieldWrapper(
-                label: 'DESCRIPTION',
-                hint: '${_descCtrl.text.length}/500',
-                child: TextField(
-                  controller: _descCtrl,
-                  maxLines: 3,
-                  maxLength: 500,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText:
-                        'Chill 6-a-side, all levels welcome. Bring water.',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    counterText: '',
-                  ),
-                  style: const TextStyle(fontSize: 13),
-                ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _ModeOptionCard(
+                label: 'Online / Virtual',
+                emoji: '💻',
+                isSelected: _isOnline,
+                onTap: () => setState(() => _isOnline = true),
               ),
-              const SizedBox(height: 16),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
 
-              // Category Picker
-              Text(
-                'CATEGORY',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                  color: isDark
-                      ? AppColors.mutedForegroundDark
-                      : AppColors.mutedForegroundLight,
-                ),
-              ),
-              const SizedBox(height: 8),
+        // Title
+        _FormFieldWrapper(
+          label: 'TITLE',
+          hint: '${_titleCtrl.text.length}/80',
+          error: _titleError,
+          child: TextField(
+            controller: _titleCtrl,
+            maxLength: 80,
+            onChanged: (_) {
+              if (_titleError != null) setState(() => _titleError = null);
+              setState(() {});
+            },
+            decoration: const InputDecoration(
+              hintText: 'Box cricket at Turf Arena',
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+              counterText: '',
+            ),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
 
-              // Groups horizontal
-              SizedBox(
-                height: 34,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: AppCategories.groups.map((g) {
-                    final isSelected = _selectedGroup == g;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedGroup = g;
-                            final firstInGroup = AppCategories.all.firstWhere(
-                              (c) => c.group == g,
-                            );
-                            _selectedCategory = firstInGroup.key;
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppColors.primary.withValues(alpha: 0.12)
-                                : cardBg,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : border.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              g.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : (isDark
-                                          ? AppColors.mutedForegroundDark
-                                          : AppColors.mutedForegroundLight),
-                              ),
-                            ),
-                          ),
-                        ),
+        // Description
+        _FormFieldWrapper(
+          label: 'DESCRIPTION',
+          hint: '${_descCtrl.text.length}/500',
+          error: _descError,
+          child: TextField(
+            controller: _descCtrl,
+            maxLines: 3,
+            maxLength: 500,
+            onChanged: (_) {
+              if (_descError != null) setState(() => _descError = null);
+              setState(() {});
+            },
+            decoration: const InputDecoration(
+              hintText: 'Chill 6-a-side, all levels welcome. Bring water.',
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+              counterText: '',
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Category Picker
+        Text(
+          'CATEGORY',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+            color: isDark
+                ? AppColors.mutedForegroundDark
+                : AppColors.mutedForegroundLight,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Groups horizontal
+        SizedBox(
+          height: 34,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: AppCategories.groups.map((g) {
+              final isSelected = _selectedGroup == g;
+              final title = g.isEmpty
+                  ? g
+                  : '${g[0].toUpperCase()}${g.substring(1).toLowerCase()}';
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedGroup = g;
+                      final firstInGroup = AppCategories.all.firstWhere(
+                        (c) => c.group == g,
+                      );
+                      _selectedCategory = firstInGroup.key;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary.withValues(alpha: 0.12)
+                          : cardBg,
+                      borderRadius: BorderRadius.circular(AppRadius.full),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : border.withValues(alpha: 0.6),
                       ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Categories in selected group
-              SizedBox(
-                height: 36,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: AppCategories.all
-                      .where((c) => c.group == _selectedGroup)
-                      .map((c) {
-                        final isSelected = _selectedCategory == c.key;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedCategory = c.key;
-                                if (c.defaultMode == 'online') {
-                                  _isOnline = true;
-                                }
-                                if (c.defaultMode == 'in_person') {
-                                  _isOnline = false;
-                                }
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelected ? AppColors.primary : cardBg,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? AppColors.primary
-                                      : border.withValues(alpha: 0.6),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    c.emoji,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    c.label,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : (isDark
-                                                ? AppColors.foregroundDark
-                                                : AppColors.foregroundLight),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      })
-                      .toList(),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Date & Time
-              Row(
-                children: [
-                  Expanded(
-                    child: _FormFieldWrapper(
-                      label: 'DATE',
-                      child: InkWell(
-                        onTap: _pickDate,
-                        child: Row(
-                          children: [
-                            const Icon(
-                              LucideIcons.calendar,
-                              size: 16,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              DateFormat('MMM d, yyyy').format(_date),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? AppColors.primary
+                              : (isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _FormFieldWrapper(
-                      label: 'TIME',
-                      child: InkWell(
-                        onTap: _pickTime,
-                        child: Row(
-                          children: [
-                            const Icon(
-                              LucideIcons.clock,
-                              size: 16,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _time.format(context),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
 
-              // Where does it happen?
-              Text(
-                'WHERE DOES IT HAPPEN?',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                  color: isDark
-                      ? AppColors.mutedForegroundDark
-                      : AppColors.mutedForegroundLight,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ModeOptionCard(
-                      label: 'In-Person Venue',
-                      emoji: '📍',
-                      isSelected: !_isOnline,
-                      onTap: () => setState(() => _isOnline = false),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ModeOptionCard(
-                      label: 'Online / Virtual',
-                      emoji: '💻',
-                      isSelected: _isOnline,
-                      onTap: () => setState(() => _isOnline = true),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Mode Specific Inputs
-              if (_isOnline) ...[
-                _FormFieldWrapper(
-                  label: 'MEETING LINK',
-                  hint: 'Google Meet, Discord, Zoom…',
-                  child: TextField(
-                    controller: _meetingLinkCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'https://meet.google.com/xyz-abcd-efg',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _FormFieldWrapper(
-                  label: 'PLATFORM NAME (OPTIONAL)',
-                  hint: 'e.g. Google Meet, Discord, Zoom',
-                  child: TextField(
-                    controller: _locCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. Google Meet or Discord Server',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(
-                      LucideIcons.lock,
-                      size: 12,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Link stays private — only accepted squad members can see it.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                _FormFieldWrapper(
-                  label: 'VENUE / LOCATION',
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _locCtrl,
-                          decoration: const InputDecoration(
-                            hintText: 'Turf Arena, Indiranagar',
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                      if (_isLocating)
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        IconButton(
-                          icon: const Icon(Icons.my_location, size: 18),
-                          tooltip: 'Use current GPS location',
-                          onPressed: _useCurrentLocation,
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 32,
-                            minHeight: 32,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Pin venue chip
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _pinnedPlace != null
-                          ? AppColors.primary.withValues(alpha: 0.5)
-                          : border.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'PIN THE VENUE (FOR GPS CHECK-IN)',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.8,
-                                color: isDark
-                                    ? AppColors.mutedForegroundDark
-                                    : AppColors.mutedForegroundLight,
-                              ),
-                            ),
-                          ),
-                          if (_pinnedPlace != null)
-                            InkWell(
-                              onTap: () {
-                                setState(() {
-                                  _pinnedPlace = null;
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(12),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4.0),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 14,
-                                  color: isDark
-                                      ? AppColors.mutedForegroundDark
-                                      : AppColors.mutedForegroundLight,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _pinnedPlace != null
-                                  ? '📍 ${_pinnedPlace!.title} · ${_pinnedPlace!.lat.toStringAsFixed(4)}, ${_pinnedPlace!.lon.toStringAsFixed(4)}'
-                                  : 'Needed so attendees can check in on arrival.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: _pinnedPlace != null
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                color: _pinnedPlace != null
-                                    ? (isDark ? Colors.white : Colors.black)
-                                    : AppColors.mutedForegroundLight,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Wrap(
-                            spacing: 6,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: _isLocating
-                                    ? null
-                                    : _useCurrentLocation,
-                                icon: _isLocating
-                                    ? const SizedBox(
-                                        width: 10,
-                                        height: 10,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 1.5,
-                                        ),
-                                      )
-                                    : const Icon(Icons.my_location, size: 12),
-                                label: const Text(
-                                  'GPS',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                ),
-                              ),
-                              ElevatedButton(
-                                onPressed: () {
-                                  PlaceSearchDialog.show(
-                                    context,
-                                    initialValue: _locCtrl.text,
-                                    onSelect: (p) {
-                                      setState(() {
-                                        _pinnedPlace = p;
-                                        if (_locCtrl.text.isEmpty) {
-                                          _locCtrl.text = p.title;
-                                        }
-                                      });
-                                    },
-                                  );
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                child: Text(
-                                  _pinnedPlace != null
-                                      ? 'Change'
-                                      : 'Search Place',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Venue amenities
-                Text(
-                  'VENUE AMENITIES',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: AppCategories.amenities.map((a) {
-                    final isSelected = _selectedAmenities.contains(a.key);
-                    return GestureDetector(
-                      onTap: () => _toggleAmenity(a.key),
+        // Categories in selected group
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: AppCategories.all
+                .where((c) => c.group == _selectedGroup)
+                .map((c) {
+                  final isSelected = _selectedCategory == c.key;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedCategory = c.key;
+                          if (c.defaultMode == 'online') _isOnline = true;
+                          if (c.defaultMode == 'in_person') _isOnline = false;
+                        });
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
+                          horizontal: 14,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary.withValues(alpha: 0.12)
-                              : cardBg,
-                          borderRadius: BorderRadius.circular(999),
+                          color: isSelected ? AppColors.primary : cardBg,
+                          borderRadius: BorderRadius.circular(AppRadius.full),
                           border: Border.all(
                             color: isSelected
                                 ? AppColors.primary
@@ -1232,61 +799,387 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              a.icon,
-                              size: 13,
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : AppColors.mutedForegroundLight,
-                            ),
-                            const SizedBox(width: 4),
+                            Text(c.emoji, style: const TextStyle(fontSize: 13)),
+                            const SizedBox(width: 6),
                             Text(
-                              a.label,
+                              c.label,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: isSelected
-                                    ? AppColors.primary
+                                    ? Colors.white
                                     : (isDark
-                                          ? AppColors.foregroundDark
-                                          : AppColors.foregroundLight),
+                                        ? AppColors.foregroundDark
+                                        : AppColors.foregroundLight),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  }).toList(),
+                    ),
+                  );
+                })
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Date & Time
+        Row(
+          children: [
+            Expanded(
+              child: _FormFieldWrapper(
+                label: 'DATE',
+                child: InkWell(
+                  onTap: _pickDate,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.calendar,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        DateFormat('MMM d, yyyy').format(_date),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _FormFieldWrapper(
+                label: 'TIME',
+                child: InkWell(
+                  onTap: _pickTime,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.clock,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _time.format(context),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStep2(Color cardBg, Color border, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_isOnline) ...[
+          _FormFieldWrapper(
+            label: 'MEETING LINK',
+            hint: 'Google Meet, Discord, Zoom…',
+            error: _meetingLinkError,
+            child: TextField(
+              controller: _meetingLinkCtrl,
+              onChanged: (_) {
+                if (_meetingLinkError != null) {
+                  setState(() => _meetingLinkError = null);
+                }
+              },
+              decoration: const InputDecoration(
+                hintText: 'https://meet.google.com/xyz-abcd-efg',
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _FormFieldWrapper(
+            label: 'PLATFORM NAME (OPTIONAL)',
+            hint: 'e.g. Google Meet, Discord, Zoom',
+            child: TextField(
+              controller: _locCtrl,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Google Meet or Discord Server',
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(LucideIcons.lock, size: 12, color: AppColors.primary),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Link stays private — only accepted squad members can see it.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark
+                        ? AppColors.mutedForegroundDark
+                        : AppColors.mutedForegroundLight,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          _FormFieldWrapper(
+            label: 'VENUE / LOCATION',
+            error: _locError,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _locCtrl,
+                    onChanged: (_) {
+                      if (_locError != null) {
+                        setState(() => _locError = null);
+                      }
+                    },
+                    decoration: const InputDecoration(
+                      hintText: 'Turf Arena, Indiranagar',
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                if (_isLocating)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.my_location, size: 18),
+                    tooltip: 'Use current GPS location',
+                    onPressed: _useCurrentLocation,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Pin venue card
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: _pinnedPlace != null
+                    ? AppColors.primary.withValues(alpha: 0.5)
+                    : border.withValues(alpha: 0.6),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'PIN THE VENUE (FOR GPS CHECK-IN)',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    ),
+                    if (_pinnedPlace != null)
+                      InkWell(
+                        onTap: () => setState(() => _pinnedPlace = null),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Icon(
+                            Icons.close,
+                            size: 14,
+                            color: isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _pinnedPlace != null
+                            ? '📍 ${_pinnedPlace!.title} · ${_pinnedPlace!.lat.toStringAsFixed(4)}, ${_pinnedPlace!.lon.toStringAsFixed(4)}'
+                            : 'Needed so attendees can check in on arrival.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: _pinnedPlace != null
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: _pinnedPlace != null
+                              ? (isDark ? Colors.white : Colors.black)
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _isLocating ? null : _useCurrentLocation,
+                          icon: _isLocating
+                              ? const SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                  ),
+                                )
+                              : const Icon(Icons.my_location, size: 12),
+                          label: const Text(
+                            'GPS',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
+                            ),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            PlaceSearchDialog.show(
+                              context,
+                              initialValue: _locCtrl.text,
+                              onSelect: (p) {
+                                setState(() {
+                                  _pinnedPlace = p;
+                                  if (_locCtrl.text.isEmpty) {
+                                    _locCtrl.text = p.title;
+                                  }
+                                  if (_locError != null) _locError = null;
+                                });
+                              },
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            _pinnedPlace != null ? 'Change' : 'Search Place',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ],
-              const SizedBox(height: 16),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
 
-              // Topic / skill tags
-              _FormFieldWrapper(
-                label: 'TOPIC / SKILL TAGS',
-                hint: 'Comma separated',
+        // Slots & Cost
+        Row(
+          children: [
+            Expanded(
+              child: _FormFieldWrapper(
+                label: 'TOTAL SLOTS',
                 child: TextField(
-                  controller: _tagsCtrl,
+                  controller: _slotsCtrl,
+                  keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    hintText: 'e.g. Beginners welcome, casual, turf',
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
                   ),
-                  style: const TextStyle(fontSize: 13),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // Slots & Cost
-              Row(
-                children: [
-                  Expanded(
-                    child: _FormFieldWrapper(
-                      label: 'TOTAL SLOTS',
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _FormFieldWrapper(
+                label: 'COST / HEAD',
+                child: Row(
+                  children: [
+                    const Text(
+                      '₹ ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                    Expanded(
                       child: TextField(
-                        controller: _slotsCtrl,
+                        controller: _costCtrl,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           border: InputBorder.none,
@@ -1300,138 +1193,444 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _FormFieldWrapper(
-                      label: 'COST / HEAD',
-                      child: Row(
-                        children: [
-                          const Text(
-                            '₹ ',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.mutedForegroundLight,
-                            ),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _costCtrl,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Safety Controls Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: border.withValues(alpha: 0.6)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(LucideIcons.shield, size: 16, color: AppColors.primary),
+                  SizedBox(width: 6),
+                  Text(
+                    'SAFETY CONTROLS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                      color: AppColors.primary,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-
-              // Safety Controls Card: rounded-3xl border border-border/60 bg-card p-5
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: border.withValues(alpha: 0.6)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(
-                          LucideIcons.shield,
-                          size: 16,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'SAFETY CONTROLS',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Restricted plans are hidden from non-matching users, and venue is masked until you approve joiners.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Women-only switch
-                    _SafetySwitchTile(
-                      iconText: '♀︎',
-                      label: 'Women-only plan',
-                      hint: 'Visible & joinable only by female users.',
-                      value: _womenOnly,
-                      onChanged: (val) => setState(() => _womenOnly = val),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Verified only switch
-                    _SafetySwitchTile(
-                      icon: LucideIcons.badgeCheck,
-                      label: 'Verified users only',
-                      hint: 'Requires a verified profile.',
-                      value: _verifiedOnly,
-                      onChanged: (val) => setState(() => _verifiedOnly = val),
-                    ),
-                  ],
+              const SizedBox(height: 4),
+              Text(
+                'Restricted plans are hidden from non-matching users, and venue is masked until you approve joiners.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
 
-              // Submit button: rounded-2xl bg-primary py-4 text-sm font-semibold
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isPublishing ? null : _publish,
-                  icon: _isPublishing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(LucideIcons.check, size: 18),
-                  label: Text(_isPublishing ? 'Publishing…' : 'Publish plan'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
+              _SafetySwitchTile(
+                iconText: '♀︎',
+                label: 'Women-only plan',
+                hint: 'Visible & joinable only by female users.',
+                value: _womenOnly,
+                onChanged: (val) => setState(() => _womenOnly = val),
+              ),
+              const SizedBox(height: 8),
+
+              _SafetySwitchTile(
+                icon: LucideIcons.badgeCheck,
+                label: 'Verified users only',
+                hint: 'Requires a verified profile.',
+                value: _verifiedOnly,
+                onChanged: (val) => setState(() => _verifiedOnly = val),
               ),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildStep3(Color cardBg, Color border, bool isDark, dynamic user) {
+    final previewAct = Activity(
+      id: 'preview_draft',
+      hostId: user?.id ?? 'preview_host',
+      title: _titleCtrl.text.trim().isNotEmpty
+          ? _titleCtrl.text.trim()
+          : 'Plan Title',
+      description: _descCtrl.text.trim().isNotEmpty
+          ? _descCtrl.text.trim()
+          : 'Plan description preview…',
+      category: _selectedCategory,
+      dateTime: DateTime(
+        _date.year,
+        _date.month,
+        _date.day,
+        _time.hour,
+        _time.minute,
       ),
+      location: _isOnline
+          ? (_locCtrl.text.trim().isNotEmpty
+              ? _locCtrl.text.trim()
+              : 'Online Event')
+          : (_locCtrl.text.trim().isNotEmpty
+              ? _locCtrl.text.trim()
+              : 'Selected venue'),
+      totalSlots: int.tryParse(_slotsCtrl.text.trim()) ?? 8,
+      slotsLeft: int.tryParse(_slotsCtrl.text.trim()) ?? 8,
+      costPerHead: double.tryParse(_costCtrl.text.trim()) ?? 0.0,
+      imageUrl: _imageUrl ??
+          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+      latitude: _isOnline ? null : _pinnedPlace?.lat,
+      longitude: _isOnline ? null : _pinnedPlace?.lon,
+      womenOnly: _womenOnly,
+      verifiedOnly: _verifiedOnly,
+      isOnline: _isOnline,
+      meetingLink: _isOnline ? _meetingLinkCtrl.text.trim() : null,
+      amenities: _isOnline ? [] : _selectedAmenities,
+      topicTags: _tagsCtrl.text
+          .split(',')
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toList(),
+      host: user,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Cover photo picker
+        GestureDetector(
+          onTap: _openCoverPicker,
+          child: Container(
+            height: 148,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: (_imageUrl == null && _previewBytes == null)
+                  ? cardBg.withValues(alpha: 0.5)
+                  : null,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(
+                color: (_imageUrl != null || _previewBytes != null)
+                    ? AppColors.primary.withValues(alpha: 0.5)
+                    : border.withValues(alpha: 0.8),
+                width: (_imageUrl != null || _previewBytes != null) ? 1.5 : 1,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: (_imageUrl == null && _previewBytes == null)
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryMuted,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          LucideIcons.imagePlus,
+                          size: 22,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Add a cover photo',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isDark
+                              ? AppColors.foregroundDark
+                              : AppColors.foregroundLight,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Curated templates · Camera · Gallery',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                      ),
+                    ],
+                  )
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (_previewBytes != null)
+                        Image.memory(
+                          _previewBytes!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                        )
+                      else if (_imageUrl != null)
+                        Image.network(
+                          _imageUrl!,
+                          fit: BoxFit.cover,
+                          cacheWidth: 800,
+                          cacheHeight: 400,
+                          gaplessPlayback: true,
+                          errorBuilder: (_, _, _) => Container(
+                            color: AppColors.primaryMuted,
+                            child: const Center(
+                              child: Icon(
+                                LucideIcons.image,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (_isUploadingCover)
+                        Positioned(
+                          bottom: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.7),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Uploading cover…',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: _openCoverPicker,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.7),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.full,
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.pencil,
+                                      color: Colors.white,
+                                      size: 12,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Change',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _imageUrl = null;
+                                  _previewBytes = null;
+                                  _isUploadingCover = false;
+                                });
+                              },
+                              child: Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.7),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  LucideIcons.x,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Amenities (if in person)
+        if (!_isOnline) ...[
+          Text(
+            'VENUE AMENITIES',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+              color: isDark
+                  ? AppColors.mutedForegroundDark
+                  : AppColors.mutedForegroundLight,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: AppCategories.amenities.map((a) {
+              final isSelected = _selectedAmenities.contains(a.key);
+              return GestureDetector(
+                onTap: () => _toggleAmenity(a.key),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : cardBg,
+                    borderRadius: BorderRadius.circular(AppRadius.full),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.primary
+                          : border.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        a.icon,
+                        size: 13,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.mutedForegroundLight,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        a.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? AppColors.primary
+                              : (isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // Topic tags
+        _FormFieldWrapper(
+          label: 'TOPIC / SKILL TAGS',
+          hint: 'Comma separated',
+          child: TextField(
+            controller: _tagsCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              hintText: 'e.g. Beginners welcome, casual, turf',
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Live preview header
+        Row(
+          children: [
+            const Icon(LucideIcons.eye, size: 16, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              'LIVE PREVIEW',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: isDark
+                    ? AppColors.foregroundDark
+                    : AppColors.foregroundLight,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'This is how members nearby will see your plan in the discovery feed.',
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark
+                ? AppColors.mutedForegroundDark
+                : AppColors.mutedForegroundLight,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Activity card preview
+        ActivityCard(
+          activity: previewAct,
+          isHost: true,
+          hasProfileGpsLocation: true,
+          onJoin: () {},
+          onChat: () {},
+        ),
+      ],
     );
   }
 }
@@ -1439,11 +1638,13 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
 class _FormFieldWrapper extends StatelessWidget {
   final String label;
   final String? hint;
+  final String? error;
   final Widget child;
 
   const _FormFieldWrapper({
     required this.label,
     this.hint,
+    this.error,
     required this.child,
   });
 
@@ -1452,47 +1653,86 @@ class _FormFieldWrapper extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
+    final hasError = error != null && error!.isNotEmpty;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: border.withValues(alpha: 0.6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(
+              color: hasError
+                  ? AppColors.destructive
+                  : border.withValues(alpha: 0.6),
+              width: hasError ? 1.5 : 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                  color: isDark
-                      ? AppColors.mutedForegroundDark
-                      : AppColors.mutedForegroundLight,
-                ),
-              ),
-              if (hint != null)
-                Text(
-                  hint!,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: hasError
+                          ? AppColors.destructive
+                          : (isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight),
+                    ),
                   ),
-                ),
+                  if (hint != null)
+                    Text(
+                      hint!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              child,
             ],
           ),
-          const SizedBox(height: 6),
-          child,
+        ),
+        if (hasError) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Row(
+              children: [
+                const Icon(
+                  LucideIcons.alertCircle,
+                  size: 12,
+                  color: AppColors.destructive,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    error!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.destructive,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 }

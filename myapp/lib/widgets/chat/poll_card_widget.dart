@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_tokens.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/supabase_service.dart';
 import '../../state/auth_state.dart';
@@ -92,7 +93,7 @@ class _PollCardWidgetState extends State<PollCardWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: cardBg,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: border),
         ),
         child: Row(
@@ -139,10 +140,10 @@ class _PollCardWidgetState extends State<PollCardWidget> {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: border),
         boxShadow: [
           BoxShadow(
