@@ -11,6 +11,7 @@ import '../models/message.dart';
 import '../models/poll.dart';
 import '../models/rating_item.dart';
 import '../models/user_profile.dart';
+import '../services/poll_service.dart';
 import '../services/supabase_service.dart';
 
 class ChatState extends ChangeNotifier {
@@ -33,6 +34,12 @@ class ChatState extends ChangeNotifier {
   List<Activity> _userChats = [];
   bool _isLoadingUserChats = false;
   bool _isDisposed = false;
+  PollService _pollService = PollService();
+
+  @visibleForTesting
+  void setPollServiceForTesting(PollService service) {
+    _pollService = service;
+  }
 
   List<Activity> get userChats => List.unmodifiable(_userChats);
   bool get isLoadingUserChats => _isLoadingUserChats;
@@ -531,35 +538,18 @@ class ChatState extends ChangeNotifier {
     if (!force && _votingPollIds.contains(pollId)) return;
 
     try {
-      // 1. Fetch poll row
-      final pollRes = await client
-          .from('polls')
-          .select('*')
-          .eq('id', pollId)
-          .maybeSingle();
+      final fetchedPoll = await _pollService.fetchPoll(pollId);
 
-      if (pollRes == null) return;
-      final pollData = Map<String, dynamic>.from(pollRes);
-
-      // 2. Fetch votes reliably without depending on schema cache foreign key embedding
-      try {
-        final votesRes = await client
-            .from('poll_votes')
-            .select('*')
-            .eq('poll_id', pollId)
-            .order('created_at', ascending: true);
-        pollData['poll_votes'] = votesRes;
-      } catch (e) {
-        debugPrint('fetchPoll votes query error: $e');
-        // If query fails, do not wipe out existing votes in memory
+      if (fetchedPoll == null) {
         if (_polls.containsKey(pollId)) {
-          return;
+          _polls[pollId] = _polls[pollId]!.copyWith(isDeleted: true);
+          if (!_isDisposed) notifyListeners();
         }
-        pollData['poll_votes'] = [];
+        return;
       }
 
       if (!_isDisposed && (force || !_votingPollIds.contains(pollId))) {
-        Poll poll = Poll.fromJson(pollData);
+        Poll poll = fetchedPoll;
 
         // Safeguard recent local user vote against replication delay:
         final recentOptionIdx = _userPollVotes[pollId];
@@ -637,6 +627,17 @@ class ChatState extends ChangeNotifier {
           ),
           callback: (payload) {
             if (!_isDisposed) {
+              if (payload.eventType == PostgresChangeEvent.delete) {
+                final pollId = payload.oldRecord['id']?.toString();
+                if (pollId != null) {
+                  final existing = _polls[pollId];
+                  if (existing != null) {
+                    _polls[pollId] = existing.copyWith(isDeleted: true);
+                    notifyListeners();
+                  }
+                }
+                return;
+              }
               final pollId =
                   payload.newRecord['id']?.toString() ??
                   payload.oldRecord['id']?.toString();
@@ -1427,16 +1428,7 @@ class ChatState extends ChangeNotifier {
     }
 
     try {
-      // Durable client-generated v4 UUID guarantees ID is known immediately
       final pollId = const Uuid().v4();
-
-      await client.from('polls').insert({
-        'id': pollId,
-        'activity_id': activityId,
-        'created_by': verifiedCreatorId,
-        'question': question.trim(),
-        'options': optionTexts,
-      });
 
       // Optimistically store poll immediately so it renders in 0 ms
       final initialPoll = Poll(
@@ -1455,10 +1447,18 @@ class ChatState extends ChangeNotifier {
               ),
             )
             .toList(),
-        createdAt: DateTime.now(),
+        createdAt: DateTime.now().toUtc(),
       );
       _polls[pollId] = initialPoll;
       notifyListeners();
+
+      await _pollService.createPoll(
+        activityId: activityId,
+        creatorId: verifiedCreatorId,
+        question: question,
+        optionTexts: optionTexts,
+        clientPollId: pollId,
+      );
 
       // TanStack-compatible format: [[poll:<uuid>]] <question>
       final formattedText = '[[poll:$pollId]] ${question.trim()}';
@@ -1477,7 +1477,6 @@ class ChatState extends ChangeNotifier {
         return false;
       }
 
-      // Sync to ensure server consistency
       await fetchPoll(pollId, force: true);
       return true;
     } catch (e) {
@@ -1486,11 +1485,177 @@ class ChatState extends ChangeNotifier {
     }
   }
 
+  Future<bool> updatePoll({
+    required String pollId,
+    required String creatorId,
+    required String question,
+    List<String>? optionTexts,
+  }) async {
+    if (_isDisposed) return false;
+    final client = SupabaseService.client;
+    final authUser = client?.auth.currentUser;
+    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
+    if (verifiedCreatorId.isEmpty) return false;
+
+    final currentPoll = _polls[pollId];
+    if (currentPoll != null) {
+      List<PollOption>? updatedOptions;
+      if (optionTexts != null && optionTexts.length >= 2) {
+        updatedOptions = optionTexts
+            .asMap()
+            .entries
+            .map(
+              (e) => PollOption(
+                id: e.key.toString(),
+                text: e.value,
+                voterIds: currentPoll.options.length > e.key
+                    ? currentPoll.options[e.key].voterIds
+                    : const [],
+              ),
+            )
+            .toList();
+      }
+      _polls[pollId] = currentPoll.copyWith(
+        question: question.trim(),
+        options: updatedOptions,
+      );
+      notifyListeners();
+    }
+
+    if (client == null) {
+      return true;
+    }
+
+    try {
+      final success = await _pollService.updatePoll(
+        pollId: pollId,
+        creatorId: verifiedCreatorId,
+        question: question,
+        optionTexts: optionTexts,
+      );
+
+      if (success) {
+        // Synchronize in-memory message text if present in activity messages
+        for (final entry in _messagesByActivity.entries) {
+          final idx = entry.value.indexWhere((m) => m.pollId == pollId);
+          if (idx != -1) {
+            final old = entry.value[idx];
+            entry.value[idx] = old.copyWith(
+              text: '[[poll:$pollId]] ${question.trim()}',
+            );
+            notifyListeners();
+            break;
+          }
+        }
+        await fetchPoll(pollId, force: true);
+      } else if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      debugPrint('updatePoll error: $e');
+      if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        notifyListeners();
+      }
+      return false;
+    }
+  }
+
+  Future<bool> togglePollClosed({
+    required String pollId,
+    required String creatorId,
+    required bool close,
+  }) async {
+    if (_isDisposed) return false;
+    final client = SupabaseService.client;
+    final authUser = client?.auth.currentUser;
+    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
+    if (verifiedCreatorId.isEmpty) return false;
+
+    final currentPoll = _polls[pollId];
+    if (currentPoll != null) {
+      _polls[pollId] = currentPoll.copyWith(
+        closedAt: close ? DateTime.now().toUtc() : null,
+        clearClosedAt: !close,
+      );
+      notifyListeners();
+    }
+
+    if (client == null) {
+      return true;
+    }
+
+    try {
+      final success = await _pollService.togglePollClosed(
+        pollId: pollId,
+        creatorId: verifiedCreatorId,
+        close: close,
+      );
+
+      if (success) {
+        await fetchPoll(pollId, force: true);
+      } else if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      debugPrint('togglePollClosed error: $e');
+      if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        notifyListeners();
+      }
+      return false;
+    }
+  }
+
+  Future<bool> deletePoll({
+    required String pollId,
+    required String creatorId,
+    required String activityId,
+  }) async {
+    if (_isDisposed) return false;
+    final client = SupabaseService.client;
+    final authUser = client?.auth.currentUser;
+    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
+    if (verifiedCreatorId.isEmpty) return false;
+
+    final currentPoll = _polls[pollId];
+    if (currentPoll != null) {
+      _polls[pollId] = currentPoll.copyWith(isDeleted: true);
+      notifyListeners();
+    }
+
+    if (client == null) {
+      return true;
+    }
+
+    try {
+      final success = await _pollService.deletePoll(
+        pollId: pollId,
+        creatorId: verifiedCreatorId,
+      );
+
+      if (!success && currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      debugPrint('deletePoll error: $e');
+      if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        notifyListeners();
+      }
+      return false;
+    }
+  }
+
   Future<bool> votePoll(String pollId, String optionId, String userId) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return false;
-
-    final authUser = client.auth.currentUser;
+    final authUser = client?.auth.currentUser;
     final verifiedUserId = (authUser?.id ?? userId).trim().toLowerCase();
     if (verifiedUserId.isEmpty) {
       debugPrint('votePoll error: Unauthenticated user');
@@ -1498,6 +1663,11 @@ class ChatState extends ChangeNotifier {
     }
 
     final currentPoll = _polls[pollId];
+    if (currentPoll != null && (currentPoll.isClosed || currentPoll.isDeleted)) {
+      debugPrint('votePoll error: Poll is closed or deleted');
+      return false;
+    }
+
     int optionIdx = -1;
     if (currentPoll != null) {
       optionIdx = currentPoll.options.indexWhere(
@@ -1531,36 +1701,29 @@ class ChatState extends ChangeNotifier {
       if (!_isDisposed) notifyListeners();
     }
 
-    try {
-      // 1. Primary path: atomic upsert with onConflict on unique composite key (matches TanStack Start services.ts)
-      try {
-        await client.from('poll_votes').upsert({
-          'poll_id': pollId,
-          'user_id': verifiedUserId,
-          'option_index': optionIdx,
-        }, onConflict: 'poll_id,user_id');
-      } catch (upsertErr) {
-        debugPrint(
-          'Direct upsert failed, trying delete & insert fallback: $upsertErr',
-        );
-        // Clean existing rows for (poll_id, user_id) first to guarantee single choice
-        // and eliminate duplicate key violations or multiple-row query crashes
-        await client
-            .from('poll_votes')
-            .delete()
-            .eq('poll_id', pollId)
-            .eq('user_id', verifiedUserId);
+    if (client == null) {
+      // Local/offline test mode
+      _votingPollIds.remove(pollId);
+      return true;
+    }
 
-        await client.from('poll_votes').insert({
-          'poll_id': pollId,
-          'user_id': verifiedUserId,
-          'option_index': optionIdx,
-        });
-      }
+    try {
+      final ok = await _pollService.votePoll(
+        pollId: pollId,
+        userId: verifiedUserId,
+        optionIndex: optionIdx,
+      );
 
       _votingPollIds.remove(pollId);
-      await fetchPoll(pollId, force: true);
-      return true;
+      if (ok) {
+        await fetchPoll(pollId, force: true);
+      } else if (currentPoll != null) {
+        _userPollVotes.remove(pollId);
+        _userPollVoteTimes.remove(pollId);
+        _polls[pollId] = currentPoll;
+        if (!_isDisposed) notifyListeners();
+      }
+      return ok;
     } catch (e) {
       debugPrint('votePoll error: $e');
       _votingPollIds.remove(pollId);
@@ -1607,15 +1770,19 @@ class ChatState extends ChangeNotifier {
     }
 
     try {
-      await client
-          .from('poll_votes')
-          .delete()
-          .eq('poll_id', pollId)
-          .eq('user_id', verifiedUserId);
+      final ok = await _pollService.retractVote(
+        pollId: pollId,
+        userId: verifiedUserId,
+      );
 
       _votingPollIds.remove(pollId);
-      await fetchPoll(pollId, force: true);
-      return true;
+      if (ok) {
+        await fetchPoll(pollId, force: true);
+      } else if (currentPoll != null) {
+        _polls[pollId] = currentPoll;
+        if (!_isDisposed) notifyListeners();
+      }
+      return ok;
     } catch (e) {
       debugPrint('retractPollVote error: $e');
       _votingPollIds.remove(pollId);

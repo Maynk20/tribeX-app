@@ -10,6 +10,7 @@ import '../../core/utils/app_toast.dart';
 import '../../services/supabase_service.dart';
 import '../../state/auth_state.dart';
 import '../../state/chat_state.dart';
+import 'edit_poll_modal.dart';
 
 class PollCardWidget extends StatefulWidget {
   final String pollId;
@@ -130,6 +131,43 @@ class _PollCardWidgetState extends State<PollCardWidget> {
       );
     }
 
+    if (poll.isDeleted) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.mutedDark : AppColors.mutedLight,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.remove_circle_outline,
+              size: 16,
+              color: isDark
+                  ? AppColors.mutedForegroundDark
+                  : AppColors.mutedForegroundLight,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'This poll was removed by the creator',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final totalVotes = poll.totalVotes;
     final effectiveUserId = _resolveUserId(authState);
     final userVotedOptId = effectiveUserId != null
@@ -224,6 +262,122 @@ class _PollCardWidgetState extends State<PollCardWidget> {
                   ],
                 ),
               ),
+              if (poll.isCreator(effectiveUserId))
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 18,
+                    color: isDark
+                        ? AppColors.mutedForegroundDark
+                        : AppColors.mutedForegroundLight,
+                  ),
+                  padding: EdgeInsets.zero,
+                  tooltip: 'Poll Options',
+                  onSelected: (val) async {
+                    if (val == 'edit') {
+                      EditPollModal.show(
+                        context,
+                        poll: poll,
+                        currentUserId: effectiveUserId,
+                      );
+                    } else if (val == 'toggle_close') {
+                      final close = !poll.isClosed;
+                      final ok = await chatState.togglePollClosed(
+                        pollId: poll.id,
+                        creatorId: effectiveUserId!,
+                        close: close,
+                      );
+                      if (context.mounted && ok) {
+                        AppToast.show(
+                          context,
+                          close ? 'Poll closed' : 'Poll reopened for voting',
+                        );
+                      }
+                    } else if (val == 'delete') {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Delete Poll?'),
+                          content: const Text(
+                            'Are you sure you want to delete this poll?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.destructive,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true && context.mounted) {
+                        final ok = await chatState.deletePoll(
+                          pollId: poll.id,
+                          creatorId: effectiveUserId!,
+                          activityId: poll.activityId,
+                        );
+                        if (context.mounted && ok) {
+                          AppToast.show(context, 'Poll deleted');
+                        }
+                      }
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit / Manage', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'toggle_close',
+                      child: Row(
+                        children: [
+                          Icon(
+                            poll.isClosed ? Icons.lock_open : Icons.lock_outline,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            poll.isClosed ? 'Reopen Voting' : 'Close Voting',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: 16,
+                            color: AppColors.destructive,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete Poll',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.destructive,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
           const SizedBox(height: 14),
@@ -404,7 +558,9 @@ class _PollCardWidgetState extends State<PollCardWidget> {
           Row(
             children: [
               Text(
-                '$totalVotes ${totalVotes == 1 ? "vote" : "votes"} · tap option to vote or switch',
+                isClosed
+                    ? '$totalVotes ${totalVotes == 1 ? "vote" : "votes"} · voting is closed'
+                    : '$totalVotes ${totalVotes == 1 ? "vote" : "votes"} · tap option to vote or switch',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
