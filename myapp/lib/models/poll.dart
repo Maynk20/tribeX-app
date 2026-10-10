@@ -44,6 +44,7 @@ class Poll {
   final List<PollOption> options;
   final DateTime? closedAt;
   final DateTime createdAt;
+  final bool isDeleted;
 
   Poll({
     required this.id,
@@ -53,6 +54,7 @@ class Poll {
     required this.options,
     this.closedAt,
     required this.createdAt,
+    this.isDeleted = false,
   });
 
   factory Poll.fromJson(Map<String, dynamic> json) {
@@ -128,6 +130,8 @@ class Poll {
       closedDate = DateTime.tryParse(json['closed_at'].toString());
     }
 
+    final deleted = json['is_deleted'] == true || json['deleted_at'] != null;
+
     return Poll(
       id: (json['id'] ?? '') as String,
       activityId: (json['activity_id'] ?? '') as String,
@@ -138,6 +142,7 @@ class Poll {
       createdAt: json['created_at'] != null
           ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
+      isDeleted: deleted,
     );
   }
 
@@ -149,13 +154,25 @@ class Poll {
       'question': question,
       'options': options.map((o) => o.text).toList(),
       if (closedAt != null) 'closed_at': closedAt!.toIso8601String(),
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'is_deleted': isDeleted,
     };
   }
 
   int get totalVotes => options.fold(0, (sum, opt) => sum + opt.votes);
 
   bool get isClosed => closedAt != null;
+
+  bool isCreator(String? userId) {
+    if (userId == null) return false;
+    return creatorId.trim().toLowerCase() == userId.trim().toLowerCase();
+  }
+
+  bool canVote(String? userId) {
+    if (isClosed || isDeleted) return false;
+    if (userId == null || userId.trim().isEmpty) return false;
+    return true;
+  }
 
   bool hasVoted(String userId) {
     final normalized = userId.trim().toLowerCase();
@@ -181,7 +198,9 @@ class Poll {
     String? question,
     List<PollOption>? options,
     DateTime? closedAt,
+    bool clearClosedAt = false,
     DateTime? createdAt,
+    bool? isDeleted,
   }) {
     return Poll(
       id: id ?? this.id,
@@ -189,8 +208,9 @@ class Poll {
       creatorId: creatorId ?? this.creatorId,
       question: question ?? this.question,
       options: options ?? this.options,
-      closedAt: closedAt ?? this.closedAt,
+      closedAt: clearClosedAt ? null : (closedAt ?? this.closedAt),
       createdAt: createdAt ?? this.createdAt,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 }
