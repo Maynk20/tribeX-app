@@ -7,8 +7,8 @@ import 'package:myapp/models/user_profile.dart';
 import 'package:myapp/services/location_service.dart';
 import 'package:myapp/state/activities_state.dart';
 import 'package:myapp/state/auth_state.dart';
-import 'package:myapp/widgets/activity/activity_card.dart';
 import 'package:myapp/screens/explore_screen.dart';
+import 'package:myapp/widgets/activity/activity_card.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -563,6 +563,99 @@ void main() {
         await tester.pump();
 
         // Banner disappears on Normal page
+        expect(
+          find.text(
+            'Enable GPS or select your city to filter plans within 15 km of you.',
+          ),
+          findsNothing,
+        );
+        actState.dispose();
+        authState.dispose();
+      },
+    );
+
+    testWidgets(
+      'ExploreScreen manually dismisses "Plans within 15 km" when user taps cross "X" option',
+      (tester) async {
+        final actState = ActivitiesState();
+        actState.setPlace(
+          const SavedPlace(
+            displayName: 'Indiranagar, Bengaluru',
+            short: 'Indiranagar',
+            lat: 12.9784,
+            lon: 77.6408,
+          ),
+        );
+
+        final authState = AuthState();
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<ActivitiesState>.value(value: actState),
+              ChangeNotifierProvider<AuthState>.value(value: authState),
+            ],
+            child: const MaterialApp(home: ExploreScreen()),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // 1. Initial State: "Plans within 15 km" and "15 km radius" badge are active
+        expect(find.text('Plans within 15 km'), findsOneWidget);
+        expect(find.text('15 km radius'), findsOneWidget);
+
+        // 2. Tap the dismiss cross 'X' on the badge
+        final dismissTarget = find.byKey(const Key('dismiss-15km-badge'));
+        expect(dismissTarget, findsOneWidget);
+        await tester.tap(dismissTarget);
+        await tester.pumpAndSettle();
+
+        // 3. 15km bar is immediately dismissed without waiting for 10s timer
+        expect(find.text('Nearby plans'), findsOneWidget);
+        expect(find.text('Plans within 15 km'), findsNothing);
+        expect(find.text('15 km radius'), findsNothing);
+
+        actState.dispose();
+        authState.dispose();
+      },
+    );
+
+    testWidgets(
+      'ExploreScreen manually dismisses location unavailable banner when user taps cross "X" button',
+      (tester) async {
+        final actState = ActivitiesState();
+        actState.clearLocation();
+
+        final authState = AuthState();
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<ActivitiesState>.value(value: actState),
+              ChangeNotifierProvider<AuthState>.value(value: authState),
+            ],
+            child: const MaterialApp(home: ExploreScreen()),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // 1. Initial State: Location unavailable banner is active
+        expect(
+          find.text(
+            'Enable GPS or select your city to filter plans within 15 km of you.',
+          ),
+          findsOneWidget,
+        );
+
+        // 2. Tap dismiss cross 'X' on the banner
+        final dismissBtn = find.bySemanticsLabel('Dismiss banner');
+        expect(dismissBtn, findsOneWidget);
+        await tester.tap(dismissBtn);
+        await tester.pumpAndSettle();
+
+        // 3. Banner is immediately dismissed
         expect(
           find.text(
             'Enable GPS or select your city to filter plans within 15 km of you.',

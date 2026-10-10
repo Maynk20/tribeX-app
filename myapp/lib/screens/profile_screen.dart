@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_tokens.dart';
 import '../models/activity.dart';
 import '../models/join_request.dart';
 import '../state/activities_state.dart';
@@ -12,6 +13,8 @@ import '../state/auth_state.dart';
 import '../widgets/activity/delete_plan_dialog.dart';
 import '../widgets/activity/edit_plan_modal.dart';
 import '../widgets/activity/manage_requests_modal.dart';
+import '../widgets/common/app_avatar.dart';
+import '../widgets/common/app_empty_state.dart';
 import '../widgets/profile/emergency_sos_modal.dart';
 import '../widgets/profile/rate_squad_modal.dart';
 import 'auth_screen.dart';
@@ -56,64 +59,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: isDark
             ? AppColors.backgroundDark
             : AppColors.backgroundLight,
+        appBar: AppBar(
+          actions: [
+            IconButton(
+              icon: const Icon(LucideIcons.settings, size: 22),
+              tooltip: 'Settings',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Your profile',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(LucideIcons.settings, size: 22),
-                      tooltip: 'Settings',
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const SettingsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Sign in to see your hosted plans, ratings and squad stats.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AuthScreen()),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text('Sign in'),
-                ),
-              ],
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Center(
+              child: AppEmptyState(
+                icon: LucideIcons.user,
+                title: 'Your profile',
+                description:
+                    'Sign in to see your hosted plans, ratings, squad stats, and safety settings.',
+                primaryActionLabel: 'Sign In',
+                onPrimaryAction: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AuthScreen()),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -135,7 +114,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final displayName = user.fullName.isNotEmpty
         ? user.fullName
         : (user.username.isNotEmpty ? user.username : 'You');
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
 
     return Scaffold(
       backgroundColor: isDark
@@ -181,84 +159,94 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   Row(
                     children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SettingsScreen(),
+                      Semantics(
+                        button: true,
+                        label: 'Settings',
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SettingsScreen(),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(22),
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: cardBg,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: border.withValues(alpha: 0.6),
+                              ),
                             ),
-                          );
-                        },
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: cardBg,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: border.withValues(alpha: 0.6),
+                            child: Icon(
+                              LucideIcons.settings,
+                              size: 18,
+                              color: isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
                             ),
-                          ),
-                          child: Icon(
-                            LucideIcons.settings,
-                            size: 18,
-                            color: isDark
-                                ? AppColors.foregroundDark
-                                : AppColors.foregroundLight,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      GestureDetector(
-                        onTap: () {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              title: const Text('Sign out?'),
-                              content: const Text(
-                                'Are you sure you want to sign out of tribeX?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(),
-                                  child: const Text('Cancel'),
+                      const SizedBox(width: 8),
+                      Semantics(
+                        button: true,
+                        label: 'Sign out',
+                        child: InkWell(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppRadius.lg),
                                 ),
-                                ElevatedButton(
-                                  onPressed: () {
-                                    actState.setScope(FeedScope.discover);
-                                    actState.clearLocation();
-                                    authState.signOut();
-                                    Navigator.of(ctx).pop();
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.destructive,
+                                title: const Text('Sign out?'),
+                                content: const Text(
+                                  'Are you sure you want to sign out of tribeX?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(ctx).pop(),
+                                    child: const Text('Cancel'),
                                   ),
-                                  child: const Text('Sign out'),
-                                ),
-                              ],
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      actState.setScope(FeedScope.discover);
+                                      actState.clearLocation();
+                                      authState.signOut();
+                                      Navigator.of(ctx).pop();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.destructive,
+                                    ),
+                                    child: const Text('Sign out'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(22),
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: cardBg,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: border.withValues(alpha: 0.6),
+                              ),
                             ),
-                          );
-                        },
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: cardBg,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: border.withValues(alpha: 0.6),
+                            child: Icon(
+                              LucideIcons.logOut,
+                              size: 16,
+                              color: isDark
+                                  ? AppColors.foregroundDark
+                                  : AppColors.foregroundLight,
                             ),
-                          ),
-                          child: Icon(
-                            LucideIcons.logOut,
-                            size: 16,
-                            color: isDark
-                                ? AppColors.foregroundDark
-                                : AppColors.foregroundLight,
                           ),
                         ),
                       ),
@@ -268,12 +256,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Profile Card: rounded-3xl border border-border/60 bg-card p-5
+              // Profile Card: rounded-2xl border border-border/60 bg-card p-5
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
                   color: cardBg,
-                  borderRadius: BorderRadius.circular(28),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                   border: Border.all(color: border.withValues(alpha: 0.6)),
                   boxShadow: [
                     BoxShadow(
@@ -293,22 +281,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            CircleAvatar(
-                              radius: 32,
-                              backgroundColor: AppColors.primary,
-                              backgroundImage: user.avatarUrl != null
-                                  ? NetworkImage(user.avatarUrl!)
-                                  : null,
-                              child: user.avatarUrl == null
-                                  ? Text(
-                                      initial,
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : null,
+                            AppAvatar(
+                              imageUrl: user.avatarUrl,
+                              name: displayName,
+                              size: 64,
                             ),
                             if (user.isVerified)
                               Positioned(
@@ -518,8 +494,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               // Tabs: rounded-full border border-border/60 bg-card p-1 text-xs
               Container(
-                height: 38,
-                padding: const EdgeInsets.all(2),
+                height: 44,
+                padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
                   color: cardBg,
                   borderRadius: BorderRadius.circular(999),
@@ -528,56 +504,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _plansTab = "joined"),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _plansTab == "joined"
-                                ? (isDark
-                                      ? Colors.white
-                                      : const Color(0xFF0F172A))
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Joined · ${joinedPlans.length}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                      child: Semantics(
+                        button: true,
+                        selected: _plansTab == "joined",
+                        label: 'Joined plans, ${joinedPlans.length} plans',
+                        child: InkWell(
+                          onTap: () => setState(() => _plansTab = "joined"),
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
                               color: _plansTab == "joined"
-                                  ? (isDark ? Colors.black : Colors.white)
-                                  : (isDark
-                                        ? AppColors.mutedForegroundDark
-                                        : AppColors.mutedForegroundLight),
+                                  ? (isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A))
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Joined · ${joinedPlans.length}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: _plansTab == "joined"
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : (isDark
+                                          ? AppColors.mutedForegroundDark
+                                          : AppColors.mutedForegroundLight),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                     Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _plansTab = "hosted"),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _plansTab == "hosted"
-                                ? (isDark
-                                      ? Colors.white
-                                      : const Color(0xFF0F172A))
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Hosted · ${hostedPlans.length}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                      child: Semantics(
+                        button: true,
+                        selected: _plansTab == "hosted",
+                        label: 'Hosted plans, ${hostedPlans.length} plans',
+                        child: InkWell(
+                          onTap: () => setState(() => _plansTab = "hosted"),
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
                               color: _plansTab == "hosted"
-                                  ? (isDark ? Colors.black : Colors.white)
-                                  : (isDark
-                                        ? AppColors.mutedForegroundDark
-                                        : AppColors.mutedForegroundLight),
+                                  ? (isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A))
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Hosted · ${hostedPlans.length}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: _plansTab == "hosted"
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : (isDark
+                                          ? AppColors.mutedForegroundDark
+                                          : AppColors.mutedForegroundLight),
+                              ),
                             ),
                           ),
                         ),
@@ -591,23 +579,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // Plans Content
               if (_plansTab == "joined") ...[
                 if (joinedPlans.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: cardBg.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: border.withValues(alpha: 0.6)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      "You haven't joined any plans yet. Discover one on the Explore tab.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                      ),
+                  const AppEmptyState(
+                    icon: LucideIcons.calendar,
+                    title: "No joined plans yet",
+                    description:
+                        "You haven't joined any plans yet. Discover one on the Explore tab.",
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 24,
                     ),
                   )
                 else
@@ -775,23 +754,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   }),
               ] else ...[
                 if (hostedPlans.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: cardBg.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: border.withValues(alpha: 0.6)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      "You haven't hosted a plan yet. Tap Create to host one.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
-                      ),
+                  const AppEmptyState(
+                    icon: LucideIcons.sparkles,
+                    title: "No hosted plans yet",
+                    description:
+                        "You haven't hosted a plan yet. Tap Create to host one in minutes.",
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 24,
                     ),
                   )
                 else

@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_tokens.dart';
 import '../core/utils/app_toast.dart';
 import '../core/utils/location_feedback.dart';
 import '../models/user_profile.dart';
@@ -10,6 +11,7 @@ import '../services/report_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/theme_state.dart';
+import '../widgets/common/app_avatar.dart';
 import 'terms_and_policies_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -939,27 +941,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Material(
                 color: cardBg,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                   side: BorderSide(color: border),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
                     ListTile(
-                      leading: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: AppColors.primary,
-                        backgroundImage: user.avatarUrl != null
-                            ? NetworkImage(user.avatarUrl!)
-                            : null,
-                        child: user.avatarUrl == null
-                            ? Text(
-                                user.fullName.isNotEmpty
-                                    ? user.fullName[0].toUpperCase()
-                                    : 'U',
-                                style: const TextStyle(color: Colors.white),
-                              )
-                            : null,
+                      leading: AppAvatar(
+                        imageUrl: user.avatarUrl,
+                        name: user.fullName,
+                        size: 40,
                       ),
                       title: Text(
                         user.fullName,
@@ -1023,7 +1015,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Material(
               color: cardBg,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 side: BorderSide(color: border),
               ),
               clipBehavior: Clip.antiAlias,
@@ -1170,7 +1162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Material(
               color: cardBg,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 side: BorderSide(color: border),
               ),
               clipBehavior: Clip.antiAlias,
@@ -1301,7 +1293,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Material(
               color: cardBg,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 side: BorderSide(
                   color: AppColors.destructive.withValues(alpha: 0.3),
                 ),

@@ -6,6 +6,7 @@ import '../../core/utils/date_formatter.dart';
 import '../../models/message.dart';
 import '../../services/supabase_service.dart';
 import '../../state/chat_state.dart';
+import '../common/app_avatar.dart';
 
 class MessageBubbleWidget extends StatelessWidget {
   final Message message;
@@ -116,7 +117,6 @@ class MessageBubbleWidget extends StatelessWidget {
     final senderAvatar = message.sender?.avatarUrl ??
         cachedProfile?.avatarUrl ??
         squadMember?.avatarUrl;
-    final initial = senderName.isNotEmpty ? senderName[0].toUpperCase() : 'M';
 
     return Padding(
       padding: EdgeInsets.only(top: showSenderInfo ? 6 : 2, bottom: 2),
@@ -129,43 +129,13 @@ class MessageBubbleWidget extends StatelessWidget {
           // Incoming sender avatar on first in group
           if (!isMine) ...[
             if (showSenderInfo)
-              Container(
-                width: 28,
-                height: 28,
-                margin: const EdgeInsets.only(right: 8, bottom: 2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.primaryMuted,
-                  border: Border.all(
-                    color: border.withValues(alpha: 0.5),
-                    width: 0.5,
-                  ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8, bottom: 2),
+                child: AppAvatar(
+                  imageUrl: senderAvatar,
+                  name: senderName,
+                  size: 28,
                 ),
-                alignment: Alignment.center,
-                clipBehavior: Clip.antiAlias,
-                child: senderAvatar != null && senderAvatar.isNotEmpty
-                    ? Image.network(
-                        senderAvatar,
-                        width: 28,
-                        height: 28,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Text(
-                          initial,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      )
-                    : Text(
-                        initial,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
               )
             else
               const SizedBox(

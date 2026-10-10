@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_tokens.dart';
 import '../../core/utils/app_toast.dart';
 import '../../state/chat_state.dart';
 
@@ -53,7 +54,7 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: cardBg,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: border),
         ),
         child: Row(
@@ -98,7 +99,7 @@ class _ExpenseCardWidgetState extends State<ExpenseCardWidget> {
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: border),
         boxShadow: [
           BoxShadow(

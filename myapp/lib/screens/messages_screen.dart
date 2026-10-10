@@ -4,23 +4,35 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_tokens.dart';
 import '../core/utils/date_formatter.dart';
 import '../models/activity.dart';
 import '../models/join_request.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/chat_state.dart';
+import '../widgets/common/app_avatar.dart';
+import '../widgets/common/app_empty_state.dart';
 import 'auth_screen.dart';
 import 'chat_screen.dart';
+import 'create_plan_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
-  const MessagesScreen({super.key});
+  final VoidCallback? onNavigateToExplore;
+  final VoidCallback? onNavigateToCreate;
+
+  const MessagesScreen({
+    super.key,
+    this.onNavigateToExplore,
+    this.onNavigateToCreate,
+  });
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
   String _query = "";
 
   @override
@@ -31,11 +43,34 @@ class _MessagesScreenState extends State<MessagesScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadChats() async {
     final authState = context.read<AuthState>();
     final user = authState.currentUser;
     if (user != null) {
       await context.read<ChatState>().fetchUserChats(user.id);
+    }
+  }
+
+  void _handleExplore() {
+    if (widget.onNavigateToExplore != null) {
+      widget.onNavigateToExplore!();
+    }
+  }
+
+  void _handleCreate() {
+    if (widget.onNavigateToCreate != null) {
+      widget.onNavigateToCreate!();
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CreatePlanScreen()),
+      );
     }
   }
 
@@ -56,45 +91,21 @@ class _MessagesScreenState extends State<MessagesScreen> {
             : AppColors.backgroundLight,
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'Your squad chats',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Sign in to see messages from plans you host or joined.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark
-                        ? AppColors.mutedForegroundDark
-                        : AppColors.mutedForegroundLight,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AuthScreen()),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text('Sign in'),
-                ),
-              ],
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Center(
+              child: AppEmptyState(
+                icon: LucideIcons.messageSquare,
+                title: 'Squad chats',
+                description:
+                    'Sign in to see and send messages in plans you host or join.',
+                primaryActionLabel: 'Sign In',
+                onPrimaryAction: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AuthScreen()),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -142,11 +153,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
           : AppColors.backgroundLight,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header matching TanStack: p.uppercase tracking-[0.18em] + h1 text-3xl font-bold
+              // Header
               Text(
                 'INBOX',
                 style: TextStyle(
@@ -170,35 +181,46 @@ class _MessagesScreenState extends State<MessagesScreen> {
                       : AppColors.foregroundLight,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
 
-              // Search bar: rounded-2xl border border-border/60 bg-card px-4 py-3
+              // Search bar with clear button and 48px touch target
               Container(
                 height: 48,
                 decoration: BoxDecoration(
                   color: cardBg,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                   border: Border.all(color: border.withValues(alpha: 0.6)),
                 ),
                 child: TextField(
+                  controller: _searchCtrl,
                   onChanged: (val) => setState(() => _query = val),
-                  decoration: const InputDecoration(
-                    hintText: 'Search chats',
-                    prefixIcon: Icon(
+                  decoration: InputDecoration(
+                    hintText: 'Search squad chats',
+                    prefixIcon: const Icon(
                       LucideIcons.search,
                       size: 18,
                       color: AppColors.mutedForegroundLight,
                     ),
+                    suffixIcon: _query.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(LucideIcons.x, size: 16),
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _query = "");
+                            },
+                          )
+                        : null,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
 
-              // Chat List: flat list with border-b separator as in TanStack
+              // Chat List
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _loadChats,
@@ -209,45 +231,31 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         )
                       : myChats.isEmpty
                       ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           children: [
-                            const SizedBox(height: 80),
-                            Center(
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(24),
-                                decoration: BoxDecoration(
-                                  color: cardBg.withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(28),
-                                  border: Border.all(
-                                    color: border.withValues(alpha: 0.6),
+                            const SizedBox(height: 60),
+                            _query.isNotEmpty
+                                ? AppEmptyState(
+                                    icon: LucideIcons.searchX,
+                                    title: 'No matching chats',
+                                    description:
+                                        'No squad chats match "$_query". Try a different search term.',
+                                    primaryActionLabel: 'Clear Search',
+                                    onPrimaryAction: () {
+                                      _searchCtrl.clear();
+                                      setState(() => _query = "");
+                                    },
+                                  )
+                                : AppEmptyState(
+                                    icon: LucideIcons.messageSquare,
+                                    title: 'No squad chats yet',
+                                    description:
+                                        'Join an upcoming activity or create your own to chat and coordinate with your squad.',
+                                    primaryActionLabel: 'Explore Plans',
+                                    onPrimaryAction: _handleExplore,
+                                    secondaryActionLabel: 'Create a Plan',
+                                    onSecondaryAction: _handleCreate,
                                   ),
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      LucideIcons.messageCircle,
-                                      size: 36,
-                                      color: isDark
-                                          ? AppColors.mutedForegroundDark
-                                          : AppColors.mutedForegroundLight,
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      'No chats yet.\nJoin or host a plan to start a squad chat.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark
-                                            ? AppColors.mutedForegroundDark
-                                            : AppColors.mutedForegroundLight,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
                         )
                       : ListView.separated(
@@ -284,11 +292,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
                               } else {
                                 final senderName =
                                     lastMsg.sender?.fullName.isNotEmpty == true
-                                    ? lastMsg.sender!.fullName
-                                    : (lastMsg.sender?.username.isNotEmpty ==
-                                              true
-                                          ? lastMsg.sender!.username
-                                          : 'Squad Member');
+                                        ? lastMsg.sender!.fullName
+                                        : (lastMsg.sender?.username.isNotEmpty ==
+                                                  true
+                                              ? lastMsg.sender!.username
+                                              : 'Squad Member');
                                 if (lastMsg.senderId == user.id) {
                                   subtitleText = 'You: ${lastMsg.text}';
                                 } else {
@@ -297,158 +305,177 @@ class _MessagesScreenState extends State<MessagesScreen> {
                               }
                             }
 
-                            return InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ChatScreen(activity: chat),
-                                  ),
-                                );
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 48,
-                                      height: 48,
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? AppColors.mutedDark
-                                            : AppColors.mutedLight,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        AppCategories.emojiFor(chat.category),
-                                        style: const TextStyle(fontSize: 22),
-                                      ),
+                            final semanticsLabel =
+                                '${chat.title}, ${chat.isVirtual ? "Virtual" : "In Person"}, Last activity: $subtitleText, ${DateFormatter.formatChatDate(displayTime)}';
+
+                            return Semantics(
+                              label: semanticsLabel,
+                              button: true,
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatScreen(activity: chat),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: Row(
-                                                  children: [
-                                                    Flexible(
-                                                      child: Text(
-                                                        chat.title,
-                                                        style: TextStyle(
-                                                          fontSize: 14,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: isDark
-                                                              ? AppColors
-                                                                    .foregroundDark
-                                                              : AppColors
-                                                                    .foregroundLight,
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 4.5,
-                                                            vertical: 1,
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                    horizontal: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      // Squad Avatar or Category Emoji
+                                      chat.host?.avatarUrl != null &&
+                                              chat.host!.avatarUrl!.isNotEmpty
+                                          ? AppAvatar(
+                                              imageUrl: chat.host!.avatarUrl,
+                                              name: chat.host?.fullName.isNotEmpty == true
+                                                  ? chat.host!.fullName
+                                                  : chat.title,
+                                              size: 48,
+                                            )
+                                          : Container(
+                                              width: 48,
+                                              height: 48,
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? AppColors.mutedDark
+                                                    : AppColors.mutedLight,
+                                                borderRadius: BorderRadius.circular(AppRadius.md),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                AppCategories.emojiFor(chat.category),
+                                                style: const TextStyle(fontSize: 22),
+                                              ),
+                                            ),
+                                      const SizedBox(width: AppSpacing.md),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Row(
+                                                    children: [
+                                                      Flexible(
+                                                        child: Text(
+                                                          chat.title,
+                                                          style: TextStyle(
+                                                            fontSize: 14,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: isDark
+                                                                ? AppColors
+                                                                      .foregroundDark
+                                                                : AppColors
+                                                                      .foregroundLight,
                                                           ),
-                                                      decoration: BoxDecoration(
-                                                        color: chat.isVirtual
-                                                            ? AppColors
-                                                                  .primaryMuted
-                                                            : (isDark
-                                                                  ? AppColors
-                                                                        .mutedDark
-                                                                  : AppColors
-                                                                        .mutedLight),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              4,
-                                                            ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
                                                       ),
-                                                      child: Text(
-                                                        chat.isVirtual
-                                                            ? 'Virtual'
-                                                            : 'In-Person',
-                                                        style: TextStyle(
-                                                          fontSize: 8.5,
-                                                          fontWeight:
-                                                              FontWeight.w700,
+                                                      const SizedBox(width: 6),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 5,
+                                                              vertical: 1.5,
+                                                            ),
+                                                        decoration: BoxDecoration(
                                                           color: chat.isVirtual
                                                               ? AppColors
-                                                                    .primary
+                                                                    .primaryMuted
                                                               : (isDark
                                                                     ? AppColors
-                                                                          .mutedForegroundDark
+                                                                          .mutedDark
                                                                     : AppColors
-                                                                          .mutedForegroundLight),
+                                                                          .mutedLight),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                AppRadius.xs,
+                                                              ),
+                                                        ),
+                                                        child: Text(
+                                                          chat.isVirtual
+                                                              ? 'Virtual'
+                                                              : 'In-Person',
+                                                          style: TextStyle(
+                                                            fontSize: 8.5,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: chat.isVirtual
+                                                                ? AppColors
+                                                                      .primary
+                                                                : (isDark
+                                                                      ? AppColors
+                                                                            .mutedForegroundDark
+                                                                      : AppColors
+                                                                            .mutedForegroundLight),
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                  ],
+                                                    ],
+                                                  ),
                                                 ),
-                                              ),
-                                              Text(
-                                                DateFormatter.formatChatDate(
-                                                  displayTime,
-                                                ),
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: isDark
-                                                      ? AppColors
-                                                            .mutedForegroundDark
-                                                      : AppColors
-                                                            .mutedForegroundLight,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            subtitleText,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: hasMsgs
-                                                  ? FontWeight.w500
-                                                  : FontWeight.normal,
-                                              color: isDark
-                                                  ? (hasMsgs
+                                                Text(
+                                                  DateFormatter.formatChatDate(
+                                                    displayTime,
+                                                  ),
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isDark
                                                         ? AppColors
-                                                              .foregroundDark
-                                                              .withValues(
-                                                                alpha: 0.85,
-                                                              )
+                                                              .mutedForegroundDark
                                                         : AppColors
-                                                              .mutedForegroundDark)
-                                                  : (hasMsgs
-                                                        ? AppColors
-                                                              .foregroundLight
-                                                              .withValues(
-                                                                alpha: 0.85,
-                                                              )
-                                                        : AppColors
-                                                              .mutedForegroundLight),
+                                                              .mutedForegroundLight,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              subtitleText,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: hasMsgs
+                                                    ? FontWeight.w500
+                                                    : FontWeight.normal,
+                                                color: isDark
+                                                    ? (hasMsgs
+                                                          ? AppColors
+                                                                .foregroundDark
+                                                                .withValues(
+                                                                  alpha: 0.85,
+                                                                )
+                                                          : AppColors
+                                                                .mutedForegroundDark)
+                                                    : (hasMsgs
+                                                          ? AppColors
+                                                                .foregroundLight
+                                                                .withValues(
+                                                                  alpha: 0.85,
+                                                                )
+                                                          : AppColors
+                                                                .mutedForegroundLight),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -463,3 +490,4 @@ class _MessagesScreenState extends State<MessagesScreen> {
     );
   }
 }
+

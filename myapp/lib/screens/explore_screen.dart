@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/categories.dart';
 import '../core/theme/app_colors.dart';
+import '../core/theme/app_tokens.dart';
 import '../core/utils/app_toast.dart';
 import '../core/utils/location_feedback.dart';
 import '../services/location_service.dart';
@@ -16,6 +17,8 @@ import '../widgets/activity/delete_plan_dialog.dart';
 import '../widgets/activity/edit_plan_modal.dart';
 import '../widgets/activity/manage_requests_modal.dart';
 import '../widgets/activity/safety_disclaimer_modal.dart';
+import '../widgets/common/app_avatar.dart';
+import '../widgets/common/app_empty_state.dart';
 import '../widgets/common/loaders.dart';
 import '../widgets/common/notifications_bell_dialog.dart';
 import '../widgets/common/place_search_dialog.dart';
@@ -66,6 +69,15 @@ class _ExploreScreenState extends State<ExploreScreen>
         });
       }
     });
+  }
+
+  void _dismiss15km() {
+    _fifteenKmTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _is15kmActive = false;
+      });
+    }
   }
 
   /// TanStack `handleUseGPS` → `requestBrowserLocation`.
@@ -247,102 +259,117 @@ class _ExploreScreenState extends State<ExploreScreen>
                               if (user != null)
                                 Row(
                                   children: [
-                                    GestureDetector(
-                                      onTap: () {
-                                        PlaceSearchDialog.show(
-                                          context,
-                                          initialValue: actState.location,
-                                          onSelect: (p) {
-                                            _start15kmTimer();
-                                            // TanStack toPlace(): short = title.
-                                            actState.setPlace(
-                                              SavedPlace(
-                                                displayName: [
-                                                  p.title,
-                                                  if (p.subtitle.isNotEmpty)
-                                                    p.subtitle,
-                                                ].join(', '),
-                                                short: p.title,
-                                                lat: p.lat,
-                                                lon: p.lon,
-                                              ),
-                                            );
-                                            AppToast.show(
-                                              context,
-                                              'Showing plans within 15 km of ${p.title}',
-                                            );
-                                          },
-                                        );
-                                      },
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            LucideIcons.mapPin,
-                                            size: 13,
-                                            color: AppColors.primary,
+                                    Semantics(
+                                      button: true,
+                                      label: 'Change location. Current: ${actState.location}',
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                                        onTap: () {
+                                          PlaceSearchDialog.show(
+                                            context,
+                                            initialValue: actState.location,
+                                            onSelect: (p) {
+                                              _start15kmTimer();
+                                              // TanStack toPlace(): short = title.
+                                              actState.setPlace(
+                                                SavedPlace(
+                                                  displayName: [
+                                                    p.title,
+                                                    if (p.subtitle.isNotEmpty)
+                                                      p.subtitle,
+                                                  ].join(', '),
+                                                  short: p.title,
+                                                  lat: p.lat,
+                                                  lon: p.lon,
+                                                ),
+                                              );
+                                              AppToast.show(
+                                                context,
+                                                'Showing plans within 15 km of ${p.title}',
+                                              );
+                                            },
+                                          );
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 6,
+                                            horizontal: 4,
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            actState.location,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark
-                                                  ? AppColors.foregroundDark
-                                                  : AppColors.foregroundLight,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Icon(
-                                            LucideIcons.chevronDown,
-                                            size: 13,
-                                            color: isDark
-                                                ? AppColors.mutedForegroundDark
-                                                : AppColors
-                                                      .mutedForegroundLight,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    GestureDetector(
-                                      onTap: _isGettingLocation
-                                          ? null
-                                          : _fetchGpsLocation,
-                                      child: _isGettingLocation
-                                          ? const SizedBox(
-                                              width: 13,
-                                              height: 13,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                LucideIcons.mapPin,
+                                                size: 14,
                                                 color: AppColors.primary,
                                               ),
-                                            )
-                                          : Icon(
-                                              LucideIcons.navigation,
-                                              size: 13,
-                                              color: isDark
-                                                  ? AppColors
-                                                        .mutedForegroundDark
-                                                  : AppColors
-                                                        .mutedForegroundLight,
-                                            ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                actState.location,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark
+                                                      ? AppColors.foregroundDark
+                                                      : AppColors.foregroundLight,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Icon(
+                                                LucideIcons.chevronDown,
+                                                size: 14,
+                                                color: isDark
+                                                    ? AppColors.mutedForegroundDark
+                                                    : AppColors.mutedForegroundLight,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Semantics(
+                                      button: true,
+                                      label: 'Use current GPS location',
+                                      child: IconButton(
+                                        tooltip: 'Use current location',
+                                        iconSize: 16,
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: _isGettingLocation
+                                            ? null
+                                            : _fetchGpsLocation,
+                                        icon: _isGettingLocation
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: AppColors.primary,
+                                                ),
+                                              )
+                                            : Icon(
+                                                LucideIcons.navigation,
+                                                size: 16,
+                                                color: isDark
+                                                    ? AppColors.mutedForegroundDark
+                                                    : AppColors.mutedForegroundLight,
+                                              ),
+                                      ),
                                     ),
                                   ],
                                 )
                               else
                                 Text(
-                                  'DISCOVER PLANS NEARBY',
+                                  'Discover local plans & fun',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    letterSpacing: 1.8,
                                     color: isDark
                                         ? AppColors.mutedForegroundDark
                                         : AppColors.mutedForegroundLight,
                                   ),
                                 ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 2),
                               RichText(
                                 text: TextSpan(
                                   style: TextStyle(
@@ -370,6 +397,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                             children: [
                               if (user != null) ...[
                                 IconButton(
+                                  tooltip: 'Notifications',
                                   icon: const Icon(LucideIcons.bell, size: 20),
                                   style: IconButton.styleFrom(
                                     backgroundColor: cardBg,
@@ -377,6 +405,10 @@ class _ExploreScreenState extends State<ExploreScreen>
                                       color: border.withValues(alpha: 0.6),
                                     ),
                                     padding: const EdgeInsets.all(10),
+                                    minimumSize: const Size(
+                                      AppTouchTarget.minSize,
+                                      AppTouchTarget.minSize,
+                                    ),
                                   ),
                                   onPressed: () {
                                     NotificationsBellDialog.show(
@@ -421,25 +453,17 @@ class _ExploreScreenState extends State<ExploreScreen>
                                   },
                                 ),
                                 const SizedBox(width: 8),
-                                GestureDetector(
-                                  onTap: widget.onNavigateToProfile,
-                                  child: CircleAvatar(
-                                    radius: 20,
-                                    backgroundColor: AppColors.primary,
-                                    backgroundImage: user.avatarUrl != null
-                                        ? NetworkImage(user.avatarUrl!)
-                                        : null,
-                                    child: user.avatarUrl == null
-                                        ? Text(
-                                            user.fullName.isNotEmpty
-                                                ? user.fullName[0].toUpperCase()
-                                                : 'U',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : null,
+                                Semantics(
+                                  button: true,
+                                  label: 'View profile',
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(AppRadius.full),
+                                    onTap: widget.onNavigateToProfile,
+                                    child: AppAvatar(
+                                      imageUrl: user.avatarUrl,
+                                      name: user.fullName,
+                                      size: 40,
+                                    ),
                                   ),
                                 ),
                               ] else
@@ -459,8 +483,12 @@ class _ExploreScreenState extends State<ExploreScreen>
                                       horizontal: 16,
                                       vertical: 10,
                                     ),
+                                    minimumSize: const Size(
+                                      80,
+                                      AppTouchTarget.minSize,
+                                    ),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(999),
+                                      borderRadius: BorderRadius.circular(AppRadius.full),
                                     ),
                                   ),
                                 ),
@@ -583,8 +611,11 @@ class _ExploreScreenState extends State<ExploreScreen>
                             ),
                             ...AppCategories.groups.map((g) {
                               final isSelected = actState.selectedGroup == g;
+                              final title = g.isEmpty
+                                  ? g
+                                  : '${g[0].toUpperCase()}${g.substring(1).toLowerCase()}';
                               return _CategoryChip(
-                                label: g.toUpperCase(),
+                                label: title,
                                 isSelected: isSelected,
                                 onTap: () => actState.setGroup(g),
                               );
@@ -750,40 +781,55 @@ class _ExploreScreenState extends State<ExploreScreen>
                           if (_is15kmActive &&
                               actState.scope == FeedScope.discover &&
                               actState.place != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(
-                                  alpha: 0.12,
-                                ),
+                            Semantics(
+                              label: 'Dismiss 15 km radius filter',
+                              button: true,
+                              child: InkWell(
+                                key: const Key('dismiss-15km-badge'),
+                                onTap: _dismiss15km,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.3,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    LucideIcons.compass,
-                                    size: 11,
-                                    color: AppColors.primary,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    '15 km radius',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.3,
+                                      ),
                                     ),
                                   ),
-                                ],
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.compass,
+                                        size: 11,
+                                        color: AppColors.primary,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '15 km radius',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      SizedBox(width: 6),
+                                      Icon(
+                                        LucideIcons.x,
+                                        size: 12,
+                                        color: AppColors.primary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                         ],
@@ -886,6 +932,25 @@ class _ExploreScreenState extends State<ExploreScreen>
                                         ),
                                       ),
                               ),
+                              const SizedBox(width: 4),
+                              Semantics(
+                                label: 'Dismiss banner',
+                                button: true,
+                                child: InkWell(
+                                  onTap: _dismiss15km,
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Icon(
+                                      LucideIcons.x,
+                                      size: 16,
+                                      color: isDark
+                                          ? AppColors.mutedForegroundDark
+                                          : AppColors.mutedForegroundLight,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -910,88 +975,25 @@ class _ExploreScreenState extends State<ExploreScreen>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
-                      vertical: 30,
+                      vertical: 32,
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: cardBg.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: border.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.wifiOff,
-                            size: 36,
-                            color: isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            user == null
-                                ? 'Sign in to Discover Local Fun!'
-                                : 'Could not load plans',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? AppColors.foregroundDark
-                                  : AppColors.foregroundLight,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            user == null
-                                ? 'Log in to browse plans, join activities, and connect with people nearby.'
-                                : 'Check your connection and try again.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark
-                                  ? AppColors.mutedForegroundDark
-                                  : AppColors.mutedForegroundLight,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          if (user == null)
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const AuthScreen(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(LucideIcons.logIn, size: 16),
-                              label: const Text('Sign In'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
+                    child: AppEmptyState(
+                      icon: LucideIcons.wifiOff,
+                      title: user == null
+                          ? 'Sign in to discover local fun'
+                          : 'Could not load plans',
+                      message: user == null
+                          ? 'Log in to browse plans, join activities, and connect with people nearby.'
+                          : (actState.error ?? 'Check your connection and try again.'),
+                      primaryActionLabel: user == null ? 'Sign in' : 'Try again',
+                      onPrimaryAction: user == null
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const AuthScreen(),
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                              ),
-                            )
-                          else
-                            TextButton.icon(
-                              onPressed: () => actState.fetchActivities(),
-                              icon: const Icon(LucideIcons.rotateCcw, size: 14),
-                              label: const Text('Retry'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                              ),
-                            ),
-                        ],
-                      ),
+                              )
+                          : () => actState.fetchActivities(),
                     ),
                   ),
                 )
@@ -1000,86 +1002,40 @@ class _ExploreScreenState extends State<ExploreScreen>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
-                      vertical: 30,
+                      vertical: 32,
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: cardBg.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: border.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.compass,
-                            size: 36,
-                            color: isDark
-                                ? AppColors.mutedForegroundDark
-                                : AppColors.mutedForegroundLight,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            actState.scope == FeedScope.hosting
-                                ? "You haven't hosted any plans yet."
-                                : actState.scope == FeedScope.joined
-                                ? "You haven't joined any plans yet."
-                                : (actState.activeFilterCount > 0 ||
+                    child: AppEmptyState(
+                      icon: LucideIcons.compass,
+                      title: actState.scope == FeedScope.hosting
+                          ? "You haven't hosted any plans yet"
+                          : actState.scope == FeedScope.joined
+                              ? "You haven't joined any plans yet"
+                              : (actState.activeFilterCount > 0 ||
                                       actState.searchQuery.isNotEmpty)
-                                ? "No plans match your active filters."
-                                : "No plans happening nearby right now.",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? AppColors.foregroundDark
-                                  : AppColors.foregroundLight,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            actState.scope == FeedScope.hosting
-                                ? 'Tap Create below to host a hangout or game.'
-                                : actState.scope == FeedScope.joined
-                                ? 'Explore local plans and request to join.'
-                                : (actState.activeFilterCount > 0 ||
+                                  ? "No plans match your search"
+                                  : "No plans happening nearby",
+                      message: actState.scope == FeedScope.hosting
+                          ? 'Tap Create below to host a hangout, game, or meetup.'
+                          : actState.scope == FeedScope.joined
+                              ? 'Explore local plans and request to join activities happening around you.'
+                              : (actState.activeFilterCount > 0 ||
                                       actState.searchQuery.isNotEmpty)
-                                ? 'Try clearing filters or search terms.'
-                                : 'Be the first to post a box cricket, trek, or hangout!',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark
-                                  ? AppColors.mutedForegroundDark
-                                  : AppColors.mutedForegroundLight,
-                            ),
-                          ),
-                          if (actState.activeFilterCount > 0 ||
-                              actState.searchQuery.isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            TextButton.icon(
-                              onPressed: () {
-                                actState.resetFilters();
-                                actState.setSearchQuery('');
-                                _searchCtrl.clear();
-                              },
-                              icon: const Icon(LucideIcons.rotateCcw, size: 14),
-                              label: const Text('Reset All Filters'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                                  ? 'Try clearing active filters or adjusting your search term.'
+                                  : 'Be the first to create a box cricket, trek, or coffee hangout!',
+                      primaryActionLabel: (actState.activeFilterCount > 0 ||
+                              actState.searchQuery.isNotEmpty)
+                          ? 'Reset filters'
+                          : (widget.onNavigateToCreate != null
+                              ? 'Create a plan'
+                              : null),
+                      onPrimaryAction: (actState.activeFilterCount > 0 ||
+                              actState.searchQuery.isNotEmpty)
+                          ? () {
+                              actState.resetFilters();
+                              actState.setSearchQuery('');
+                              _searchCtrl.clear();
+                            }
+                          : widget.onNavigateToCreate,
                     ),
                   ),
                 )
@@ -1238,34 +1194,40 @@ class _CategoryChip extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.primary
-                : (isDark ? AppColors.cardDark : AppColors.cardLight),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: '$label category',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 36),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
               color: isSelected
                   ? AppColors.primary
-                  : (isDark ? AppColors.borderDark : AppColors.borderLight)
-                        .withValues(alpha: 0.6),
-            ),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5,
+                  : (isDark ? AppColors.cardDark : AppColors.cardLight),
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              border: Border.all(
                 color: isSelected
-                    ? Colors.white
-                    : (isDark
+                    ? AppColors.primary
+                    : (isDark ? AppColors.borderDark : AppColors.borderLight)
+                        .withValues(alpha: 0.6),
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected
+                      ? Colors.white
+                      : (isDark
                           ? AppColors.mutedForegroundDark
                           : AppColors.mutedForegroundLight),
+                ),
               ),
             ),
           ),
@@ -1294,42 +1256,49 @@ class _SubCategoryChip extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.primary.withValues(alpha: 0.12)
-                : (isDark ? AppColors.cardDark : AppColors.cardLight),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: '$label subcategory',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
               color: isSelected
-                  ? AppColors.primary
-                  : (isDark ? AppColors.borderDark : AppColors.borderLight)
+                  ? AppColors.primary.withValues(alpha: 0.12)
+                  : (isDark ? AppColors.cardDark : AppColors.cardLight),
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.primary
+                    : (isDark ? AppColors.borderDark : AppColors.borderLight)
                         .withValues(alpha: 0.6),
+              ),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (emoji != null) ...[
-                Text(emoji!, style: const TextStyle(fontSize: 12)),
-                const SizedBox(width: 4),
-              ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: isSelected
-                      ? AppColors.primary
-                      : (isDark
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (emoji != null) ...[
+                  Text(emoji!, style: const TextStyle(fontSize: 12)),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isSelected
+                        ? AppColors.primary
+                        : (isDark
                             ? AppColors.mutedForegroundDark
                             : AppColors.mutedForegroundLight),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1355,44 +1324,51 @@ class _ModeTab extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isDark ? Colors.white : const Color(0xFF0F172A))
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (icon != null) ...[
-                Icon(
-                  icon,
-                  size: 12,
-                  color: isSelected
-                      ? (isDark ? Colors.black : Colors.white)
-                      : (isDark
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: '$label mode',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 34),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    size: 13,
+                    color: isSelected
+                        ? (isDark ? Colors.black : Colors.white)
+                        : (isDark
                             ? AppColors.mutedForegroundDark
                             : AppColors.mutedForegroundLight),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected
+                        ? (isDark ? Colors.black : Colors.white)
+                        : (isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight),
+                  ),
                 ),
-                const SizedBox(width: 4),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected
-                      ? (isDark ? Colors.black : Colors.white)
-                      : (isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1416,26 +1392,33 @@ class _ScopeTab extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isDark ? Colors.white : const Color(0xFF0F172A))
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: '$label scope',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 32),
+            decoration: BoxDecoration(
               color: isSelected
-                  ? (isDark ? Colors.black : Colors.white)
-                  : (isDark
+                  ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isSelected
+                    ? (isDark ? Colors.black : Colors.white)
+                    : (isDark
                         ? AppColors.mutedForegroundDark
                         : AppColors.mutedForegroundLight),
+              ),
             ),
           ),
         ),

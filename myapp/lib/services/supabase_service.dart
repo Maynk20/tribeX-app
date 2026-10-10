@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -18,7 +19,9 @@ class SupabaseService {
         ),
       );
       _initialized = true;
-    } catch (_) {
+    } catch (e, stackTrace) {
+      debugPrint('Supabase initialization failed: $e');
+      debugPrint('$stackTrace');
       _initialized = true;
     }
   }
