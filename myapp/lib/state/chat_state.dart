@@ -657,6 +657,12 @@ class ChatState extends ChangeNotifier {
                   payload.oldRecord['poll_id']?.toString();
               if (pollId != null) {
                 fetchPoll(pollId, force: true);
+              } else {
+                // On DELETE events (vote retraction), oldRecord may lack poll_id under default REPLICA IDENTITY.
+                // Refresh all loaded polls for this activity so vote counts remain synced across all users.
+                for (final pId in _polls.keys.toList()) {
+                  fetchPoll(pId, force: true);
+                }
               }
             }
           },
@@ -1535,27 +1541,21 @@ class ChatState extends ChangeNotifier {
         }, onConflict: 'poll_id,user_id');
       } catch (upsertErr) {
         debugPrint(
-          'Direct upsert failed, trying select & update/insert fallback: $upsertErr',
+          'Direct upsert failed, trying delete & insert fallback: $upsertErr',
         );
-        final existingVote = await client
+        // Clean existing rows for (poll_id, user_id) first to guarantee single choice
+        // and eliminate duplicate key violations or multiple-row query crashes
+        await client
             .from('poll_votes')
-            .select('id')
+            .delete()
             .eq('poll_id', pollId)
-            .eq('user_id', verifiedUserId)
-            .maybeSingle();
+            .eq('user_id', verifiedUserId);
 
-        if (existingVote != null && existingVote['id'] != null) {
-          await client
-              .from('poll_votes')
-              .update({'option_index': optionIdx})
-              .eq('id', existingVote['id']);
-        } else {
-          await client.from('poll_votes').insert({
-            'poll_id': pollId,
-            'user_id': verifiedUserId,
-            'option_index': optionIdx,
-          });
-        }
+        await client.from('poll_votes').insert({
+          'poll_id': pollId,
+          'user_id': verifiedUserId,
+          'option_index': optionIdx,
+        });
       }
 
       _votingPollIds.remove(pollId);
@@ -1577,10 +1577,10 @@ class ChatState extends ChangeNotifier {
   }
 
   Future<bool> retractPollVote(String pollId, String userId) async {
-    final client = SupabaseService.client;
-    if (client == null || _isDisposed) return false;
+    if (_isDisposed) return false;
 
-    final authUser = client.auth.currentUser;
+    final client = SupabaseService.client;
+    final authUser = client?.auth.currentUser;
     final verifiedUserId = (authUser?.id ?? userId).trim().toLowerCase();
     if (verifiedUserId.isEmpty) return false;
 
@@ -1599,6 +1599,11 @@ class ChatState extends ChangeNotifier {
 
       _polls[pollId] = currentPoll.copyWith(options: updatedOptions);
       if (!_isDisposed) notifyListeners();
+    }
+
+    if (client == null) {
+      _votingPollIds.remove(pollId);
+      return true;
     }
 
     try {
