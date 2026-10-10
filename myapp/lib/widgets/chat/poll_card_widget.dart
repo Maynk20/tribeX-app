@@ -254,26 +254,31 @@ class _PollCardWidgetState extends State<PollCardWidget> {
                       );
                       return;
                     }
-                    if (isSelected) {
-                      // Already picked this option; maintain vote
-                      return;
-                    }
-
                     unawaited(HapticFeedback.selectionClick());
                     setState(() {
                       _votingOptionId = opt.id;
                     });
                     try {
-                      final ok = await chatState.votePoll(
-                        poll.id,
-                        opt.id,
-                        effectiveUserId,
-                      );
+                      final bool ok;
+                      if (isSelected) {
+                        // User tapped their currently selected option: retract/un-vote
+                        ok = await chatState.retractPollVote(
+                          poll.id,
+                          effectiveUserId,
+                        );
+                      } else {
+                        // Vote for new option or switch pick
+                        ok = await chatState.votePoll(
+                          poll.id,
+                          opt.id,
+                          effectiveUserId,
+                        );
+                      }
                       if (!context.mounted) return;
                       if (!ok) {
                         AppToast.show(
                           context,
-                          'Could not record vote. Please retry.',
+                          'Could not update vote. Please retry.',
                           isError: true,
                         );
                       }

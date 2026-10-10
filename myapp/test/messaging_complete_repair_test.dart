@@ -318,7 +318,7 @@ void main() {
 
         expect(find.text('Rohit Verma'), findsOneWidget);
         expect(find.text('Count me in for the match!'), findsOneWidget);
-        expect(find.text('R'), findsOneWidget); // Initials avatar
+        expect(find.text('RV'), findsOneWidget); // Initials avatar
       },
     );
 
