@@ -840,11 +840,15 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                         color: AppColors.primary,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        DateFormat('MMM d, yyyy').format(_date),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                      Flexible(
+                        child: Text(
+                          DateFormat('MMM d, yyyy').format(_date),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -866,11 +870,15 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                         color: AppColors.primary,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _time.format(context),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                      Flexible(
+                        child: Text(
+                          _time.format(context),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -891,7 +899,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
         if (_isOnline) ...[
           _FormFieldWrapper(
             label: 'MEETING LINK',
-            hint: 'Google Meet, Discord, Zoom…',
+            hint: 'Meet, Discord, Zoom…',
             error: _meetingLinkError,
             child: TextField(
               controller: _meetingLinkCtrl,
@@ -912,8 +920,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
           ),
           const SizedBox(height: 10),
           _FormFieldWrapper(
-            label: 'PLATFORM NAME (OPTIONAL)',
-            hint: 'e.g. Google Meet, Discord, Zoom',
+            label: 'PLATFORM (OPTIONAL)',
+            hint: 'e.g. Google Meet',
             child: TextField(
               controller: _locCtrl,
               decoration: const InputDecoration(
@@ -1676,29 +1684,40 @@ class _FormFieldWrapper extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: hasError
-                          ? AppColors.destructive
-                          : (isDark
-                              ? AppColors.mutedForegroundDark
-                              : AppColors.mutedForegroundLight),
-                    ),
-                  ),
-                  if (hint != null)
-                    Text(
-                      hint!,
+                  Flexible(
+                    child: Text(
+                      label,
                       style: TextStyle(
                         fontSize: 10,
-                        color: isDark
-                            ? AppColors.mutedForegroundDark
-                            : AppColors.mutedForegroundLight,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: hasError
+                            ? AppColors.destructive
+                            : (isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (hint != null) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        hint!,
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? AppColors.mutedForegroundDark
+                              : AppColors.mutedForegroundLight,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                  ],
                 ],
               ),
               const SizedBox(height: 6),
@@ -1776,16 +1795,20 @@ class _ModeOptionCard extends StatelessWidget {
           children: [
             Text(emoji, style: const TextStyle(fontSize: 16)),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isSelected
-                    ? AppColors.primary
-                    : (isDark
-                          ? AppColors.foregroundDark
-                          : AppColors.foregroundLight),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected
+                      ? AppColors.primary
+                      : (isDark
+                            ? AppColors.foregroundDark
+                            : AppColors.foregroundLight),
+                ),
               ),
             ),
           ],
