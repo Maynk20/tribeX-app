@@ -118,7 +118,8 @@ class NotificationsBellDialog extends StatelessWidget {
                             notifsState.markAsRead(n.id);
                             Navigator.of(context).pop();
                             if (n.activityId != null) {
-                              if (n.type == NotificationType.joinRequest) {
+                              if (n.type == NotificationType.joinRequest ||
+                                  n.type == NotificationType.requestDeclined) {
                                 onOpenActivity?.call(n.activityId!);
                               } else {
                                 onOpenChat?.call(n.activityId!);

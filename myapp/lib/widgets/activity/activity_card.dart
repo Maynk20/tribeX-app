@@ -79,8 +79,20 @@ class ActivityCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    final host = activity.host;
-    final hostName = host?.fullName ?? host?.username ?? 'Host';
+    ActivitiesState? actState;
+    try {
+      actState = Provider.of<ActivitiesState>(context);
+    } catch (_) {
+      actState = null;
+    }
+    final host = activity.host ?? actState?.getCachedProfile(activity.hostId);
+    final rawHostName = host?.fullName.trim();
+    final rawHostUsername = host?.username.trim();
+    final hostName = (rawHostName != null && rawHostName.isNotEmpty && rawHostName != 'User')
+        ? rawHostName
+        : ((rawHostUsername != null && rawHostUsername.isNotEmpty)
+            ? rawHostUsername
+            : 'Host');
     final isUrgentSlots = activity.slotsLeft <= 3 && activity.slotsLeft > 0;
     final urgentActive = activity.isUrgentActive;
 

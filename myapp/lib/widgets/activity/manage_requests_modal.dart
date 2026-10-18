@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/join_request.dart';
+import '../../models/user_profile.dart';
 import '../../state/activities_state.dart';
 
 class ManageRequestsModal extends StatelessWidget {
@@ -153,6 +154,36 @@ class _AttendeeRow extends StatefulWidget {
 class _AttendeeRowState extends State<_AttendeeRow> {
   bool _isProcessing = false;
   String? _processingAction; // 'accept', 'decline', 'remove'
+  UserProfile? _resolvedUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvedUser = widget.req.user;
+    if (_resolvedUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final actState = context.read<ActivitiesState>();
+        final cached = actState.getCachedProfile(widget.req.userId);
+        if (cached != null) {
+          if (mounted) setState(() => _resolvedUser = cached);
+          return;
+        }
+        final prof = await actState.fetchUserProfile(widget.req.userId);
+        if (mounted && prof != null) {
+          setState(() => _resolvedUser = prof);
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AttendeeRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.req.user != oldWidget.req.user && widget.req.user != null) {
+      _resolvedUser = widget.req.user;
+    }
+  }
 
   Future<void> _handleAction(
     String action,
@@ -182,8 +213,14 @@ class _AttendeeRowState extends State<_AttendeeRow> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.backgroundDark : AppColors.mutedLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    final user = widget.req.user;
-    final name = user?.fullName ?? user?.username ?? "Squad Mate";
+    final user = _resolvedUser ?? widget.req.user ?? state.getCachedProfile(widget.req.userId);
+    final rawFullName = user?.fullName.trim();
+    final rawUsername = user?.username.trim();
+    final name = (rawFullName != null && rawFullName.isNotEmpty && rawFullName != 'User')
+        ? rawFullName
+        : ((rawUsername != null && rawUsername.isNotEmpty)
+            ? rawUsername
+            : "Unknown user");
     final isAccepted = widget.req.status == JoinStatus.accepted;
 
     return Container(

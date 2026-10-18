@@ -9,6 +9,7 @@ import 'screens/main_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/terms_and_policies_screen.dart';
+import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
 import 'state/activities_state.dart';
 import 'state/auth_state.dart';
@@ -60,6 +61,7 @@ Future<void> main() async {
   );
 
   await SupabaseService.initialize();
+  await NotificationService().initialize();
 
   runApp(const TribeXApp());
 }

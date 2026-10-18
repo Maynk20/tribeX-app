@@ -340,11 +340,13 @@ class LocationService {
       );
       return LocationResult.success(position.latitude, position.longitude);
     } on TimeoutException {
-      // Graceful fallback: If fresh satellite acquisition timed out, try last known position
+      // Graceful fallback: If fresh satellite acquisition timed out, try a recent last known position (within 15 minutes)
       if (!kIsWeb) {
         try {
           final last = await Geolocator.getLastKnownPosition();
-          if (last != null) {
+          if (last != null &&
+              DateTime.now().difference(last.timestamp).abs() <=
+                  const Duration(minutes: 15)) {
             return LocationResult.success(last.latitude, last.longitude);
           }
         } catch (_) {}
@@ -364,11 +366,13 @@ class LocationService {
         reason: LocationFailure.permissionDenied,
       );
     } catch (_) {
-      // Attempt last known fix as fallback on unexpected platform failure
+      // Attempt last known fix as fallback on unexpected platform failure if fresh (<15 mins)
       if (!kIsWeb) {
         try {
           final last = await Geolocator.getLastKnownPosition();
-          if (last != null) {
+          if (last != null &&
+              DateTime.now().difference(last.timestamp).abs() <=
+                  const Duration(minutes: 15)) {
             return LocationResult.success(last.latitude, last.longitude);
           }
         } catch (_) {}
@@ -382,7 +386,7 @@ class LocationService {
 
   /// Two-stage lookup used for the profile location and mirrors TanStack
   /// `getCurrentCoords`: a fast low-power read accepting a fix up to 10 min
-  /// old (12 s window), then a longer 20 s window accepting any cached fix.
+  /// old (12 s window), then a longer 20 s window accepting a fix up to 30 min old.
   /// Permission / service errors are returned immediately without retrying.
   static Future<LocationResult> getProfileCoords() async {
     final first = await getCurrentPosition(
@@ -395,11 +399,11 @@ class LocationService {
         first.reason != LocationFailure.unavailable) {
       return first;
     }
-    // maximumAge: Infinity → any last-known fix is acceptable.
+    // Accept recent fix up to 30 minutes, never years/infinite stale.
     return getCurrentPosition(
       accuracy: LocationAccuracy.medium,
       timeLimit: const Duration(seconds: 20),
-      maxAge: const Duration(days: 3650),
+      maxAge: const Duration(minutes: 30),
     );
   }
 

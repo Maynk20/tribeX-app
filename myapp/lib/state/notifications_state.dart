@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/notification_item.dart';
+import '../services/notification_service.dart';
 import '../services/supabase_service.dart';
 
 class NotificationsState extends ChangeNotifier {
@@ -11,16 +12,23 @@ class NotificationsState extends ChangeNotifier {
   bool _isLoading = false;
   RealtimeChannel? _notificationsChannel;
   String? _userId;
+  String? _activeChatActivityId;
   bool _isDisposed = false;
 
   List<NotificationItem> get notifications => List.unmodifiable(_notifications);
   bool get isLoading => _isLoading;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
+  String? get activeChatActivityId => _activeChatActivityId;
+
+  void setActiveChatActivityId(String? id) {
+    _activeChatActivityId = id;
+  }
 
   void initUser(String? userId) {
     if (_userId == userId) return;
     _userId = userId;
     if (_userId != null) {
+      unawaited(NotificationService().requestPermissions());
       fetchNotifications();
       _subscribeRealtime();
     } else {
@@ -81,6 +89,38 @@ class NotificationsState extends ChangeNotifier {
           ),
           callback: (payload) {
             if (!_isDisposed) {
+              if (payload.eventType == PostgresChangeEvent.insert) {
+                final rec = payload.newRecord;
+                if (rec.isNotEmpty) {
+                  final title =
+                      rec['title']?.toString() ?? 'tribeX Notification';
+                  final body = rec['body']?.toString() ?? '';
+                  final type = rec['type']?.toString() ?? '';
+                  final nId = rec['id']?.toString() ?? '';
+                  final actId = rec['activity_id']?.toString();
+
+                  final isActivelyViewingChat =
+                      actId != null && actId == _activeChatActivityId;
+
+                  NotificationChannelType channelType =
+                      NotificationChannelType.plans;
+                  if (type.contains('request')) {
+                    channelType = NotificationChannelType.requests;
+                  } else if (type.contains('message') || type.contains('chat')) {
+                    channelType = NotificationChannelType.messages;
+                  }
+
+                  if (!isActivelyViewingChat) {
+                    NotificationService().showNotification(
+                      title: title,
+                      body: body,
+                      channelType: channelType,
+                      payload: actId,
+                      deduplicationKey: 'notif_$nId',
+                    );
+                  }
+                }
+              }
               fetchNotifications();
             }
           },

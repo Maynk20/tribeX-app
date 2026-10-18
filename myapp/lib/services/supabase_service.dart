@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -35,59 +37,86 @@ class SupabaseService {
   }
 
   /// Perform PostGIS spatial distance query for activities near (lat, lng) within radiusKm.
-  /// Attempts PostGIS RPC `get_nearby_activities` first; falls back to indexed bounding-box query + virtual activities.
+  /// Attempts PostGIS RPC `get_nearby_activities` first with pagination; falls back to indexed bounding-box query + virtual activities.
   static Future<List<dynamic>?> fetchNearbyActivities({
     required double lat,
     required double lng,
     double radiusKm = 15.0,
+    int limit = 50,
+    int offset = 0,
   }) async {
     final c = client;
     if (c == null) return null;
 
     try {
+      // 1. Try 5-arg RPC with pagination parameters
       final res = await c.rpc(
         'get_nearby_activities',
-        params: {'user_lat': lat, 'user_lng': lng, 'radius_km': radiusKm},
+        params: {
+          'user_lat': lat,
+          'user_lng': lng,
+          'radius_km': radiusKm,
+          'limit_count': limit,
+          'offset_count': offset,
+        },
       );
       if (res is List<dynamic>) return res;
     } catch (_) {
       try {
-        final double latDelta = radiusKm / 111.0;
-        final double lngDelta = radiusKm / (111.0 * 0.7);
-
-        final nearbyRes = await c
-            .from('activities')
-            .select('*, profiles_public(*)')
-            .filter('deleted_at', 'is', null)
-            .gte('latitude', lat - latDelta)
-            .lte('latitude', lat + latDelta)
-            .gte('longitude', lng - lngDelta)
-            .lte('longitude', lng + lngDelta)
-            .order('date_time', ascending: true);
-
-        final onlineRes = await c
-            .from('activities')
-            .select('*, profiles_public(*)')
-            .filter('deleted_at', 'is', null)
-            .eq('is_online', true)
-            .order('date_time', ascending: true);
-
-        final combined = <dynamic>[];
-        final seenIds = <dynamic>{};
-
-        for (final item in nearbyRes) {
-          if (item['id'] != null && seenIds.add(item['id'])) {
-            combined.add(item);
-          }
+        // Fallback to 3-arg RPC if remote db only has 3-argument signature
+        final res3 = await c.rpc(
+          'get_nearby_activities',
+          params: {'user_lat': lat, 'user_lng': lng, 'radius_km': radiusKm},
+        );
+        if (res3 is List<dynamic>) {
+          if (offset >= res3.length) return <dynamic>[];
+          final end = (offset + limit < res3.length) ? offset + limit : res3.length;
+          return res3.sublist(offset, end);
         }
-        for (final item in onlineRes) {
-          if (item['id'] != null && seenIds.add(item['id'])) {
-            combined.add(item);
-          }
-        }
+      } catch (_) {
+        try {
+          final double latRad = lat * math.pi / 180.0;
+          final double cosLat = math.cos(latRad).abs();
+          final double safeCos = cosLat > 0.1 ? cosLat : 0.1;
+          final double latDelta = radiusKm / 111.0;
+          final double lngDelta = radiusKm / (111.0 * safeCos);
 
-        return combined;
-      } catch (_) {}
+          final nearbyRes = await c
+              .from('activities')
+              .select('*, profiles_public(*)')
+              .filter('deleted_at', 'is', null)
+              .gte('latitude', lat - latDelta)
+              .lte('latitude', lat + latDelta)
+              .gte('longitude', lng - lngDelta)
+              .lte('longitude', lng + lngDelta)
+              .range(offset, offset + limit - 1)
+              .order('date_time', ascending: true);
+
+          final onlineRes = await c
+              .from('activities')
+              .select('*, profiles_public(*)')
+              .filter('deleted_at', 'is', null)
+              .eq('is_online', true)
+              .range(offset, offset + limit - 1)
+              .order('date_time', ascending: true);
+
+          final combined = <dynamic>[];
+          final seenIds = <dynamic>{};
+
+          for (final item in nearbyRes) {
+            if (item['id'] != null && seenIds.add(item['id'])) {
+              combined.add(item);
+            }
+          }
+          for (final item in onlineRes) {
+            if (item['id'] != null && seenIds.add(item['id'])) {
+              combined.add(item);
+            }
+          }
+
+          return combined;
+        } catch (_) {}
+      }
     }
     return null;
   }

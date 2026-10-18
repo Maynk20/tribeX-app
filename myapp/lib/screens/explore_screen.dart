@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
@@ -81,7 +82,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   /// TanStack `handleUseGPS` → `requestBrowserLocation`.
-  Future<void> _fetchGpsLocation() async {
+  Future<void> _fetchGpsLocation({bool isUserInitiated = true}) async {
     if (_isGettingLocation) return;
     setState(() => _isGettingLocation = true);
 
@@ -94,18 +95,25 @@ class _ExploreScreenState extends State<ExploreScreen>
     if (place != null) {
       _start15kmTimer();
       context.read<ActivitiesState>().setPlace(place);
-      AppToast.show(context, 'Showing plans within 15 km of your location');
+      if (isUserInitiated) {
+        AppToast.show(context, 'Showing plans within 15 km of your location');
+      }
     } else {
-      showLocationError(
-        context,
-        lookup.result.error ?? "Couldn't get your location",
-      );
+      if (isUserInitiated) {
+        showLocationError(
+          context,
+          lookup.result.error ?? "Couldn't get your location",
+        );
+      }
     }
   }
 
   Future<void> _checkInitialLocation() async {
+    final auth = context.read<AuthState>();
+    if (!auth.isAuthenticated) return;
+
     // 1. If user is signed in with GPS coords on profile, use that as initial center if no place set
-    final user = context.read<AuthState>().currentUser;
+    final user = auth.currentUser;
     if (user != null && user.latitude != null && user.longitude != null) {
       if (!mounted) return;
       final actState = context.read<ActivitiesState>();
@@ -122,11 +130,21 @@ class _ExploreScreenState extends State<ExploreScreen>
       }
     }
 
-    // 2. Otherwise, check if GPS permission is already granted silently
+    // 2. Safe first-time location permission flow:
+    // If permission is already granted, resolve GPS location silently without toasts.
+    // If this is a first launch and permission is not yet determined, prompt safely.
     try {
-      final hasPerm = await LocationService.hasLocationPermission();
-      if (hasPerm && mounted) {
-        await _fetchGpsLocation();
+      final actState = context.read<ActivitiesState>();
+      final perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.whileInUse ||
+          perm == LocationPermission.always) {
+        if (mounted && actState.place == null) {
+          await _fetchGpsLocation(isUserInitiated: false);
+        }
+      } else if (perm == LocationPermission.denied) {
+        if (mounted && actState.place == null) {
+          await _fetchGpsLocation(isUserInitiated: false);
+        }
       }
     } catch (_) {}
   }
@@ -160,13 +178,26 @@ class _ExploreScreenState extends State<ExploreScreen>
       if (shouldShow != _showScrollToTop) {
         setState(() => _showScrollToTop = shouldShow);
       }
+
+      // Infinite scroll trigger for complete nearby results pagination
+      if (_scrollCtrl.hasClients &&
+          _scrollCtrl.position.pixels >=
+              _scrollCtrl.position.maxScrollExtent - 300) {
+        final act = context.read<ActivitiesState>();
+        if (act.hasMore && !act.isLoadingMore && !act.isLoading) {
+          act.loadMoreActivities();
+        }
+      }
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final act = context.read<ActivitiesState>();
-      if (act.place == null) {
-        _checkInitialLocation();
+      final auth = context.read<AuthState>();
+      if (auth.isAuthenticated) {
+        final act = context.read<ActivitiesState>();
+        if (act.place == null) {
+          _checkInitialLocation();
+        }
       }
     });
   }
@@ -212,7 +243,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     final filteredActivities = actState.getFilteredActivities(
       user?.id,
       authState.blockedUserIds,
-      applyRadiusFilter: _is15kmActive,
+      applyRadiusFilter: true,
     );
 
     return Scaffold(
@@ -231,6 +262,13 @@ class _ExploreScreenState extends State<ExploreScreen>
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
+            if (user == null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen()),
+              );
+              return;
+            }
             _start15kmTimer();
             await actState.fetchActivities();
           },
@@ -961,7 +999,29 @@ class _ExploreScreenState extends State<ExploreScreen>
               ),
 
               // Activity Cards List
-              if (actState.isLoading && filteredActivities.isEmpty)
+              if (user == null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 40,
+                    ),
+                    child: AppEmptyState(
+                      icon: LucideIcons.logIn,
+                      title: 'Sign in to discover local fun',
+                      message:
+                          'Log in to browse plans, join activities, and connect with people nearby.',
+                      primaryActionLabel: 'Sign In',
+                      onPrimaryAction: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AuthScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (actState.isLoading && filteredActivities.isEmpty)
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -979,21 +1039,10 @@ class _ExploreScreenState extends State<ExploreScreen>
                     ),
                     child: AppEmptyState(
                       icon: LucideIcons.wifiOff,
-                      title: user == null
-                          ? 'Sign in to discover local fun'
-                          : 'Could not load plans',
-                      message: user == null
-                          ? 'Log in to browse plans, join activities, and connect with people nearby.'
-                          : (actState.error ?? 'Check your connection and try again.'),
-                      primaryActionLabel: user == null ? 'Sign in' : 'Try again',
-                      onPrimaryAction: user == null
-                          ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AuthScreen(),
-                                ),
-                              )
-                          : () => actState.fetchActivities(),
+                      title: 'Could not load plans',
+                      message: actState.error ?? 'Check your connection and try again.',
+                      primaryActionLabel: 'Try again',
+                      onPrimaryAction: () => actState.fetchActivities(),
                     ),
                   ),
                 )
@@ -1045,10 +1094,8 @@ class _ExploreScreenState extends State<ExploreScreen>
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((ctx, idx) {
                       final act = filteredActivities[idx];
-                      final isHost = user != null && act.hostId == user.id;
-                      final myReq = user != null
-                          ? actState.getMyRequest(act.id, user.id)
-                          : null;
+                      final isHost = act.hostId == user.id;
+                      final myReq = actState.getMyRequest(act.id, user.id);
                       final pendingCount = actState.getPendingCountForActivity(
                         act.id,
                       );
@@ -1077,15 +1124,6 @@ class _ExploreScreenState extends State<ExploreScreen>
                               authState.hasProfileGpsLocation,
                           onAddGpsLocation: _showAddGpsLocationPrompt,
                           onJoin: () {
-                            if (user == null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AuthScreen(),
-                                ),
-                              );
-                              return;
-                            }
                             if (!act.isOnline &&
                                 !authState.hasProfileGpsLocation) {
                               _showAddGpsLocationPrompt();
@@ -1111,15 +1149,6 @@ class _ExploreScreenState extends State<ExploreScreen>
                             );
                           },
                           onChat: () {
-                            if (user == null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AuthScreen(),
-                                ),
-                              );
-                              return;
-                            }
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -1167,6 +1196,22 @@ class _ExploreScreenState extends State<ExploreScreen>
                         ),
                       );
                     }, childCount: filteredActivities.length),
+                  ),
+                ),
+              if (actState.isLoadingMore)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
             ],
