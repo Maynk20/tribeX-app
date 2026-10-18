@@ -11,7 +11,10 @@ export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
 export type PublicProfile = Pick<Profile, "id" | "full_name" | "username" | "avatar_url" | "rating" | "is_verified"> & {
   reliability_score?: number | null;
 };
-export type ActivityWithHost = Activity & { host: PublicProfile | null };
+export type ActivityWithHost = Activity & {
+  host: PublicProfile | null;
+  distanceKm?: number | null;
+};
 export type JoinRequestWithUser = JoinRequest & { user: PublicProfile | null };
 export type HostJoinProfile = {
   join_request_id: string;
@@ -679,16 +682,24 @@ export async function listUserChats(userId: string): Promise<Activity[]> {
     .slice(0, 25);
 }
 
-export async function listMessages(activityId: string): Promise<Message[]> {
+export type MessageWithSender = Message & { sender?: PublicProfile | null };
+
+export async function listMessages(activityId: string): Promise<MessageWithSender[]> {
   const { data, error } = await supabase
     .from("messages")
     .select("*")
     .eq("activity_id", activityId)
     .order("created_at", { ascending: false })
-    .limit(25);
+    .limit(50);
   if (error) throw error;
   // Return oldest→newest for chat rendering.
-  return (data ?? []).slice().reverse();
+  const rows = (data ?? []).slice().reverse();
+  const senderIds = Array.from(new Set(rows.map((m) => m.sender_id)));
+  const profilesMap = await fetchPublicProfiles(senderIds);
+  return rows.map((m) => ({
+    ...m,
+    sender: profilesMap.get(m.sender_id) ?? null,
+  }));
 }
 
 export async function sendMessage(activityId: string, text: string) {

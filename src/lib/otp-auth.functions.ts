@@ -47,14 +47,6 @@ async function sha256Hex(message: string): Promise<string> {
 async function findUserIdByEmail(email: string): Promise<string | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  const { data: profData } = await supabaseAdmin
-    .from("profiles")
-    .select("id")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (profData?.id) return profData.id;
-
   const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc("get_user_id_by_email", {
     _email: email,
   });
@@ -386,7 +378,6 @@ export async function handleVerifySignUpOtp(inputData: { email: string; code: st
     .from("profiles")
     .upsert({
       id: userId,
-      email,
       full_name: fullName,
       username,
       has_completed_profile: true,

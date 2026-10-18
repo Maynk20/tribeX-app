@@ -231,15 +231,15 @@ async function searchGoogle(q: string, signal: AbortSignal, apiKey: string): Pro
   }).filter((r) => r.lat !== 0 || r.lon !== 0);
 }
 
-// ---------------- Public API ----------------
-export async function searchPlaces(q: string, signal: AbortSignal): Promise<PlaceResult[]> {
+export async function searchPlaces(q: string, signal?: AbortSignal): Promise<PlaceResult[]> {
   const term = q.trim();
   if (term.length < 2) return [];
+  const sig = signal ?? new AbortController().signal;
   const isPincode = /^\d{6}$/.test(term);
   const key = (import.meta.env.VITE_GOOGLE_PLACES_API_KEY as string | undefined)?.trim();
   if (key) {
     try {
-      const g = await searchGoogle(term, signal, key);
+      const g = await searchGoogle(term, sig, key);
       if (g.length) return g;
     } catch (e) {
       if ((e as Error).name === "AbortError") throw e;
@@ -248,10 +248,10 @@ export async function searchPlaces(q: string, signal: AbortSignal): Promise<Plac
   }
   if (isPincode) {
     const [pins, photon] = await Promise.all([
-      searchPincode(term, signal).catch(() => []),
-      searchPhoton(term, signal).catch(() => []),
+      searchPincode(term, sig).catch(() => []),
+      searchPhoton(term, sig).catch(() => []),
     ]);
     return [...pins, ...photon];
   }
-  return searchPhoton(term, signal);
+  return searchPhoton(term, sig);
 }
