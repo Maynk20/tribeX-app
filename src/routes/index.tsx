@@ -55,6 +55,7 @@ import { CATEGORIES, CATEGORY_GROUPS, emojiForCategory, AMENITY_MAP, type Amenit
 import { notifyUrgentSpot } from "@/lib/urgent-push.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "@/hooks/use-location";
+import { haversineKm, DEFAULT_LAT, DEFAULT_LON } from "@/lib/geo";
 import { friendlyError } from "@/lib/friendly-error";
 import { PlaceSearch } from "@/components/place-search";
 import { SafetyDisclaimerModal } from "@/components/safety-disclaimer-modal";
@@ -109,7 +110,8 @@ function Explore() {
   // Scope switches read from cache — TanStack Query already keeps them fresh
   // via staleTime + focus refetch. Extra invalidation on every tap made the
   // whole UI feel laggy.
-  const { location, setPlace, requestBrowserLocation, requesting } = useLocation();
+  const { location, place, setPlace, requestBrowserLocation, requesting } = useLocation();
+  const [applyRadiusFilter, setApplyRadiusFilter] = useState(true);
   const [pendingJoinId, setPendingJoinId] = useState<string | null>(null);
   const [manageActivityId, setManageActivityId] = useState<string | null>(null);
   const [urgentBusyId, setUrgentBusyId] = useState<string | null>(null);
@@ -333,12 +335,10 @@ function Explore() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const city = (location || "").trim().toLowerCase();
-    const cityTokens = city
-      .split(/[\s,]+/)
-      .map((t) => t.trim())
-      .filter((t) => t.length > 2);
     const nowMs = Date.now();
+
+    const viewerLat = place?.lat ?? viewerProfile?.latitude ?? DEFAULT_LAT;
+    const viewerLon = place?.lon ?? viewerProfile?.longitude ?? DEFAULT_LON;
 
     const source: ActivityWithHost[] =
       scope === "hosting" && user
@@ -347,7 +347,16 @@ function Explore() {
         ? ((mineJoined?.joined ?? []) as ActivityWithHost[])
         : activities;
 
-    const base = source.filter((a) => {
+    // Attach true geographic distance in km (matching Android LocationService.haversineKm)
+    const sourceWithDistance = source.map((a) => {
+      let distanceKm: number | null = null;
+      if (!a.is_online && a.latitude != null && a.longitude != null && viewerLat != null && viewerLon != null) {
+        distanceKm = haversineKm(viewerLat, viewerLon, a.latitude, a.longitude);
+      }
+      return { ...a, distanceKm };
+    });
+
+    const base = sourceWithDistance.filter((a) => {
       if (user) {
         if (blockedIds.has(a.host_id)) return false;
         const hostedByMe = a.host_id === user.id || mineIds.has(a.id);
@@ -374,12 +383,13 @@ function Explore() {
       }
       if (verifiedHostsOnly && !a.host?.is_verified) return false;
 
-      // Location match: check if location matches city or any token in city string
-      if (scope === "discover" && cityTokens.length > 0) {
-        const locLower = (a.location || "").toLowerCase();
-        const matchesCity = cityTokens.some((tok) => locLower.includes(tok) || tok.includes(locLower));
-        // If location tokens are specified and user is searching within location, check match.
-        // We only enforce if there are other matching plans in that city; if not, we gracefully fall back.
+      // Hyper-local 15 km Discovery Radius Filter (matches Android ActivitiesState)
+      if (scope === "discover" && applyRadiusFilter) {
+        if (!a.is_online) {
+          if (a.distanceKm == null || a.distanceKm > 15.001) {
+            return false;
+          }
+        }
       }
 
       if (!q) return true;
@@ -391,18 +401,7 @@ function Explore() {
       );
     });
 
-    // If city filter turned out too strict (0 items), include base items for location fallback
-    let items = base;
-    if (items.length === 0 && scope === "discover" && cityTokens.length > 0 && !q) {
-      // Relax location filter if strict token matching yielded no results
-      items = source.filter((a) => {
-        if (user && blockedIds.has(a.host_id)) return false;
-        if (active !== "All" && a.category !== active) return false;
-        return true;
-      });
-    }
-
-    const sorted = [...items];
+    const sorted = [...base];
     if (sort === "date") {
       sorted.sort((a, b) => {
         // Prioritize upcoming plans, then sort by date
@@ -419,11 +418,17 @@ function Explore() {
         return ra - rb;
       });
     } else if (sort === "distance") {
-      sorted.sort((a, b) => a.location.localeCompare(b.location));
+      // Sort by actual geographic distance in km (matching Android ActivitiesState)
+      sorted.sort((a, b) => {
+        const da = a.distanceKm ?? 999999;
+        const db = b.distanceKm ?? 999999;
+        if (da !== db) return da - db;
+        return a.date_time < b.date_time ? -1 : 1;
+      });
     }
 
     return sorted.map((a) => maskActivityForViewer(a, user?.id ?? null, acceptedRequestIds));
-  }, [activities, mineJoined, active, activeGroup, modeFilter, query, sort, location, scope, mineIds, joinedIds, user, acceptedRequestIds, freeOnly, spotsOnly, todayOnly, weekendOnly, verifiedHostsOnly, blockedIds]);
+  }, [activities, mineJoined, active, activeGroup, modeFilter, query, sort, location, place, viewerProfile, applyRadiusFilter, scope, mineIds, joinedIds, user, acceptedRequestIds, freeOnly, spotsOnly, todayOnly, weekendOnly, verifiedHostsOnly, blockedIds]);
 
   async function handleUseGPS() {
     try {
@@ -705,14 +710,39 @@ function Explore() {
         </div>
       )}
 
+      {scope === "discover" && (
+        <div className="flex items-center justify-between rounded-2xl border border-primary/25 bg-primary/5 px-3.5 py-2.5 text-xs transition-all">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-semibold text-primary truncate">
+              {applyRadiusFilter ? "Plans within 15 km" : "All nearby plans"}
+            </span>
+            <span className="text-muted-foreground truncate">
+              · {location || "Bengaluru"}
+            </span>
+          </div>
+          <button
+            onClick={() => setApplyRadiusFilter((v) => !v)}
+            className="shrink-0 text-[11px] font-semibold text-primary hover:underline ml-2"
+          >
+            {applyRadiusFilter ? "Show all" : "Strict 15 km"}
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold tracking-tight">
           {!user || scope === "discover"
-            ? "Happening nearby"
+            ? (applyRadiusFilter ? "Plans within 15 km" : "Happening nearby")
             : scope === "joined"
               ? "Plans you've joined"
               : "Plans you're hosting"}
         </h2>
+        {filtered.length > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {filtered.length} {filtered.length === 1 ? "plan" : "plans"}
+          </span>
+        )}
       </div>
 
       {isLoading ? (
@@ -764,6 +794,7 @@ function Explore() {
               viewerIsFemale={viewerIsFemale}
               viewerIsVerified={viewerIsVerified}
               hasProfileGpsLocation={hasProfileGpsLocation}
+              distanceKm={a.distanceKm}
               myStatus={
                 a.host_id === user?.id || mineIds.has(a.id)
                   ? "hosting"
@@ -889,6 +920,7 @@ function ActivityCard({
   viewerIsFemale,
   viewerIsVerified,
   hasProfileGpsLocation,
+  distanceKm,
   myStatus,
   pendingCount,
   onManage,
@@ -907,6 +939,7 @@ function ActivityCard({
   viewerIsFemale: boolean;
   viewerIsVerified: boolean;
   hasProfileGpsLocation: boolean;
+  distanceKm?: number | null;
   myStatus: "hosting" | "confirmed" | "pending" | null;
   pendingCount: number;
   onManage: () => void;
@@ -1009,10 +1042,15 @@ function ActivityCard({
             )}
           </div>
           <h3 className="mt-1.5 line-clamp-2 text-base font-semibold tracking-tight">{a.title}</h3>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+          <div className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
             <MapPin className="h-3 w-3 shrink-0" />
+            {!a.is_online && distanceKm != null && (
+              <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                {distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m away` : `${distanceKm.toFixed(1)} km away`}
+              </span>
+            )}
             <span className="truncate">{a.is_masked ? "~ " : ""}{a.location}</span>
-          </p>
+          </div>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" /> {formatWhen(a.date_time)}
           </p>

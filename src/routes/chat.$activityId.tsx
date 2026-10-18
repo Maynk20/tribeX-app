@@ -5,7 +5,7 @@ import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, Us
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { listMessages, sendMessage, emojiFor, listAttendees, checkInActivity, markNoShow, blockUser, type Message, type JoinRequestWithUser } from "@/lib/services";
+import { listMessages, sendMessage, emojiFor, listAttendees, checkInActivity, markNoShow, blockUser, type MessageWithSender, type JoinRequestWithUser } from "@/lib/services";
 import { friendlyError } from "@/lib/friendly-error";
 import { ExpenseCard, isExpenseMessage } from "@/components/expense-card";
 import { SplitExpenseModal } from "@/components/split-expense-modal";
@@ -54,8 +54,32 @@ function ChatPage() {
     queryKey: ["messages", activityId],
     queryFn: () => listMessages(activityId),
     enabled: !!user,
-    refetchInterval: 5000,
+    refetchInterval: 10000,
   });
+
+  // Realtime WebSocket subscription for instant message updates (matching Android ChatState)
+  useEffect(() => {
+    if (!activityId) return;
+    const channel = supabase
+      .channel(`chat-realtime:${activityId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `activity_id=eq.${activityId}`,
+        },
+        () => {
+          qc.invalidateQueries({ queryKey: ["messages", activityId] });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activityId, qc]);
 
   const blockMut = useMutation({
     mutationFn: (targetId: string) => blockUser(targetId),
@@ -298,11 +322,27 @@ function ChatPage() {
   );
 }
 
-function MessageBubble({ m, mine }: { m: Message; mine: boolean }) {
+function MessageBubble({ m, mine }: { m: MessageWithSender; mine: boolean }) {
   const time = new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const senderName = m.sender?.full_name || m.sender?.username || "Squad Member";
+  const avatarUrl = m.sender?.avatar_url;
+  const initial = (senderName || "U")[0]?.toUpperCase() ?? "U";
+
   return (
-    <li className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <li className={`flex gap-2 ${mine ? "justify-end" : "justify-start"}`}>
+      {!mine && (
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-[10px] font-bold text-primary self-end mb-1">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initial
+          )}
+        </div>
+      )}
       <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-card border border-border/60"}`}>
+        {!mine && (
+          <p className="mb-0.5 text-[11px] font-semibold text-primary">{senderName}</p>
+        )}
         <p className="whitespace-pre-wrap break-words">{m.text}</p>
         <p className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{time}</p>
       </div>

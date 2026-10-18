@@ -8,6 +8,8 @@ import { notifyMatchingUsersPush } from "@/lib/push.functions";
 import { createActivity, uploadActivityImage } from "@/lib/services";
 import { useAuth } from "@/hooks/use-auth";
 import { PlaceSearch, type Place } from "@/components/place-search";
+import { searchPlaces } from "@/lib/place-providers";
+import { DEFAULT_LAT, DEFAULT_LON } from "@/lib/geo";
 import { CATEGORIES, CATEGORY_GROUPS, CATEGORY_MAP, AMENITIES, type AmenityKey } from "@/lib/categories";
 import {
   Calendar as CalendarIcon,
@@ -163,7 +165,7 @@ function Create() {
           (e) => console.warn("[push] dispatch failed", e),
         );
       }
-      navigate({ to: "/profile" });
+      navigate({ to: "/" });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -237,6 +239,32 @@ function Create() {
       setUploading(false);
     }
     const safeTime = p.time.length === 5 ? `${p.time}:00` : p.time;
+
+    let finalLat: number | null = null;
+    let finalLon: number | null = null;
+
+    if (!p.is_online) {
+      if (pinnedPlace?.lat != null && pinnedPlace?.lon != null) {
+        finalLat = pinnedPlace.lat;
+        finalLon = pinnedPlace.lon;
+      } else if (p.location.trim()) {
+        try {
+          const geocoded = await searchPlaces(p.location.trim());
+          if (geocoded.length > 0) {
+            finalLat = geocoded[0].lat;
+            finalLon = geocoded[0].lon;
+          }
+        } catch {
+          // fallback
+        }
+      }
+      // Guaranteed coordinate fallback matching Android CreatePlanScreen:
+      if (finalLat == null || finalLon == null) {
+        finalLat = DEFAULT_LAT;
+        finalLon = DEFAULT_LON;
+      }
+    }
+
     mutation.mutate({
       title: p.title,
       description: p.description,
@@ -246,8 +274,8 @@ function Create() {
       total_slots: p.slots,
       cost_per_head: p.cost,
       image_url,
-      latitude: p.is_online ? null : (pinnedPlace?.lat ?? null),
-      longitude: p.is_online ? null : (pinnedPlace?.lon ?? null),
+      latitude: p.is_online ? null : finalLat,
+      longitude: p.is_online ? null : finalLon,
       women_only: womenOnly,
       verified_only: verifiedOnly,
       is_online: p.is_online,
