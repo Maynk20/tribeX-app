@@ -7,13 +7,11 @@ import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../core/utils/date_formatter.dart';
 import '../models/activity.dart';
-import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/chat_state.dart';
-import '../widgets/chat/check_in_panel.dart';
+import '../state/notifications_state.dart';
 import '../widgets/chat/create_poll_modal.dart';
 import '../widgets/chat/expense_card_widget.dart';
-import '../widgets/chat/memory_banner_widget.dart';
 import '../widgets/chat/message_bubble_widget.dart';
 import '../widgets/chat/poll_card_widget.dart';
 import '../widgets/chat/split_expense_modal.dart';
@@ -34,6 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _attachMenuOpen = false;
 
   late ChatState _chatState;
+  late NotificationsState _notificationsState;
 
   @override
   void initState() {
@@ -42,6 +41,10 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final chatState = context.read<ChatState>();
+        chatState.setActiveChat(widget.activity.id);
+        context
+            .read<NotificationsState>()
+            .setActiveChatActivityId(widget.activity.id);
         chatState.fetchMessagesForActivity(widget.activity.id);
         chatState.fetchSquadMembers(widget.activity.id);
       }
@@ -82,11 +85,14 @@ class _ChatScreenState extends State<ChatScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _chatState = context.read<ChatState>();
+    _notificationsState = context.read<NotificationsState>();
   }
 
   @override
   void dispose() {
     _scrollCtrl.removeListener(_onScroll);
+    _chatState.setActiveChat(null);
+    _notificationsState.setActiveChatActivityId(null);
     _chatState.unsubscribeFromActivityChat(widget.activity.id);
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -262,7 +268,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final actState = context.watch<ActivitiesState>();
     final authState = context.watch<AuthState>();
     final chatState = context.watch<ChatState>();
     final me = authState.currentUser;
@@ -275,9 +280,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
 
     final isHost = me != null && widget.activity.hostId == me.id;
-    final myReq = me != null
-        ? actState.getMyRequest(widget.activity.id, me.id)
-        : null;
     final host = widget.activity.host;
     final hostName = host?.fullName ?? host?.username ?? "Host";
 
@@ -433,23 +435,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 parent: BouncingScrollPhysics(),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              itemCount: messages.isEmpty ? 3 : messages.length + (hasMore ? 3 : 2),
+              itemCount:
+                  messages.isEmpty ? 1 : messages.length + (hasMore ? 1 : 0),
               itemBuilder: (context, index) {
-                if (index == 0) {
-                  return CheckInPanel(
-                    activity: widget.activity,
-                    isHost: isHost,
-                    myRequest: myReq,
-                  );
-                }
-                if (index == 1) {
-                  return MemoryBannerWidget(
-                    activity: widget.activity,
-                    canUpload: isHost || myReq?.status.name == 'accepted',
-                  );
-                }
-
-                if (messages.isEmpty && index == 2) {
+                if (messages.isEmpty) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40),
                     child: Center(
@@ -490,7 +479,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 }
 
-                if (hasMore && index == 2) {
+                if (hasMore && index == 0) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Center(
@@ -518,7 +507,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 }
 
-                final msgIndex = hasMore ? index - 3 : index - 2;
+                final msgIndex = hasMore ? index - 1 : index;
                 final m = messages[msgIndex];
 
                 final isFirstMsgOfDay =

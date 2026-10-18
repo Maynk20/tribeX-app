@@ -361,13 +361,51 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
 
     if (success) {
       AppToast.show(context, 'Plan published — your squad will find you!');
-      widget.onPlanCreated?.call();
+      _resetForm();
+      if (widget.onPlanCreated != null) {
+        widget.onPlanCreated!();
+      } else if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        Navigator.of(context).pushReplacementNamed('/');
+      }
     } else {
       AppToast.show(
         context,
         "Couldn't publish plan. Please try again.",
         isError: true,
       );
+    }
+  }
+
+  void _resetForm() {
+    _titleCtrl.clear();
+    _descCtrl.clear();
+    _locCtrl.clear();
+    _meetingLinkCtrl.clear();
+    _slotsCtrl.text = "8";
+    _costCtrl.text = "0";
+    _tagsCtrl.clear();
+    if (mounted) {
+      setState(() {
+        _selectedGroup = "Sports & Outdoor";
+        _selectedCategory = "Cricket";
+        _date = DateTime.now().add(const Duration(days: 1));
+        _time = const TimeOfDay(hour: 18, minute: 0);
+        _isOnline = false;
+        _womenOnly = false;
+        _verifiedOnly = false;
+        _selectedAmenities.clear();
+        _imageUrl = null;
+        _previewBytes = null;
+        _isUploadingCover = false;
+        _pinnedPlace = null;
+        _currentStep = 0;
+        _titleError = null;
+        _descError = null;
+        _locError = null;
+        _meetingLinkError = null;
+      });
     }
   }
 

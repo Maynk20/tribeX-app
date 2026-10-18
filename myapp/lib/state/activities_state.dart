@@ -48,6 +48,16 @@ class ActivitiesState extends ChangeNotifier {
   final Set<String> _pendingJoinRequests = {};
   final Set<String> _pendingRespondRequests = {};
 
+  // Pagination state
+  static const int defaultPageSize = 30;
+  int _currentPage = 0;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+  bool _isSpatialResult = false;
+  final Set<String> _spatiallyVerifiedIds = {};
+  bool _isLocationRestored = false;
+  Completer<void>? _locationRestoreCompleter;
+
   // Memoization Cache for Filtered Activities
   List<Activity>? _cachedFilteredActivities;
   String? _cachedCurrentUserId;
@@ -57,6 +67,49 @@ class ActivitiesState extends ChangeNotifier {
 
   RealtimeChannel? _activitiesChannel;
   RealtimeChannel? _joinRequestsChannel;
+
+  // Cached user profiles for hosts and requesters
+  final Map<String, UserProfile> _profileCache = {};
+  UserProfile? getCachedProfile(String userId) => _profileCache[userId];
+  void cacheUserProfile(UserProfile profile) => _profileCache[profile.id] = profile;
+
+  Future<UserProfile?> fetchUserProfile(String userId) async {
+    if (_profileCache.containsKey(userId)) {
+      return _profileCache[userId];
+    }
+    final client = SupabaseService.client;
+    if (client == null || userId.isEmpty) return null;
+    try {
+      dynamic profRes;
+      try {
+        profRes = await client
+            .from('profiles_public')
+            .select('id, full_name, username, avatar_url, rating, is_verified')
+            .eq('id', userId)
+            .maybeSingle();
+      } catch (_) {
+        try {
+          profRes = await client
+              .from('profiles_public')
+              .select('id, full_name, username, avatar_url')
+              .eq('id', userId)
+              .maybeSingle();
+        } catch (_) {
+          profRes = await client
+              .from('profiles')
+              .select('id, full_name, username, avatar_url')
+              .eq('id', userId)
+              .maybeSingle();
+        }
+      }
+      if (profRes != null && profRes is Map<String, dynamic>) {
+        final prof = UserProfile.fromJson(profRes);
+        _profileCache[userId] = prof;
+        return prof;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   void _invalidateFilterCache() {
     _filterCacheValid = false;
@@ -112,15 +165,42 @@ class ActivitiesState extends ChangeNotifier {
   bool _verifiedHostsOnly = false;
 
   ActivitiesState() {
-    _restoreLocation();
-    fetchActivities();
-    _subscribeRealtime();
+    _init();
+  }
+
+  Future<void> _init() async {
+    await restoreLocation();
+    final client = SupabaseService.client;
+    final currentUid = client?.auth.currentUser?.id;
+    if (currentUid != null) {
+      await fetchActivities();
+      _subscribeRealtime();
+    }
+  }
+
+  void clearActivities() {
+    _activities = [];
+    _joinRequests = [];
+    _isSpatialResult = false;
+    _spatiallyVerifiedIds.clear();
+    _currentPage = 0;
+    _hasMore = false;
+    _error = null;
+    _activitiesChannel?.unsubscribe();
+    _joinRequestsChannel?.unsubscribe();
+    _activitiesChannel = null;
+    _joinRequestsChannel = null;
+    _invalidateFilterCache();
+    if (!_isDisposed) notifyListeners();
   }
 
   // Getters
   List<Activity> get activities => List.unmodifiable(_activities);
   List<JoinRequest> get joinRequests => List.unmodifiable(_joinRequests);
   bool get isLoading => _isLoading;
+  bool get isLoadingMore => _isLoadingMore;
+  bool get hasMore => _hasMore;
+  int get currentPage => _currentPage;
   String? get error => _error;
 
   String get selectedGroup => _selectedGroup;
@@ -147,10 +227,42 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   @visibleForTesting
-  void setActivitiesForTesting(List<Activity> acts) {
-    _activities = List.from(acts);
+  void setActivitiesForTesting(List<Activity> acts, {bool isSpatial = false}) {
+    final deduplicated = <String, Activity>{};
+    for (final a in acts) {
+      if (a.id.isNotEmpty) {
+        deduplicated[a.id] = a;
+      }
+    }
+    _activities = deduplicated.values.toList();
+    _isSpatialResult = isSpatial;
+    _spatiallyVerifiedIds.clear();
+    if (isSpatial) {
+      _spatiallyVerifiedIds.addAll(deduplicated.keys);
+    }
+    _currentPage = 0;
+    _hasMore = false;
     _invalidateFilterCache();
     if (!_isDisposed) notifyListeners();
+  }
+
+  @visibleForTesting
+  void handleRealtimeActivityChangeForTesting({
+    required PostgresChangeEvent eventType,
+    Map<String, dynamic> newRecord = const {},
+    Map<String, dynamic> oldRecord = const {},
+  }) {
+    _onRealtimeActivityChange(
+      PostgresChangePayload(
+        eventType: eventType,
+        newRecord: newRecord,
+        oldRecord: oldRecord,
+        schema: 'public',
+        table: 'activities',
+        commitTimestamp: DateTime.now(),
+        errors: const [],
+      ),
+    );
   }
 
   bool get freeOnly => _freeOnly;
@@ -170,35 +282,46 @@ class ActivitiesState extends ChangeNotifier {
   }
 
   /// Restore the persisted label/place (TanStack reads localStorage on mount).
-  Future<void> _restoreLocation() async {
+  Future<void> restoreLocation() async {
+    if (_isLocationRestored) return;
+    if (_locationRestoreCompleter != null) {
+      return _locationRestoreCompleter!.future;
+    }
+    _locationRestoreCompleter = Completer<void>();
     try {
       final prefs = await SharedPreferences.getInstance();
       // Don't clobber a location the user picked while prefs were loading.
-      if (_isDisposed || _locationTouched) return;
-      final saved = prefs.getString(locationPrefsKey);
-      final savedPlace = prefs.getString(placePrefsKey);
-      var changed = false;
-      if (saved != null && saved.trim().isNotEmpty) {
-        _location = saved;
-        changed = true;
-      }
-      if (savedPlace != null) {
-        try {
-          final p = SavedPlace.tryFromJson(jsonDecode(savedPlace));
-          if (p != null) {
-            _place = p;
-            changed = true;
-          }
-        } catch (_) {
-          // corrupt entry — ignore, same as TanStack
+      if (!_isDisposed && !_locationTouched) {
+        final saved = prefs.getString(locationPrefsKey);
+        final savedPlace = prefs.getString(placePrefsKey);
+        var changed = false;
+        if (saved != null && saved.trim().isNotEmpty) {
+          _location = saved;
+          changed = true;
         }
-      }
-      if (changed) {
-        _invalidateFilterCache();
-        notifyListeners();
+        if (savedPlace != null) {
+          try {
+            final p = SavedPlace.tryFromJson(jsonDecode(savedPlace));
+            if (p != null) {
+              _place = p;
+              changed = true;
+            }
+          } catch (_) {
+            // corrupt entry — ignore, same as TanStack
+          }
+        }
+        if (changed) {
+          _invalidateFilterCache();
+          notifyListeners();
+        }
       }
     } catch (_) {
       // storage unavailable — safe to ignore
+    } finally {
+      _isLocationRestored = true;
+      if (!(_locationRestoreCompleter?.isCompleted ?? true)) {
+        _locationRestoreCompleter!.complete();
+      }
     }
   }
 
@@ -250,6 +373,9 @@ class ActivitiesState extends ChangeNotifier {
     _locationTouched = true;
     _location = defaultCity;
     _place = null;
+    _isLocationRestored = true;
+    _isSpatialResult = false;
+    _spatiallyVerifiedIds.clear();
     _invalidateFilterCache();
     if (!_isDisposed) notifyListeners();
     fetchActivities();
@@ -348,17 +474,45 @@ class ActivitiesState extends ChangeNotifier {
     if (!_isDisposed) notifyListeners();
   }
 
-  Future<void> fetchActivities() async {
+  Future<void> fetchActivities({bool refresh = true}) async {
     final client = SupabaseService.client;
     if (client == null || _isDisposed) return;
 
-    _isLoading = true;
+    // Do not load plans until the user is signed in
+    final currentUid = client.auth.currentUser?.id;
+    if (currentUid == null) {
+      _activities = [];
+      _joinRequests = [];
+      _isSpatialResult = false;
+      _spatiallyVerifiedIds.clear();
+      _isLoading = false;
+      _hasMore = false;
+      _error = null;
+      _invalidateFilterCache();
+      if (!_isDisposed) notifyListeners();
+      return;
+    }
+
+    if (_activitiesChannel == null) {
+      _subscribeRealtime();
+    }
+
+    if (!_isLocationRestored && !_locationTouched) {
+      await restoreLocation();
+    }
+
+    if (refresh) {
+      _isLoading = true;
+      _currentPage = 0;
+      _hasMore = true;
+    }
     _error = null;
     if (!_isDisposed) notifyListeners();
 
     try {
       dynamic res;
       final currentPlace = _place;
+      bool spatial = false;
 
       // 1. When coordinates are available, attempt backend spatial filtering via get_nearby_activities RPC
       if (currentPlace != null) {
@@ -367,7 +521,12 @@ class ActivitiesState extends ChangeNotifier {
             lat: currentPlace.lat,
             lng: currentPlace.lon,
             radiusKm: _radiusKm,
+            limit: defaultPageSize,
+            offset: 0,
           );
+          if (res != null) {
+            spatial = true;
+          }
         } catch (_) {
           res = null;
         }
@@ -380,6 +539,7 @@ class ActivitiesState extends ChangeNotifier {
               .from('activities')
               .select('*, profiles_public(*)')
               .filter('deleted_at', 'is', null)
+              .range(0, defaultPageSize - 1)
               .order('date_time', ascending: true);
         } catch (_) {
           try {
@@ -387,12 +547,14 @@ class ActivitiesState extends ChangeNotifier {
                 .from('activities')
                 .select('*, profiles(*)')
                 .filter('deleted_at', 'is', null)
+                .range(0, defaultPageSize - 1)
                 .order('date_time', ascending: true);
           } catch (_) {
             res = await client
                 .from('activities')
                 .select('*')
                 .filter('deleted_at', 'is', null)
+                .range(0, defaultPageSize - 1)
                 .order('date_time', ascending: true);
           }
         }
@@ -401,35 +563,30 @@ class ActivitiesState extends ChangeNotifier {
       if (_isDisposed) return;
 
       if (res is List<dynamic>) {
-        _activities = res
+        _isSpatialResult = spatial;
+        _spatiallyVerifiedIds.clear();
+        if (spatial) {
+          for (final item in res) {
+            if (item is Map<String, dynamic> && item['id'] != null) {
+              _spatiallyVerifiedIds.add(item['id'].toString());
+            }
+          }
+        }
+        final list = res
             .map((json) => Activity.fromJson(json as Map<String, dynamic>))
             .toList();
 
-        if (_activities.isNotEmpty && _activities.any((a) => a.host == null)) {
-          try {
-            final hostIds = _activities.map((a) => a.hostId).toSet().toList();
-            final profRes = await client
-                .from('profiles_public')
-                .select(
-                  'id, full_name, username, avatar_url, rating, is_verified',
-                )
-                .filter('id', 'in', hostIds);
-            final profMap = <String, UserProfile>{};
-            for (final p in profRes) {
-              if (p['id'] != null) {
-                profMap[p['id'].toString()] = UserProfile.fromJson(p);
-              }
-            }
-            _activities = _activities.map((a) {
-              if (a.host == null && profMap.containsKey(a.hostId)) {
-                return a.copyWith(host: profMap[a.hostId]);
-              }
-              return a;
-            }).toList();
-          } catch (_) {
-            // Ignore profile enrichment failure
+        // Deduplicate by stable ID
+        final deduplicated = <String, Activity>{};
+        for (final a in list) {
+          if (a.id.isNotEmpty) {
+            deduplicated[a.id] = a;
           }
         }
+        _activities = deduplicated.values.toList();
+        _hasMore = list.length >= defaultPageSize;
+
+        await _enrichHostProfiles(_activities);
       }
 
       // Safe join_requests fetch (does not break activities if unauthenticated or empty)
@@ -454,6 +611,7 @@ class ActivitiesState extends ChangeNotifier {
               .map((json) => JoinRequest.fromJson(json as Map<String, dynamic>))
               .toList();
           _rebuildJoinRequestIndices();
+          await _enrichJoinRequestProfiles(_joinRequests);
         }
       } catch (_) {
         // join_requests error should not fail activities loading
@@ -469,6 +627,292 @@ class ActivitiesState extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Loads the next page of matching nearby plans deterministically.
+  Future<void> loadMoreActivities() async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed || _isLoading || _isLoadingMore || !_hasMore) {
+      return;
+    }
+
+    _isLoadingMore = true;
+    if (!_isDisposed) notifyListeners();
+
+    try {
+      final currentPlace = _place;
+      final nextOffset = (_currentPage + 1) * defaultPageSize;
+      dynamic res;
+      bool spatial = false;
+
+      if (currentPlace != null) {
+        try {
+          res = await SupabaseService.fetchNearbyActivities(
+            lat: currentPlace.lat,
+            lng: currentPlace.lon,
+            radiusKm: _radiusKm,
+            limit: defaultPageSize,
+            offset: nextOffset,
+          );
+          if (res != null) {
+            spatial = true;
+          }
+        } catch (_) {
+          res = null;
+        }
+      }
+
+      if (res == null) {
+        try {
+          res = await client
+              .from('activities')
+              .select('*, profiles_public(*)')
+              .filter('deleted_at', 'is', null)
+              .range(nextOffset, nextOffset + defaultPageSize - 1)
+              .order('date_time', ascending: true);
+        } catch (_) {
+          try {
+            res = await client
+                .from('activities')
+                .select('*, profiles(*)')
+                .filter('deleted_at', 'is', null)
+                .range(nextOffset, nextOffset + defaultPageSize - 1)
+                .order('date_time', ascending: true);
+          } catch (_) {
+            res = await client
+                .from('activities')
+                .select('*')
+                .filter('deleted_at', 'is', null)
+                .range(nextOffset, nextOffset + defaultPageSize - 1)
+                .order('date_time', ascending: true);
+          }
+        }
+      }
+
+      if (_isDisposed) return;
+
+      if (res is List<dynamic> && res.isNotEmpty) {
+        if (spatial) {
+          for (final item in res) {
+            if (item is Map<String, dynamic> && item['id'] != null) {
+              _spatiallyVerifiedIds.add(item['id'].toString());
+            }
+          }
+        }
+        final newItems = res
+            .map((json) => Activity.fromJson(json as Map<String, dynamic>))
+            .toList();
+
+        final currentMap = <String, Activity>{for (final a in _activities) a.id: a};
+        final newlyAdded = <Activity>[];
+        for (final item in newItems) {
+          if (!currentMap.containsKey(item.id)) {
+            currentMap[item.id] = item;
+            newlyAdded.add(item);
+          }
+        }
+        _activities = currentMap.values.toList();
+        _currentPage++;
+        _hasMore = newItems.length >= defaultPageSize;
+
+        if (newlyAdded.isNotEmpty) {
+          await _enrichHostProfiles(newlyAdded);
+        }
+        _invalidateFilterCache();
+      } else {
+        _hasMore = false;
+      }
+    } catch (_) {
+      // Load more failure should not crash existing list
+    } finally {
+      if (!_isDisposed) {
+        _isLoadingMore = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _enrichHostProfiles(List<Activity> items) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return;
+
+    final missingHostIds = items
+        .where((a) => a.host == null && a.hostId.isNotEmpty)
+        .map((a) => a.hostId)
+        .toSet()
+        .toList();
+
+    if (missingHostIds.isEmpty) return;
+
+    final toFetch = missingHostIds
+        .where((id) => !_profileCache.containsKey(id))
+        .toList();
+
+    if (toFetch.isNotEmpty) {
+      try {
+        dynamic profRes;
+        try {
+          profRes = await client
+              .from('profiles_public')
+              .select('id, full_name, username, avatar_url, rating, is_verified')
+              .inFilter('id', toFetch);
+        } catch (_) {
+          try {
+            profRes = await client
+                .from('profiles_public')
+                .select('id, full_name, username, avatar_url')
+                .inFilter('id', toFetch);
+          } catch (_) {
+            profRes = await client
+                .from('profiles')
+                .select('id, full_name, username, avatar_url')
+                .inFilter('id', toFetch);
+          }
+        }
+        if (profRes is List<dynamic>) {
+          for (final p in profRes) {
+            if (p is Map<String, dynamic> && p['id'] != null) {
+              _profileCache[p['id'].toString()] = UserProfile.fromJson(p);
+            }
+          }
+        }
+      } catch (_) {
+        // Ignore profile enrichment failure
+      }
+    }
+
+    bool changed = false;
+    _activities = _activities.map((a) {
+      if (a.host == null && _profileCache.containsKey(a.hostId)) {
+        changed = true;
+        return a.copyWith(host: _profileCache[a.hostId]);
+      }
+      return a;
+    }).toList();
+
+    if (changed) {
+      _invalidateFilterCache();
+      if (!_isDisposed) {
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _enrichJoinRequestProfiles(List<JoinRequest> reqs) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return;
+
+    final missingUserIds = reqs
+        .where((r) => r.user == null && r.userId.isNotEmpty)
+        .map((r) => r.userId)
+        .toSet()
+        .toList();
+
+    if (missingUserIds.isEmpty) return;
+
+    final toFetch = missingUserIds
+        .where((id) => !_profileCache.containsKey(id))
+        .toList();
+
+    if (toFetch.isNotEmpty) {
+      try {
+        dynamic profRes;
+        try {
+          profRes = await client
+              .from('profiles_public')
+              .select('id, full_name, username, avatar_url, rating, is_verified')
+              .inFilter('id', toFetch);
+        } catch (_) {
+          try {
+            profRes = await client
+                .from('profiles_public')
+                .select('id, full_name, username, avatar_url')
+                .inFilter('id', toFetch);
+          } catch (_) {
+            profRes = await client
+                .from('profiles')
+                .select('id, full_name, username, avatar_url')
+                .inFilter('id', toFetch);
+          }
+        }
+        if (profRes is List<dynamic>) {
+          for (final p in profRes) {
+            if (p is Map<String, dynamic> && p['id'] != null) {
+              _profileCache[p['id'].toString()] = UserProfile.fromJson(p);
+            }
+          }
+        }
+      } catch (_) {
+        // Ignore profile enrichment failure
+      }
+    }
+
+    bool changed = false;
+    _joinRequests = _joinRequests.map((r) {
+      if (r.user == null && _profileCache.containsKey(r.userId)) {
+        changed = true;
+        return r.copyWith(user: _profileCache[r.userId]);
+      }
+      return r;
+    }).toList();
+
+    if (changed) {
+      _rebuildJoinRequestIndices();
+      if (!_isDisposed) {
+        notifyListeners();
+      }
+    }
+  }
+
+  void _onRealtimeActivityChange(PostgresChangePayload payload) {
+    if (_isDisposed) return;
+
+    if (payload.eventType == PostgresChangeEvent.insert) {
+      final record = payload.newRecord;
+      if (record.isNotEmpty && record['id'] != null) {
+        try {
+          final newAct = Activity.fromJson(record);
+          if (record['deleted_at'] == null) {
+            final idx = _activities.indexWhere((a) => a.id == newAct.id);
+            if (idx == -1) {
+              _activities.insert(0, newAct);
+              _invalidateFilterCache();
+              notifyListeners();
+              unawaited(_enrichHostProfiles([newAct]));
+            }
+          }
+        } catch (_) {}
+      }
+    } else if (payload.eventType == PostgresChangeEvent.update) {
+      final record = payload.newRecord;
+      if (record.isNotEmpty && record['id'] != null) {
+        try {
+          final updAct = Activity.fromJson(record);
+          if (record['deleted_at'] != null) {
+            _activities.removeWhere((a) => a.id == updAct.id);
+          } else {
+            final idx = _activities.indexWhere((a) => a.id == updAct.id);
+            if (idx != -1) {
+              final existing = _activities[idx];
+              _activities[idx] = updAct.copyWith(
+                host: updAct.host ?? existing.host,
+              );
+            }
+          }
+          _invalidateFilterCache();
+          notifyListeners();
+        } catch (_) {}
+      }
+    } else if (payload.eventType == PostgresChangeEvent.delete) {
+      final oldId = payload.oldRecord['id']?.toString();
+      if (oldId != null && oldId.isNotEmpty) {
+        _activities.removeWhere((a) => a.id == oldId);
+        _invalidateFilterCache();
+        notifyListeners();
+      }
+    }
+
+    _onRealtimeChange();
   }
 
   Timer? _debounceTimer;
@@ -502,7 +946,7 @@ class ActivitiesState extends ChangeNotifier {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'activities',
-          callback: (payload) => _onRealtimeChange(),
+          callback: (payload) => _onRealtimeActivityChange(payload),
         )
         .subscribe();
 
@@ -558,23 +1002,49 @@ class ActivitiesState extends ChangeNotifier {
       if (_modeFilter == ModeFilter.inPerson && a.isOnline) return false;
       if (_modeFilter == ModeFilter.online && !a.isOnline) return false;
 
-      // 15 KM Default Radius Filtering (applies to in-person plans in discover feed when location is known and radius filtering is active):
-      if (applyRadiusFilter && _scope == FeedScope.discover && _place != null && !a.isOnline) {
-        if (a.latitude != null && a.longitude != null) {
-          final dist = LocationService.haversineKm(
-            _place!.lat,
-            _place!.lon,
-            a.latitude!,
-            a.longitude!,
-          );
-          // Plans within 15 km appear; plans beyond 15 km do not appear
-          // 0.001km precision allowance handles floating-point 15.000km edge
-          if (dist > _radiusKm + 0.001) {
+      // 15 KM Default Radius Filtering (applies in discover feed when location is known and radius filtering is active):
+      if (applyRadiusFilter && _scope == FeedScope.discover && _place != null) {
+        if (!a.isOnline) {
+          // In-person physical plans must have valid coordinates within radius
+          if (a.latitude != null && a.longitude != null) {
+            final dist = LocationService.haversineKm(
+              _place!.lat,
+              _place!.lon,
+              a.latitude!,
+              a.longitude!,
+            );
+            // Plans within 15 km appear; plans beyond 15 km do not appear
+            // 0.001km precision allowance handles floating-point 15.000km edge
+            if (dist > _radiusKm + 0.001) {
+              return false;
+            }
+          } else {
+            // In-person physical plans with no coordinates cannot be confirmed within 15 km
             return false;
           }
         } else {
-          // In-person physical plans with no coordinates cannot be confirmed within 15 km
-          return false;
+          // Virtual plans: proximity anchor is creator's authorized discovery location
+          final double? anchorLat = a.latitude ?? a.host?.latitude;
+          final double? anchorLon = a.longitude ?? a.host?.longitude;
+
+          if (anchorLat != null && anchorLon != null) {
+            final dist = LocationService.haversineKm(
+              _place!.lat,
+              _place!.lon,
+              anchorLat,
+              anchorLon,
+            );
+            if (dist > _radiusKm + 0.001) {
+              return false;
+            }
+          } else {
+            // If coordinates are not directly exposed on activity or host model:
+            // Check if this virtual plan was already spatially verified by the backend RPC
+            if (!(_isSpatialResult && _spatiallyVerifiedIds.contains(a.id))) {
+              // Unverified virtual plan without location anchor cannot be confirmed within 15 km
+              return false;
+            }
+          }
         }
       }
 
@@ -634,17 +1104,19 @@ class ActivitiesState extends ChangeNotifier {
               a.location.toLowerCase().compareTo(b.location.toLowerCase()),
         );
       } else {
-        // A real place is known: order by great-circle distance; plans
-        // without coordinates (e.g. online) go last.
-        double? distOf(Activity a) =>
-            (a.latitude != null && a.longitude != null)
-            ? LocationService.haversineKm(
-                origin.lat,
-                origin.lon,
-                a.latitude!,
-                a.longitude!,
-              )
-            : null;
+        // A real place is known: order by great-circle distance (using venue or creator anchor)
+        double? distOf(Activity a) {
+          final lat = a.isOnline ? (a.latitude ?? a.host?.latitude) : a.latitude;
+          final lon = a.isOnline ? (a.longitude ?? a.host?.longitude) : a.longitude;
+          return (lat != null && lon != null)
+              ? LocationService.haversineKm(
+                  origin.lat,
+                  origin.lon,
+                  lat,
+                  lon,
+                )
+              : null;
+        }
         result.sort((a, b) {
           final da = distOf(a);
           final db = distOf(b);
@@ -674,7 +1146,13 @@ class ActivitiesState extends ChangeNotifier {
     if (client == null || _isDisposed) return false;
     try {
       await client.from('activities').insert(activity.toJson());
-      await fetchActivities();
+      // Reconcile and ensure newly created plan is in memory immediately
+      final existingIdx = _activities.indexWhere((a) => a.id == activity.id);
+      if (existingIdx == -1) {
+        _activities = [activity, ..._activities];
+        _invalidateFilterCache();
+      }
+      await fetchActivities(refresh: true);
       return true;
     } catch (e) {
       _error = e.toString();
@@ -691,7 +1169,12 @@ class ActivitiesState extends ChangeNotifier {
           .from('activities')
           .update(activity.toJson())
           .eq('id', activity.id);
-      await fetchActivities();
+      final existingIdx = _activities.indexWhere((a) => a.id == activity.id);
+      if (existingIdx != -1) {
+        _activities[existingIdx] = activity;
+        _invalidateFilterCache();
+      }
+      await fetchActivities(refresh: true);
       return true;
     } catch (e) {
       _error = e.toString();
@@ -708,7 +1191,9 @@ class ActivitiesState extends ChangeNotifier {
           .from('activities')
           .update({'deleted_at': DateTime.now().toIso8601String()})
           .eq('id', id);
-      await fetchActivities();
+      _activities.removeWhere((a) => a.id == id);
+      _invalidateFilterCache();
+      await fetchActivities(refresh: true);
       return true;
     } catch (e) {
       _error = e.toString();

@@ -1,6 +1,7 @@
 enum NotificationType {
   joinRequest,
   requestAccepted,
+  requestDeclined,
   eventMatch,
   chatMessage,
   system,
@@ -32,6 +33,7 @@ class NotificationItem {
     final tStr = json['type'] as String? ?? '';
     if (tStr == 'join_request') nType = NotificationType.joinRequest;
     if (tStr == 'request_accepted') nType = NotificationType.requestAccepted;
+    if (tStr == 'request_declined' || tStr == 'request_rejected') nType = NotificationType.requestDeclined;
     if (tStr == 'event_match') nType = NotificationType.eventMatch;
     if (tStr == 'chat_message') nType = NotificationType.chatMessage;
 

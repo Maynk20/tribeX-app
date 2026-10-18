@@ -11,6 +11,7 @@ import '../models/message.dart';
 import '../models/poll.dart';
 import '../models/rating_item.dart';
 import '../models/user_profile.dart';
+import '../services/notification_service.dart';
 import '../services/poll_service.dart';
 import '../services/supabase_service.dart';
 
@@ -35,6 +36,12 @@ class ChatState extends ChangeNotifier {
   bool _isLoadingUserChats = false;
   bool _isDisposed = false;
   PollService _pollService = PollService();
+  String? _activeChatActivityId;
+
+  String? get activeChatActivityId => _activeChatActivityId;
+  void setActiveChat(String? activityId) {
+    _activeChatActivityId = activityId;
+  }
 
   @visibleForTesting
   void setPollServiceForTesting(PollService service) {
@@ -173,7 +180,7 @@ class ChatState extends ChangeNotifier {
           final profRes = await client
               .from('profiles_public')
               .select('id, full_name, username, avatar_url')
-              .filter('id', 'in', missingSenderIds.toList());
+              .inFilter('id', missingSenderIds.toList());
           for (final p in (profRes as List<dynamic>)) {
             final pid = p['id']?.toString();
             if (pid != null) {
@@ -332,7 +339,7 @@ class ChatState extends ChangeNotifier {
           final profRes = await client
               .from('profiles_public')
               .select('id, full_name, username, avatar_url')
-              .filter('id', 'in', missingOlderSenderIds.toList());
+              .inFilter('id', missingOlderSenderIds.toList());
           for (final p in (profRes as List<dynamic>)) {
             final pid = p['id']?.toString();
             if (pid != null) {
@@ -541,10 +548,6 @@ class ChatState extends ChangeNotifier {
       final fetchedPoll = await _pollService.fetchPoll(pollId);
 
       if (fetchedPoll == null) {
-        if (_polls.containsKey(pollId)) {
-          _polls[pollId] = _polls[pollId]!.copyWith(isDeleted: true);
-          if (!_isDisposed) notifyListeners();
-        }
         return;
       }
 
@@ -786,6 +789,32 @@ class ChatState extends ChangeNotifier {
       final eid = msg.expenseId;
       if (eid != null) unawaited(fetchExpenseIfNeeded(eid));
 
+      // Native notification when not actively viewing this chat
+      final currentUid = SupabaseService.client?.auth.currentUser?.id;
+      if (currentUid != null &&
+          senderId != currentUid &&
+          _activeChatActivityId != activityId) {
+        final senderDisplayName = senderProfile?.fullName.isNotEmpty == true
+            ? senderProfile!.fullName
+            : (senderProfile?.username.isNotEmpty == true
+                ? senderProfile!.username
+                : 'Squad Member');
+
+        String notifBody = msg.text;
+        if (msg.pollId != null) {
+          notifBody = '📊 Created a group poll';
+        } else if (msg.expenseId != null) {
+          notifBody = '💰 Added an expense split';
+        }
+
+        NotificationService().showNotification(
+          title: 'Squad: $senderDisplayName',
+          body: notifBody,
+          channelType: NotificationChannelType.messages,
+          deduplicationKey: 'msg_$msgId',
+        );
+      }
+
       notifyListeners();
     } else if (payload.eventType == PostgresChangeEvent.delete) {
       final oldId = payload.oldRecord['id']?.toString();
@@ -838,7 +867,10 @@ class ChatState extends ChangeNotifier {
 
   void reconnectActiveSubscriptions() {
     if (_isDisposed) return;
-    final activityIds = List<String>.from(_activeChannels.keys);
+    final activityIds = Set<String>.from(_activeChannels.keys);
+    if (_activeChatActivityId != null && _activeChatActivityId!.isNotEmpty) {
+      activityIds.add(_activeChatActivityId!);
+    }
     for (final id in activityIds) {
       _activeChannels[id]?.unsubscribe();
       _activeChannels.remove(id);
@@ -950,7 +982,7 @@ class ChatState extends ChangeNotifier {
           final profs = await client
               .from('profiles_public')
               .select('id, full_name, username, avatar_url')
-              .filter('id', 'in', participantUserIds.toList());
+              .inFilter('id', participantUserIds.toList());
           for (final p in profs) {
             final uid = p['id']?.toString();
             if (uid != null) {
@@ -962,7 +994,7 @@ class ChatState extends ChangeNotifier {
             final profs = await client
                 .from('profiles')
                 .select('id, full_name, username, avatar_url')
-                .filter('id', 'in', participantUserIds.toList());
+                .inFilter('id', participantUserIds.toList());
             for (final p in profs) {
               final uid = p['id']?.toString();
               if (uid != null) {
@@ -1093,20 +1125,20 @@ class ChatState extends ChangeNotifier {
           joinedRes = await client
               .from('activities')
               .select('*, profiles_public(id, full_name, username, avatar_url)')
-              .filter('id', 'in', joinedActivityIds)
+              .inFilter('id', joinedActivityIds)
               .filter('deleted_at', 'is', null);
         } catch (_) {
           try {
             joinedRes = await client
                 .from('activities')
                 .select('*, profiles(id, full_name, username, avatar_url)')
-                .filter('id', 'in', joinedActivityIds)
+                .inFilter('id', joinedActivityIds)
                 .filter('deleted_at', 'is', null);
           } catch (_) {
             joinedRes = await client
                 .from('activities')
                 .select('*')
-                .filter('id', 'in', joinedActivityIds)
+                .inFilter('id', joinedActivityIds)
                 .filter('deleted_at', 'is', null);
           }
         }

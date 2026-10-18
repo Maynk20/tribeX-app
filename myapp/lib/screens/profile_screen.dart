@@ -157,43 +157,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                  Row(
-                    children: [
-                      Semantics(
-                        button: true,
-                        label: 'Settings',
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const SettingsScreen(),
-                              ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(22),
-                          child: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: cardBg,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: border.withValues(alpha: 0.6),
-                              ),
-                            ),
-                            child: Icon(
-                              LucideIcons.settings,
-                              size: 18,
-                              color: isDark
-                                  ? AppColors.foregroundDark
-                                  : AppColors.foregroundLight,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Semantics(
+                  Semantics(
                         button: true,
                         label: 'Sign out',
                         child: InkWell(
@@ -252,8 +216,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                ],
-              ),
               const SizedBox(height: 16),
 
               // Profile Card: rounded-2xl border border-border/60 bg-card p-5

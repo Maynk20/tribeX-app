@@ -173,7 +173,7 @@ void main() {
         isOnline: false,
       );
 
-      // Virtual / Online plan
+      // Virtual / Online plan anchored to nearby host
       final virtualPlan = Activity(
         id: 'virtual_1',
         hostId: 'host_3',
@@ -187,6 +187,13 @@ void main() {
         costPerHead: 0,
         isOnline: true,
         meetingLink: 'https://discord.gg/gaming-room',
+        host: UserProfile(
+          id: 'host_3',
+          fullName: 'Gamer Host',
+          username: 'gamer_host',
+          latitude: 12.9750,
+          longitude: 77.6350,
+        ),
       );
 
       state.setActivitiesForTesting([nearPlan, farPlan, virtualPlan]);
@@ -208,7 +215,7 @@ void main() {
         ids,
         contains('virtual_1'),
         reason:
-            'Virtual plans must NEVER be excluded by physical distance radius',
+            'Virtual plans anchored within 15 km must appear in nearby discovery',
       );
     });
 
