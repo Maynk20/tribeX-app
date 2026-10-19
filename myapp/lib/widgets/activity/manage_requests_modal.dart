@@ -31,6 +31,9 @@ class ManageRequestsModal extends StatelessWidget {
     );
   }
 
+  static String resolveRequesterName(UserProfile? prof) =>
+      _AttendeeRow.resolveRequesterName(prof);
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<ActivitiesState>();
@@ -147,6 +150,27 @@ class _AttendeeRow extends StatefulWidget {
 
   const _AttendeeRow({required this.req});
 
+  static String resolveRequesterName(UserProfile? prof) {
+    final fName = prof?.fullName.trim();
+    final uName = prof?.username.trim();
+    if (fName != null &&
+        fName.isNotEmpty &&
+        fName != 'Squad Mate' &&
+        fName != 'Squad Member' &&
+        fName != 'User' &&
+        fName != 'Unknown user') {
+      return fName;
+    }
+    if (uName != null &&
+        uName.isNotEmpty &&
+        uName != 'Squad Mate' &&
+        uName != 'Squad Member' &&
+        uName != 'User') {
+      return uName;
+    }
+    return 'Unknown user';
+  }
+
   @override
   State<_AttendeeRow> createState() => _AttendeeRowState();
 }
@@ -161,27 +185,34 @@ class _AttendeeRowState extends State<_AttendeeRow> {
     super.initState();
     _resolvedUser = widget.req.user;
     if (_resolvedUser == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        final actState = context.read<ActivitiesState>();
-        final cached = actState.getCachedProfile(widget.req.userId);
-        if (cached != null) {
-          if (mounted) setState(() => _resolvedUser = cached);
-          return;
-        }
-        final prof = await actState.fetchUserProfile(widget.req.userId);
-        if (mounted && prof != null) {
-          setState(() => _resolvedUser = prof);
-        }
-      });
+      _loadProfile();
     }
+  }
+
+  void _loadProfile() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final actState = context.read<ActivitiesState>();
+      final cached = actState.getCachedProfile(widget.req.userId);
+      if (cached != null) {
+        if (mounted) setState(() => _resolvedUser = cached);
+        return;
+      }
+      final prof = await actState.fetchUserProfile(widget.req.userId);
+      if (mounted && prof != null) {
+        setState(() => _resolvedUser = prof);
+      }
+    });
   }
 
   @override
   void didUpdateWidget(covariant _AttendeeRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.req.user != oldWidget.req.user && widget.req.user != null) {
+    if (widget.req.user != null) {
       _resolvedUser = widget.req.user;
+    } else if (widget.req.userId != oldWidget.req.userId) {
+      _resolvedUser = null;
+      _loadProfile();
     }
   }
 
@@ -209,18 +240,12 @@ class _AttendeeRowState extends State<_AttendeeRow> {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.read<ActivitiesState>();
+    final state = context.watch<ActivitiesState>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.backgroundDark : AppColors.mutedLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
     final user = _resolvedUser ?? widget.req.user ?? state.getCachedProfile(widget.req.userId);
-    final rawFullName = user?.fullName.trim();
-    final rawUsername = user?.username.trim();
-    final name = (rawFullName != null && rawFullName.isNotEmpty && rawFullName != 'User')
-        ? rawFullName
-        : ((rawUsername != null && rawUsername.isNotEmpty)
-            ? rawUsername
-            : "Unknown user");
+    final name = _AttendeeRow.resolveRequesterName(user);
     final isAccepted = widget.req.status == JoinStatus.accepted;
 
     return Container(
@@ -239,10 +264,10 @@ class _AttendeeRowState extends State<_AttendeeRow> {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: AppColors.primaryMuted,
-                backgroundImage: user?.avatarUrl != null
-                    ? NetworkImage(user!.avatarUrl!)
+                backgroundImage: (user?.avatarUrl != null && user!.avatarUrl!.trim().isNotEmpty)
+                    ? NetworkImage(user.avatarUrl!.trim())
                     : null,
-                child: user?.avatarUrl == null
+                child: (user?.avatarUrl == null || user!.avatarUrl!.trim().isEmpty)
                     ? Text(
                         name.isNotEmpty ? name[0].toUpperCase() : 'U',
                         style: const TextStyle(
@@ -336,32 +361,6 @@ class _AttendeeRowState extends State<_AttendeeRow> {
                         ),
                       ],
                     ),
-                    if (user?.city != null) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 12,
-                            color: AppColors.mutedForegroundLight,
-                          ),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              user!.city!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isDark
-                                    ? AppColors.mutedForegroundDark
-                                    : AppColors.mutedForegroundLight,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
                   ],
                 ),
               ),

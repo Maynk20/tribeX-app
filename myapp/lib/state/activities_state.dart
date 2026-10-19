@@ -71,7 +71,32 @@ class ActivitiesState extends ChangeNotifier {
   // Cached user profiles for hosts and requesters
   final Map<String, UserProfile> _profileCache = {};
   UserProfile? getCachedProfile(String userId) => _profileCache[userId];
-  void cacheUserProfile(UserProfile profile) => _profileCache[profile.id] = profile;
+  void cacheUserProfile(UserProfile profile) {
+    _profileCache[profile.id] = profile;
+    bool changed = false;
+    _joinRequests = _joinRequests.map((r) {
+      if (r.userId == profile.id &&
+          (r.user == null || _isGenericName(r.user?.fullName))) {
+        changed = true;
+        return r.copyWith(user: profile);
+      }
+      return r;
+    }).toList();
+    if (changed) {
+      _rebuildJoinRequestIndices();
+      if (!_isDisposed) notifyListeners();
+    }
+  }
+
+  bool _isGenericName(String? name) {
+    if (name == null) return true;
+    final n = name.trim().toLowerCase();
+    return n.isEmpty ||
+        n == 'user' ||
+        n == 'squad mate' ||
+        n == 'squad member' ||
+        n == 'unknown user';
+  }
 
   Future<UserProfile?> fetchUserProfile(String userId) async {
     if (_profileCache.containsKey(userId)) {
@@ -84,27 +109,48 @@ class ActivitiesState extends ChangeNotifier {
       try {
         profRes = await client
             .from('profiles_public')
-            .select('id, full_name, username, avatar_url, rating, is_verified')
+            .select('id, full_name, username, avatar_url, rating, is_verified, reliability_score')
             .eq('id', userId)
             .maybeSingle();
       } catch (_) {
         try {
           profRes = await client
               .from('profiles_public')
-              .select('id, full_name, username, avatar_url')
+              .select('id, full_name, username, avatar_url, rating, is_verified')
               .eq('id', userId)
               .maybeSingle();
         } catch (_) {
-          profRes = await client
-              .from('profiles')
-              .select('id, full_name, username, avatar_url')
-              .eq('id', userId)
-              .maybeSingle();
+          try {
+            profRes = await client
+                .from('profiles_public')
+                .select('id, full_name, username, avatar_url')
+                .eq('id', userId)
+                .maybeSingle();
+          } catch (_) {
+            profRes = await client
+                .from('profiles')
+                .select('id, full_name, username, avatar_url')
+                .eq('id', userId)
+                .maybeSingle();
+          }
         }
       }
       if (profRes != null && profRes is Map<String, dynamic>) {
         final prof = UserProfile.fromJson(profRes);
         _profileCache[userId] = prof;
+        bool changed = false;
+        _joinRequests = _joinRequests.map((r) {
+          if (r.userId == userId &&
+              (r.user == null || _isGenericName(r.user?.fullName))) {
+            changed = true;
+            return r.copyWith(user: prof);
+          }
+          return r;
+        }).toList();
+        if (changed) {
+          _rebuildJoinRequestIndices();
+          if (!_isDisposed) notifyListeners();
+        }
         return prof;
       }
     } catch (_) {}
@@ -820,19 +866,26 @@ class ActivitiesState extends ChangeNotifier {
         try {
           profRes = await client
               .from('profiles_public')
-              .select('id, full_name, username, avatar_url, rating, is_verified')
+              .select('id, full_name, username, avatar_url, rating, is_verified, reliability_score')
               .inFilter('id', toFetch);
         } catch (_) {
           try {
             profRes = await client
                 .from('profiles_public')
-                .select('id, full_name, username, avatar_url')
+                .select('id, full_name, username, avatar_url, rating, is_verified')
                 .inFilter('id', toFetch);
           } catch (_) {
-            profRes = await client
-                .from('profiles')
-                .select('id, full_name, username, avatar_url')
-                .inFilter('id', toFetch);
+            try {
+              profRes = await client
+                  .from('profiles_public')
+                  .select('id, full_name, username, avatar_url')
+                  .inFilter('id', toFetch);
+            } catch (_) {
+              profRes = await client
+                  .from('profiles')
+                  .select('id, full_name, username, avatar_url')
+                  .inFilter('id', toFetch);
+            }
           }
         }
         if (profRes is List<dynamic>) {
@@ -849,9 +902,10 @@ class ActivitiesState extends ChangeNotifier {
 
     bool changed = false;
     _joinRequests = _joinRequests.map((r) {
-      if (r.user == null && _profileCache.containsKey(r.userId)) {
+      final cached = _profileCache[r.userId];
+      if (cached != null && (r.user == null || _isGenericName(r.user?.fullName))) {
         changed = true;
-        return r.copyWith(user: _profileCache[r.userId]);
+        return r.copyWith(user: cached);
       }
       return r;
     }).toList();
@@ -1453,6 +1507,13 @@ class ActivitiesState extends ChangeNotifier {
 
   JoinRequest? getMyRequest(String activityId, String userId) {
     return _userRequestIndex['$activityId:$userId'];
+  }
+
+  @visibleForTesting
+  void setJoinRequestsForTest(List<JoinRequest> requests) {
+    _joinRequests = List.from(requests);
+    _rebuildJoinRequestIndices();
+    if (!_isDisposed) notifyListeners();
   }
 
   @override

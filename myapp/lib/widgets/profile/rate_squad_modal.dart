@@ -40,6 +40,20 @@ class _RateSquadModalState extends State<RateSquadModal> {
     super.dispose();
   }
 
+  static String _resolvePersonName(UserProfile person) {
+    final name = person.fullName.trim();
+    final lower = name.toLowerCase();
+    final isGeneric = name.isEmpty ||
+        lower == 'user' ||
+        lower == 'squad mate' ||
+        lower == 'squad member' ||
+        lower == 'unknown user';
+    if (!isGeneric) return name;
+    final uname = person.username.trim();
+    if (uname.isNotEmpty) return uname;
+    return name.isNotEmpty ? name : 'Attendee';
+  }
+
   Future<void> _submitSingleRating({
     required UserProfile? me,
     required UserProfile person,
@@ -211,24 +225,29 @@ class _RateSquadModalState extends State<RateSquadModal> {
                             children: [
                               Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: AppColors.primaryMuted,
-                                    backgroundImage: person.avatarUrl != null
-                                        ? NetworkImage(person.avatarUrl!)
-                                        : null,
-                                    child: person.avatarUrl == null
-                                        ? Text(
-                                            person.fullName.isNotEmpty
-                                                ? person.fullName[0]
-                                                      .toUpperCase()
-                                                : 'U',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.primary,
-                                            ),
-                                          )
-                                        : null,
+                                  Builder(
+                                    builder: (context) {
+                                      final displayName = _resolvePersonName(person);
+                                      final initialChar = displayName.isNotEmpty
+                                          ? displayName[0].toUpperCase()
+                                          : 'A';
+                                      return CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: AppColors.primaryMuted,
+                                        backgroundImage: person.avatarUrl != null
+                                            ? NetworkImage(person.avatarUrl!)
+                                            : null,
+                                        child: person.avatarUrl == null
+                                            ? Text(
+                                                initialChar,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.primary,
+                                                ),
+                                              )
+                                            : null,
+                                      );
+                                    },
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
@@ -237,7 +256,7 @@ class _RateSquadModalState extends State<RateSquadModal> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          person.fullName,
+                                          _resolvePersonName(person),
                                           style: const TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w700,

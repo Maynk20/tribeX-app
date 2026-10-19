@@ -7,6 +7,7 @@ import '../core/theme/app_tokens.dart';
 import '../core/utils/app_toast.dart';
 import '../core/utils/location_feedback.dart';
 import '../models/user_profile.dart';
+import '../services/location_service.dart';
 import '../services/report_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
@@ -44,420 +45,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ];
 
   void _openEditProfileModal(BuildContext context, UserProfile user) {
-    final nameCtrl = TextEditingController(text: user.fullName);
-    final unameCtrl = TextEditingController(text: user.username);
-    final avatarCtrl = TextEditingController(text: user.avatarUrl ?? "");
-    final phoneCtrl = TextEditingController(text: user.phone ?? "");
-    final cityCtrl = TextEditingController(text: user.city ?? "");
-    final bioCtrl = TextEditingController(text: user.bio ?? "");
-    String gender = user.gender ?? "Prefer not to say";
-    bool isSaving = false;
-    bool fetchingGps = false;
-
-    final presetAvatars = [
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80",
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
-    ];
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
-        final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final currentAvatar = avatarCtrl.text.trim();
-            final initialChar = user.fullName.isNotEmpty
-                ? user.fullName[0].toUpperCase()
-                : (user.username.isNotEmpty
-                      ? user.username[0].toUpperCase()
-                      : 'U');
-
-            return Container(
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                border: Border.all(color: border),
-              ),
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color:
-                              (isDark
-                                      ? AppColors.borderDark
-                                      : AppColors.borderLight)
-                                  .withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryMuted,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            LucideIcons.pencil,
-                            size: 18,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Edit Profile',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            Text(
-                              'Update your details & profile avatar',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.mutedForegroundLight,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Avatar Preview & Input
-                    Center(
-                      child: Column(
-                        children: [
-                          Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              CircleAvatar(
-                                radius: 36,
-                                backgroundColor: AppColors.primary,
-                                backgroundImage: currentAvatar.isNotEmpty
-                                    ? NetworkImage(currentAvatar)
-                                    : null,
-                                child: currentAvatar.isEmpty
-                                    ? Text(
-                                        initialChar,
-                                        style: const TextStyle(
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  LucideIcons.camera,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: presetAvatars.map((url) {
-                                final isSelected = avatarCtrl.text == url;
-                                return GestureDetector(
-                                  onTap: () {
-                                    setModalState(() {
-                                      avatarCtrl.text = url;
-                                    });
-                                  },
-                                  child: Container(
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? AppColors.primary
-                                            : Colors.transparent,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: CircleAvatar(
-                                      radius: 16,
-                                      backgroundImage: NetworkImage(url),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    TextField(
-                      controller: avatarCtrl,
-                      onChanged: (_) => setModalState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'Avatar Image URL',
-                        prefixIcon: Icon(LucideIcons.image, size: 18),
-                        hintText: 'Paste image link or choose preset above',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Full name',
-                        prefixIcon: Icon(LucideIcons.user, size: 18),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: unameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        prefixIcon: Icon(LucideIcons.atSign, size: 18),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: phoneCtrl,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone number',
-                        prefixIcon: Icon(LucideIcons.phone, size: 18),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue:
-                          [
-                            "Male",
-                            "Female",
-                            "Other",
-                            "Prefer not to say",
-                          ].contains(gender)
-                          ? gender
-                          : "Prefer not to say",
-                      decoration: const InputDecoration(
-                        labelText: 'Gender',
-                        prefixIcon: Icon(LucideIcons.users, size: 18),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: "Male", child: Text("Male")),
-                        DropdownMenuItem(
-                          value: "Female",
-                          child: Text("Female"),
-                        ),
-                        DropdownMenuItem(value: "Other", child: Text("Other")),
-                        DropdownMenuItem(
-                          value: "Prefer not to say",
-                          child: Text("Prefer not to say"),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setModalState(() => gender = val);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: cityCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'City / Neighborhood',
-                        prefixIcon: Icon(LucideIcons.mapPin, size: 18),
-                      ),
-                    ),
-                    // TanStack profile.settings.tsx → handleFetchProfileGPS.
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: fetchingGps
-                            ? null
-                            : () async {
-                                setModalState(() => fetchingGps = true);
-                                final auth = context.read<AuthState>();
-                                final err = await auth
-                                    .saveVerifiedProfileLocation();
-                                if (!ctx.mounted) return;
-                                setModalState(() {
-                                  fetchingGps = false;
-                                  if (err == null) {
-                                    cityCtrl.text =
-                                        auth.currentUser?.city ?? cityCtrl.text;
-                                  }
-                                });
-                                if (err == null) {
-                                  AppToast.show(
-                                    ctx,
-                                    'Profile location verified',
-                                  );
-                                } else {
-                                  showLocationError(ctx, err);
-                                }
-                              },
-                        icon: fetchingGps
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
-                                ),
-                              )
-                            : const Icon(
-                                LucideIcons.navigation,
-                                size: 14,
-                                color: AppColors.primary,
-                              ),
-                        label: Text(
-                          fetchingGps
-                              ? 'Fetching location…'
-                              : 'Use current location',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: bioCtrl,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Bio',
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: isSaving
-                            ? null
-                            : () async {
-                                final name = nameCtrl.text.trim();
-                                final uname = unameCtrl.text.trim();
-
-                                if (name.length < 2) {
-                                  AppToast.show(
-                                    context,
-                                    'Full name must be at least 2 characters',
-                                    isError: true,
-                                  );
-                                  return;
-                                }
-                                if (uname.length < 3) {
-                                  AppToast.show(
-                                    context,
-                                    'Username must be at least 3 characters',
-                                    isError: true,
-                                  );
-                                  return;
-                                }
-
-                                setModalState(() => isSaving = true);
-
-                                final auth = context.read<AuthState>();
-                                final success = await auth.updateProfile(
-                                  fullName: name,
-                                  username: uname,
-                                  avatarUrl: avatarCtrl.text.trim().isNotEmpty
-                                      ? avatarCtrl.text.trim()
-                                      : null,
-                                  phone: phoneCtrl.text.trim().isNotEmpty
-                                      ? phoneCtrl.text.trim()
-                                      : null,
-                                  gender: gender,
-                                  city: cityCtrl.text.trim().isNotEmpty
-                                      ? cityCtrl.text.trim()
-                                      : null,
-                                  bio: bioCtrl.text.trim().isNotEmpty
-                                      ? bioCtrl.text.trim()
-                                      : null,
-                                );
-
-                                if (!ctx.mounted) return;
-                                if (!success) {
-                                  setModalState(() => isSaving = false);
-                                  AppToast.show(
-                                    ctx,
-                                    auth.error ?? 'Failed to update profile. Please try again.',
-                                    isError: true,
-                                  );
-                                  return;
-                                }
-
-                                Navigator.of(ctx).pop();
-                                AppToast.show(
-                                  context,
-                                  'Profile details updated successfully',
-                                );
-                              },
-                        child: isSaving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Save Profile Changes'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    ).whenComplete(() {
-      nameCtrl.dispose();
-      unameCtrl.dispose();
-      avatarCtrl.dispose();
-      phoneCtrl.dispose();
-      cityCtrl.dispose();
-      bioCtrl.dispose();
-    });
+      builder: (ctx) => _EditProfileModalContent(user: user),
+    );
   }
 
   void _showBlockedUsersModal(BuildContext context, AuthState authState) {
@@ -1320,6 +913,543 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EditProfileModalContent extends StatefulWidget {
+  final UserProfile user;
+
+  const _EditProfileModalContent({required this.user});
+
+  @override
+  State<_EditProfileModalContent> createState() =>
+      _EditProfileModalContentState();
+}
+
+class _EditProfileModalContentState extends State<_EditProfileModalContent>
+    with WidgetsBindingObserver {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _unameCtrl;
+  late final TextEditingController _avatarCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _cityCtrl;
+  late final TextEditingController _bioCtrl;
+
+  late String _gender;
+  double? _selectedLatitude;
+  double? _selectedLongitude;
+
+  bool _isSaving = false;
+  bool _fetchingGps = false;
+  bool _waitingForSettingsReturn = false;
+  int _locationFetchToken = 0;
+
+  static const List<String> presetAvatars = [
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80",
+    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _nameCtrl = TextEditingController(text: widget.user.fullName);
+    _unameCtrl = TextEditingController(text: widget.user.username);
+    _avatarCtrl = TextEditingController(text: widget.user.avatarUrl ?? "");
+    _phoneCtrl = TextEditingController(text: widget.user.phone ?? "");
+    _cityCtrl = TextEditingController(text: widget.user.city ?? "");
+    _bioCtrl = TextEditingController(text: widget.user.bio ?? "");
+    _gender = widget.user.gender ?? "Prefer not to say";
+    _selectedLatitude = widget.user.latitude;
+    _selectedLongitude = widget.user.longitude;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _nameCtrl.dispose();
+    _unameCtrl.dispose();
+    _avatarCtrl.dispose();
+    _phoneCtrl.dispose();
+    _cityCtrl.dispose();
+    _bioCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _waitingForSettingsReturn) {
+      _waitingForSettingsReturn = false;
+      _handleSettingsReturn();
+    }
+  }
+
+  Future<void> _handleSettingsReturn() async {
+    final isServiceEnabled = await LocationService.isLocationServiceEnabled();
+    final hasPermission = await LocationService.hasLocationPermission();
+    if (!mounted) return;
+
+    if (isServiceEnabled && hasPermission) {
+      AppToast.show(context, 'Settings updated. Fetching location...');
+      await _handleUseCurrentLocation();
+    } else if (!isServiceEnabled) {
+      AppToast.show(
+        context,
+        'Device location services are still off. Please enable GPS in Settings.',
+        isError: true,
+      );
+    } else if (!hasPermission) {
+      AppToast.show(
+        context,
+        'Location permission is still needed to use current location.',
+        isError: true,
+      );
+    }
+  }
+
+  Future<void> _handleUseCurrentLocation() async {
+    if (_fetchingGps) return;
+    final token = ++_locationFetchToken;
+    setState(() => _fetchingGps = true);
+
+    try {
+      final result = await LocationService.getFreshCurrentPosition();
+      if (!mounted || token != _locationFetchToken) return;
+
+      if (!result.isSuccess) {
+        setState(() => _fetchingGps = false);
+        showLocationError(
+          context,
+          result.error ?? "Couldn't fetch your location",
+          onSettingsOpened: () {
+            _waitingForSettingsReturn = true;
+          },
+        );
+        return;
+      }
+
+      final lat = result.latitude!;
+      final lon = result.longitude!;
+
+      String resolvedCity;
+      try {
+        resolvedCity = await LocationService.resolveProfileCity(lat, lon);
+      } catch (_) {
+        resolvedCity = LocationService.coordinateFallbackLabel(lat, lon);
+      }
+
+      if (!mounted || token != _locationFetchToken) return;
+
+      setState(() {
+        _selectedLatitude = lat;
+        _selectedLongitude = lon;
+        _cityCtrl.text = resolvedCity;
+      });
+
+      final auth = context.read<AuthState>();
+      final err = await auth.saveVerifiedProfileLocation(
+        knownLat: lat,
+        knownLon: lon,
+        knownCity: resolvedCity,
+      );
+
+      if (!mounted || token != _locationFetchToken) return;
+      setState(() => _fetchingGps = false);
+
+      if (err == null) {
+        final actState = context.read<ActivitiesState>();
+        actState.setPlace(
+          SavedPlace(
+            displayName: resolvedCity,
+            short: resolvedCity,
+            lat: lat,
+            lon: lon,
+            city: resolvedCity,
+          ),
+        );
+        AppToast.show(context, 'Profile location verified');
+      } else {
+        AppToast.show(context, err, isError: true);
+      }
+    } catch (_) {
+      if (!mounted || token != _locationFetchToken) return;
+      setState(() => _fetchingGps = false);
+      AppToast.show(
+        context,
+        "Failed to obtain your location. Please try again.",
+        isError: true,
+      );
+    }
+  }
+
+  Future<void> _handleSaveProfile() async {
+    final name = _nameCtrl.text.trim();
+    final uname = _unameCtrl.text.trim();
+
+    if (name.length < 2) {
+      AppToast.show(
+        context,
+        'Full name must be at least 2 characters',
+        isError: true,
+      );
+      return;
+    }
+    if (uname.length < 3) {
+      AppToast.show(
+        context,
+        'Username must be at least 3 characters',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    final auth = context.read<AuthState>();
+    final success = await auth.updateProfile(
+      fullName: name,
+      username: uname,
+      avatarUrl: _avatarCtrl.text.trim().isNotEmpty
+          ? _avatarCtrl.text.trim()
+          : null,
+      phone: _phoneCtrl.text.trim().isNotEmpty
+          ? _phoneCtrl.text.trim()
+          : null,
+      gender: _gender,
+      city: _cityCtrl.text.trim().isNotEmpty
+          ? _cityCtrl.text.trim()
+          : null,
+      bio: _bioCtrl.text.trim().isNotEmpty
+          ? _bioCtrl.text.trim()
+          : null,
+      latitude: _selectedLatitude,
+      longitude: _selectedLongitude,
+    );
+
+    if (!mounted) return;
+    if (!success) {
+      setState(() => _isSaving = false);
+      AppToast.show(
+        context,
+        auth.error ?? 'Failed to update profile. Please try again.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (_selectedLatitude != null && _selectedLongitude != null) {
+      final actState = context.read<ActivitiesState>();
+      final cityLabel = _cityCtrl.text.trim().isNotEmpty
+          ? _cityCtrl.text.trim()
+          : 'Current Location';
+      actState.setPlace(
+        SavedPlace(
+          displayName: cityLabel,
+          short: cityLabel,
+          lat: _selectedLatitude!,
+          lon: _selectedLongitude!,
+          city: cityLabel,
+        ),
+      );
+    }
+
+    Navigator.of(context).pop();
+    AppToast.show(context, 'Profile details updated successfully');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
+    final border = isDark ? AppColors.borderDark : AppColors.borderLight;
+
+    final currentAvatar = _avatarCtrl.text.trim();
+    final initialChar = widget.user.fullName.isNotEmpty
+        ? widget.user.fullName[0].toUpperCase()
+        : (widget.user.username.isNotEmpty
+              ? widget.user.username[0].toUpperCase()
+              : 'U');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border.all(color: border),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: (isDark ? AppColors.borderDark : AppColors.borderLight)
+                      .withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryMuted,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    LucideIcons.pencil,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Edit Profile',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Update your details & profile avatar',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.mutedForegroundLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Avatar Preview & Input
+            Center(
+              child: Column(
+                children: [
+                  Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      CircleAvatar(
+                        radius: 36,
+                        backgroundColor: AppColors.primary,
+                        backgroundImage: currentAvatar.isNotEmpty
+                            ? NetworkImage(currentAvatar)
+                            : null,
+                        child: currentAvatar.isEmpty
+                            ? Text(
+                                initialChar,
+                                style: const TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : null,
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          LucideIcons.camera,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: presetAvatars.map((url) {
+                        final isSelected = _avatarCtrl.text == url;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _avatarCtrl.text = url;
+                            });
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                            child: CircleAvatar(
+                              radius: 16,
+                              backgroundImage: NetworkImage(url),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            TextField(
+              controller: _avatarCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Avatar Image URL',
+                prefixIcon: Icon(LucideIcons.image, size: 18),
+                hintText: 'Paste image link or choose preset above',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Full name',
+                prefixIcon: Icon(LucideIcons.user, size: 18),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _unameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                prefixIcon: Icon(LucideIcons.atSign, size: 18),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone number',
+                prefixIcon: Icon(LucideIcons.phone, size: 18),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue:
+                  [
+                    "Male",
+                    "Female",
+                    "Other",
+                    "Prefer not to say",
+                  ].contains(_gender)
+                  ? _gender
+                  : "Prefer not to say",
+              decoration: const InputDecoration(
+                labelText: 'Gender',
+                prefixIcon: Icon(LucideIcons.users, size: 18),
+              ),
+              items: const [
+                DropdownMenuItem(value: "Male", child: Text("Male")),
+                DropdownMenuItem(value: "Female", child: Text("Female")),
+                DropdownMenuItem(value: "Other", child: Text("Other")),
+                DropdownMenuItem(
+                  value: "Prefer not to say",
+                  child: Text("Prefer not to say"),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _gender = val);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _cityCtrl,
+              onChanged: (_) {
+                // Invalidate pending async GPS tokens to prevent overwriting user input
+                _locationFetchToken++;
+              },
+              decoration: const InputDecoration(
+                labelText: 'City / Neighborhood',
+                prefixIcon: Icon(LucideIcons.mapPin, size: 18),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _fetchingGps ? null : _handleUseCurrentLocation,
+                icon: _fetchingGps
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : const Icon(
+                        LucideIcons.navigation,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                label: Text(
+                  _fetchingGps
+                      ? 'Fetching location…'
+                      : 'Use current location',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _bioCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Bio',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _handleSaveProfile,
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Save Profile Changes'),
+              ),
+            ),
           ],
         ),
       ),

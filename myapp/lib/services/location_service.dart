@@ -143,12 +143,32 @@ class LocationService {
   _forwardCache = {};
   static const Duration _cacheTtl = Duration(minutes: 15);
 
+  // Testing hooks to mock platform location, permissions, and reverse geocoding
+  static Future<bool> Function()? mockServiceEnabledChecker;
+  static Future<LocationPermission> Function()? mockPermissionChecker;
+  static Future<LocationPermission> Function()? mockPermissionRequester;
+  static Future<Position> Function()? mockPositionGetter;
+  static Future<bool> Function()? mockOpenAppSettings;
+  static Future<bool> Function()? mockOpenLocationSettings;
+  static Future<String> Function(double lat, double lon)? mockReverseGeocoder;
+
+  static void resetMockHandlers() {
+    mockServiceEnabledChecker = null;
+    mockPermissionChecker = null;
+    mockPermissionRequester = null;
+    mockPositionGetter = null;
+    mockOpenAppSettings = null;
+    mockOpenLocationSettings = null;
+    mockReverseGeocoder = null;
+  }
+
   /// Clears in-memory geocoding and position caches (useful on logout / testing)
   static void clearCache() {
     _resolvedPlaceCache.clear();
     _cityCache.clear();
     _reverseCache.clear();
     _forwardCache.clear();
+    resetMockHandlers();
   }
 
   static String _roundCoordKey(double lat, double lon) =>
@@ -247,13 +267,41 @@ class LocationService {
     return 2 * r * math.asin(math.min(1.0, math.sqrt(h)));
   }
 
+  /// Checks whether system location service / GPS is enabled on the device.
+  static Future<bool> isLocationServiceEnabled() async {
+    if (kIsWeb) return true;
+    try {
+      return mockServiceEnabledChecker != null
+          ? await mockServiceEnabledChecker!()
+          : await Geolocator.isLocationServiceEnabled();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks the current location permission without prompting the user.
+  static Future<LocationPermission> checkPermission() async {
+    try {
+      return mockPermissionChecker != null
+          ? await mockPermissionChecker!()
+          : await Geolocator.checkPermission();
+    } catch (_) {
+      return LocationPermission.denied;
+    }
+  }
+
   /// Checks whether location service is enabled and permission is granted,
   /// without popping any permission prompt dialogs.
   static Future<bool> hasLocationPermission() async {
     if (kIsWeb) return false;
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) return false;
-      final perm = await Geolocator.checkPermission();
+      final isEnabled = mockServiceEnabledChecker != null
+          ? await mockServiceEnabledChecker!()
+          : await Geolocator.isLocationServiceEnabled();
+      if (!isEnabled) return false;
+      final perm = mockPermissionChecker != null
+          ? await mockPermissionChecker!()
+          : await Geolocator.checkPermission();
       return perm == LocationPermission.whileInUse ||
           perm == LocationPermission.always;
     } catch (_) {
@@ -277,7 +325,10 @@ class LocationService {
     // when getCurrentPosition() is called.
     if (!kIsWeb) {
       try {
-        if (!await Geolocator.isLocationServiceEnabled()) {
+        final isEnabled = mockServiceEnabledChecker != null
+            ? await mockServiceEnabledChecker!()
+            : await Geolocator.isLocationServiceEnabled();
+        if (!isEnabled) {
           return LocationResult.failure(
             msgServiceDisabled,
             reason: LocationFailure.serviceDisabled,
@@ -292,9 +343,13 @@ class LocationService {
 
       LocationPermission permission;
       try {
-        permission = await Geolocator.checkPermission();
+        permission = mockPermissionChecker != null
+            ? await mockPermissionChecker!()
+            : await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
+          permission = mockPermissionRequester != null
+              ? await mockPermissionRequester!()
+              : await Geolocator.requestPermission();
           if (permission == LocationPermission.denied) {
             return LocationResult.failure(
               msgDenied,
@@ -332,16 +387,21 @@ class LocationService {
 
     // 4. Obtain the current position.
     try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(
-          accuracy: accuracy,
-          timeLimit: timeLimit,
-        ),
-      );
+      final Position position;
+      if (mockPositionGetter != null) {
+        position = await mockPositionGetter!();
+      } else {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: LocationSettings(
+            accuracy: accuracy,
+            timeLimit: timeLimit,
+          ),
+        );
+      }
       return LocationResult.success(position.latitude, position.longitude);
     } on TimeoutException {
-      // Graceful fallback: If fresh satellite acquisition timed out, try a recent last known position (within 15 minutes)
-      if (!kIsWeb) {
+      // Graceful fallback: only if cached fixes are explicitly permitted (maxAge != null)
+      if (maxAge != null && !kIsWeb) {
         try {
           final last = await Geolocator.getLastKnownPosition();
           if (last != null &&
@@ -366,8 +426,8 @@ class LocationService {
         reason: LocationFailure.permissionDenied,
       );
     } catch (_) {
-      // Attempt last known fix as fallback on unexpected platform failure if fresh (<15 mins)
-      if (!kIsWeb) {
+      // Attempt last known fix as fallback only if maxAge != null
+      if (maxAge != null && !kIsWeb) {
         try {
           final last = await Geolocator.getLastKnownPosition();
           if (last != null &&
@@ -382,6 +442,19 @@ class LocationService {
         reason: LocationFailure.unavailable,
       );
     }
+  }
+
+  /// Obtain a fresh device GPS position with high accuracy.
+  /// Bypasses any cached/stale positions.
+  static Future<LocationResult> getFreshCurrentPosition({
+    LocationAccuracy accuracy = LocationAccuracy.high,
+    Duration timeLimit = const Duration(seconds: 15),
+  }) async {
+    return getCurrentPosition(
+      accuracy: accuracy,
+      timeLimit: timeLimit,
+      maxAge: null,
+    );
   }
 
   /// Two-stage lookup used for the profile location and mirrors TanStack
@@ -470,6 +543,10 @@ class LocationService {
   /// Reverse geocode for the profile `city` column, capped at 3 s exactly like
   /// TanStack so the save flow never hangs; falls back to `Near lat, lon`.
   static Future<String> resolveProfileCity(double lat, double lon) async {
+    if (mockReverseGeocoder != null) {
+      return await mockReverseGeocoder!(lat, lon);
+    }
+
     final cacheKey = _roundCoordKey(lat, lon);
     final cached = _cityCache[cacheKey];
     if (cached != null &&
@@ -505,6 +582,7 @@ class LocationService {
 
   /// Open the OS app-settings page (used after a permanent denial).
   static Future<bool> openAppSettings() async {
+    if (mockOpenAppSettings != null) return await mockOpenAppSettings!();
     try {
       return await Geolocator.openAppSettings();
     } catch (_) {
@@ -514,6 +592,7 @@ class LocationService {
 
   /// Open the OS location-services settings page (used when GPS is off).
   static Future<bool> openLocationSettings() async {
+    if (mockOpenLocationSettings != null) return await mockOpenLocationSettings!();
     try {
       return await Geolocator.openLocationSettings();
     } catch (_) {
