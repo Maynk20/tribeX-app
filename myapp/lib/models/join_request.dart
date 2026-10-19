@@ -29,18 +29,22 @@ class JoinRequest {
     if (stStr == 'accepted') st = JoinStatus.accepted;
     if (stStr == 'rejected') st = JoinStatus.rejected;
 
-    UserProfile? userObj;
-    if (json['user'] != null && json['user'] is Map<String, dynamic>) {
-      userObj = UserProfile.fromJson(json['user'] as Map<String, dynamic>);
-    } else if (json['profiles'] != null &&
-        json['profiles'] is Map<String, dynamic>) {
-      userObj = UserProfile.fromJson(json['profiles'] as Map<String, dynamic>);
-    } else if (json['profiles_public'] != null &&
-        json['profiles_public'] is Map<String, dynamic>) {
-      userObj = UserProfile.fromJson(
-        json['profiles_public'] as Map<String, dynamic>,
-      );
+    Map<String, dynamic>? extractMap(dynamic val) {
+      if (val is Map<String, dynamic>) return val;
+      if (val is Map) return Map<String, dynamic>.from(val);
+      if (val is List && val.isNotEmpty) {
+        final first = val.first;
+        if (first is Map<String, dynamic>) return first;
+        if (first is Map) return Map<String, dynamic>.from(first);
+      }
+      return null;
     }
+
+    final userRaw = extractMap(json['user']) ??
+        extractMap(json['profiles']) ??
+        extractMap(json['profiles_public']);
+    final UserProfile? userObj =
+        userRaw != null ? UserProfile.fromJson(userRaw) : null;
 
     return JoinRequest(
       id: json['id'] as String? ?? '',

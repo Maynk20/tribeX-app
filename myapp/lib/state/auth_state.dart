@@ -108,6 +108,7 @@ class AuthState extends ChangeNotifier {
     _gpsTriedForUserId = null;
     _blockedUserIds.clear();
     _unsubscribeBlocks();
+    LocationService.clearCache();
     if (!_isDisposed) notifyListeners();
   }
 
@@ -190,7 +191,11 @@ class AuthState extends ChangeNotifier {
   /// `city`, `latitude`, `longitude` on the profile. Returns `null` on success
   /// or a user-facing error message. Port of TanStack
   /// `saveVerifiedProfileLocation` (src/lib/services.ts).
-  Future<String?> saveVerifiedProfileLocation() async {
+  Future<String?> saveVerifiedProfileLocation({
+    double? knownLat,
+    double? knownLon,
+    String? knownCity,
+  }) async {
     final u = _currentUser;
     final client = SupabaseService.client;
     if (u == null || client == null || _isDisposed) {
@@ -200,13 +205,23 @@ class AuthState extends ChangeNotifier {
     _isSavingLocation = true;
     if (!_isDisposed) notifyListeners();
     try {
-      final coords = await LocationService.getProfileCoords();
-      if (!coords.isSuccess) {
-        return coords.error ?? "Couldn't fetch your location";
+      final double lat;
+      final double lon;
+      final String city;
+
+      if (knownLat != null && knownLon != null) {
+        lat = knownLat;
+        lon = knownLon;
+        city = knownCity ?? await LocationService.resolveProfileCity(lat, lon);
+      } else {
+        final coords = await LocationService.getFreshCurrentPosition();
+        if (!coords.isSuccess) {
+          return coords.error ?? "Couldn't fetch your location";
+        }
+        lat = coords.latitude!;
+        lon = coords.longitude!;
+        city = await LocationService.resolveProfileCity(lat, lon);
       }
-      final lat = coords.latitude!;
-      final lon = coords.longitude!;
-      final city = await LocationService.resolveProfileCity(lat, lon);
       if (_isDisposed) return null;
 
       await client
