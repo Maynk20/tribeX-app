@@ -43,21 +43,36 @@ class JoinRequest {
     final userRaw = extractMap(json['user']) ??
         extractMap(json['profiles']) ??
         extractMap(json['profiles_public']);
-    final UserProfile? userObj =
+    UserProfile? userObj =
         userRaw != null ? UserProfile.fromJson(userRaw) : null;
 
+    final reqUserId =
+        json['user_id'] as String? ?? json['userId'] as String? ?? '';
+
+    // If flat profile fields are returned (e.g. from list_activity_join_profiles RPC)
+    if (userObj == null &&
+        (json['full_name'] != null || json['username'] != null)) {
+      final userMap = Map<String, dynamic>.from(json);
+      userMap['id'] =
+          reqUserId.isNotEmpty ? reqUserId : (json['id'] as String? ?? '');
+      userObj = UserProfile.fromJson(userMap);
+    }
+
     return JoinRequest(
-      id: json['id'] as String? ?? '',
+      id: json['id'] as String? ?? json['join_request_id'] as String? ?? '',
       activityId:
           json['activity_id'] as String? ?? json['activityId'] as String? ?? '',
-      userId: json['user_id'] as String? ?? json['userId'] as String? ?? '',
+      userId: reqUserId,
       status: st,
       requestedAt: json['created_at'] != null
           ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
-          : (json['requestedAt'] != null
-                ? (DateTime.tryParse(json['requestedAt'].toString()) ??
+          : (json['requested_at'] != null
+              ? (DateTime.tryParse(json['requested_at'].toString()) ??
+                  DateTime.now())
+              : (json['requestedAt'] != null
+                  ? (DateTime.tryParse(json['requestedAt'].toString()) ??
                       DateTime.now())
-                : DateTime.now()),
+                  : DateTime.now())),
       checkedInAt: json['checked_in_at'] != null
           ? DateTime.tryParse(json['checked_in_at'].toString())
           : null,

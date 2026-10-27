@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:myapp/models/user_profile.dart';
-import 'package:myapp/screens/settings_screen.dart';
 import 'package:myapp/services/location_service.dart';
 import 'package:myapp/state/activities_state.dart';
 import 'package:myapp/state/auth_state.dart';

@@ -6,7 +6,7 @@ import '../../models/join_request.dart';
 import '../../models/user_profile.dart';
 import '../../state/activities_state.dart';
 
-class ManageRequestsModal extends StatelessWidget {
+class ManageRequestsModal extends StatefulWidget {
   final String activityId;
   final String activityTitle;
 
@@ -35,9 +35,26 @@ class ManageRequestsModal extends StatelessWidget {
       _AttendeeRow.resolveRequesterName(prof);
 
   @override
+  State<ManageRequestsModal> createState() => _ManageRequestsModalState();
+}
+
+class _ManageRequestsModalState extends State<ManageRequestsModal> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context
+            .read<ActivitiesState>()
+            .fetchRequestsForActivity(widget.activityId);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = context.watch<ActivitiesState>();
-    final requests = state.getRequestsForActivity(activityId);
+    final requests = state.getRequestsForActivity(widget.activityId);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
@@ -80,7 +97,7 @@ class ManageRequestsModal extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          activityTitle,
+                          widget.activityTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -158,14 +175,15 @@ class _AttendeeRow extends StatefulWidget {
         fName != 'Squad Mate' &&
         fName != 'Squad Member' &&
         fName != 'User' &&
-        fName != 'Unknown user') {
+        fName.toLowerCase() != 'unknown user') {
       return fName;
     }
     if (uName != null &&
         uName.isNotEmpty &&
         uName != 'Squad Mate' &&
         uName != 'Squad Member' &&
-        uName != 'User') {
+        uName != 'User' &&
+        uName.toLowerCase() != 'unknown user') {
       return uName;
     }
     return 'Unknown user';
@@ -184,7 +202,8 @@ class _AttendeeRowState extends State<_AttendeeRow> {
   void initState() {
     super.initState();
     _resolvedUser = widget.req.user;
-    if (_resolvedUser == null) {
+    if (_resolvedUser == null ||
+        _AttendeeRow.resolveRequesterName(_resolvedUser) == 'Unknown user') {
       _loadProfile();
     }
   }
@@ -194,7 +213,8 @@ class _AttendeeRowState extends State<_AttendeeRow> {
       if (!mounted) return;
       final actState = context.read<ActivitiesState>();
       final cached = actState.getCachedProfile(widget.req.userId);
-      if (cached != null) {
+      if (cached != null &&
+          _AttendeeRow.resolveRequesterName(cached) != 'Unknown user') {
         if (mounted) setState(() => _resolvedUser = cached);
         return;
       }
@@ -208,10 +228,12 @@ class _AttendeeRowState extends State<_AttendeeRow> {
   @override
   void didUpdateWidget(covariant _AttendeeRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.req.user != null) {
+    if (widget.req.user != null &&
+        _AttendeeRow.resolveRequesterName(widget.req.user) != 'Unknown user') {
       _resolvedUser = widget.req.user;
-    } else if (widget.req.userId != oldWidget.req.userId) {
-      _resolvedUser = null;
+    } else if (widget.req.userId != oldWidget.req.userId ||
+        _resolvedUser == null ||
+        _AttendeeRow.resolveRequesterName(_resolvedUser) == 'Unknown user') {
       _loadProfile();
     }
   }
@@ -228,6 +250,11 @@ class _AttendeeRowState extends State<_AttendeeRow> {
 
     try {
       await actionFn();
+      if (mounted) {
+        await context
+            .read<ActivitiesState>()
+            .fetchRequestsForActivity(widget.req.activityId);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -244,7 +271,20 @@ class _AttendeeRowState extends State<_AttendeeRow> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.backgroundDark : AppColors.mutedLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    final user = _resolvedUser ?? widget.req.user ?? state.getCachedProfile(widget.req.userId);
+    final cached = state.getCachedProfile(widget.req.userId);
+    UserProfile? user;
+    if (_resolvedUser != null &&
+        _AttendeeRow.resolveRequesterName(_resolvedUser) != 'Unknown user') {
+      user = _resolvedUser;
+    } else if (cached != null &&
+        _AttendeeRow.resolveRequesterName(cached) != 'Unknown user') {
+      user = cached;
+    } else if (widget.req.user != null &&
+        _AttendeeRow.resolveRequesterName(widget.req.user) != 'Unknown user') {
+      user = widget.req.user;
+    } else {
+      user = widget.req.user ?? _resolvedUser ?? cached;
+    }
     final name = _AttendeeRow.resolveRequesterName(user);
     final isAccepted = widget.req.status == JoinStatus.accepted;
 
