@@ -10,31 +10,35 @@
 ## Table of Contents
 
 1. [Executive Overview & Tech Stack](#1-executive-overview--tech-stack)
-2. [End-to-End System Architecture](#2-end-to-end-system-architecture)
-3. [User Flow & Lifecycle Journeys](#3-user-flow--lifecycle-journeys)
-   - [3.1 User Authentication & Profile Onboarding](#31-user-authentication--profile-onboarding)
-   - [3.2 Plan Discovery & Spatial Feed Engine](#32-plan-discovery--spatial-feed-engine)
-   - [3.3 3-Step Plan Creation Flow](#33-3-step-plan-creation-flow)
-   - [3.4 Join Request, Host Approval & Geofenced Check-In](#34-join-request-host-approval--geofenced-check-in)
-   - [3.5 Real-Time Squad Chat & Messaging](#35-real-time-squad-chat--messaging)
-   - [3.6 Interactive Polls & Group Expense Splitting](#36-interactive-polls--group-expense-splitting)
-   - [3.7 Safety, Reliability Ratings & User Moderation](#37-safety-reliability-ratings--user-moderation)
-4. [State Management Architecture (`/myapp/lib/state`)](#4-state-management-architecture-myapplibstate)
-5. [Database Architecture & Data Flow](#5-database-architecture--data-flow)
-   - [5.1 Entity Relationship Diagram](#51-entity-relationship-diagram)
-   - [5.2 Complete Table Schemas](#52-complete-table-schemas)
-   - [5.3 Row-Level Security (RLS) & Security-Definer Views](#53-row-level-security-rls--security-definer-views)
-   - [5.4 Stored Procedures (RPC Functions)](#54-stored-procedures-rpc-functions)
-   - [5.5 Database Triggers & Realtime Notifications](#55-database-triggers--realtime-notifications)
-6. [Subsystems Deep Dive](#6-subsystems-deep-dive)
+2. [API Keys, Environment Variables & Service Credentials](#2-api-keys-environment-variables--service-credentials)
+   - [2.1 Key Inventory & Configuration Parameters](#21-key-inventory--configuration-parameters)
+   - [2.2 Detailed Usage & Integration Points](#22-detailed-usage--integration-points)
+   - [2.3 Security Boundaries & Client Protection Rules](#23-security-boundaries--client-protection-rules)
+3. [End-to-End System Architecture](#3-end-to-end-system-architecture)
+4. [User Flow & Lifecycle Journeys](#4-user-flow--lifecycle-journeys)
+   - [4.1 User Authentication & Profile Onboarding](#41-user-authentication--profile-onboarding)
+   - [4.2 Plan Discovery & Spatial Feed Engine](#42-plan-discovery--spatial-feed-engine)
+   - [4.3 3-Step Plan Creation Flow](#43-3-step-plan-creation-flow)
+   - [4.4 Join Request, Host Approval & Geofenced Check-In](#44-join-request-host-approval--geofenced-check-in)
+   - [4.5 Real-Time Squad Chat & Messaging](#45-real-time-squad-chat--messaging)
+   - [4.6 Interactive Polls & Group Expense Splitting](#46-interactive-polls--group-expense-splitting)
+   - [4.7 Safety, Reliability Ratings & User Moderation](#47-safety-reliability-ratings--user-moderation)
+5. [State Management Architecture (`/myapp/lib/state`)](#5-state-management-architecture-myapplibstate)
+6. [Database Architecture & Data Flow](#6-database-architecture--data-flow)
+   - [6.1 Entity Relationship Diagram](#61-entity-relationship-diagram)
+   - [6.2 Complete Table Schemas](#62-complete-table-schemas)
+   - [6.3 Row-Level Security (RLS) & Security-Definer Views](#63-row-level-security-rls--security-definer-views)
+   - [6.4 Stored Procedures (RPC Functions)](#64-stored-procedures-rpc-functions)
+   - [6.5 Database Triggers & Realtime Notifications](#65-database-triggers--realtime-notifications)
+7. [Subsystems Deep Dive](#7-subsystems-deep-dive)
    - [A. Show Plan & 15 KM Spatial Logic](#a-show-plan--15-km-spatial-logic)
    - [B. Plan Creation Pipeline](#b-plan-creation-pipeline)
    - [C. Join Request Resolution Pipeline](#c-join-request-resolution-pipeline)
    - [D. Real-Time Messaging & Chat Multiplexing](#d-real-time-messaging--chat-multiplexing)
    - [E. Poll Voting Synchronization](#e-poll-voting-synchronization)
    - [F. Expense Splitting & Settlement Calculations](#f-expense-splitting--settlement-calculations)
-7. [Android Platform Permissions & Notifications](#7-android-platform-permissions--notifications)
-8. [Testing & Build Verification](#8-testing--build-verification)
+8. [Android Platform Permissions & Notifications](#8-android-platform-permissions--notifications)
+9. [Testing & Build Verification](#9-testing--build-verification)
 
 ---
 
@@ -56,7 +60,105 @@
 
 ---
 
-## 2. End-to-End System Architecture
+## 2. API Keys, Environment Variables & Service Credentials
+
+### 2.1 Key Inventory & Configuration Parameters
+
+The table below lists all production keys, secrets, API endpoints, and configuration parameters used across the TribeX mobile application and backend services:
+
+| Key / Variable Name | Active Value | Environment / File | Security Scope | Purpose / Usage |
+|---|---|---|---|---|
+| `SUPABASE_URL` | `https://ovknvssfrsuufuopbeqf.supabase.co` | `.env`<br/>`myapp/lib/services/supabase_service.dart` | **Public Client URL** | Primary Supabase API gateway endpoint for authentication, PostgREST queries, Realtime WebSockets, and Storage CDN. |
+| `SUPABASE_PUBLISHABLE_KEY`<br/>(`supabaseAnonKey`) | `sb_publishable_k8-EYhRp1ixYnTUCkWPaVQ_pbhzebqL` | `.env`<br/>`myapp/lib/services/supabase_service.dart` | **Public Client Key** | Client-side publishable key passed in request headers (`apikey`). Safe for Flutter and Web clients because database access is governed strictly by Postgres Row Level Security (RLS). |
+| `SUPABASE_PROJECT_ID` | `ovknvssfrsuufuopbeqf` | `.env` | **Public Identifier** | Unique Supabase project identifier used by the Supabase CLI for linking (`supabase link`), running migrations (`supabase db push`), and remote database management. |
+| `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92a252c3NmcnN1dWZ1b3BiZXFmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDg4MTU2MiwiZXhwIjoyMTAwNDU3NTYyfQ.4UJRKPv1rTgVSsY0l9KEzbKeYe2Nw6i2lubez5FgPdU` | `.env` | **SECRET (Backend Only)** | High-privilege administrative service role key. Completely bypasses Row Level Security. Used for database migrations, administrative scripts, automated data seeding, and backend edge functions. **NEVER embedded in the mobile APK.** |
+| `GMAIL_USER` | `tribex.apk@gmail.com` | `.env` | **Operational Email** | Official service email account used for sending automated transactional emails, error reports, and system alerts. |
+| `GMAIL_APP_PASS` | `xmva hdqc hoqq xkly` | `.env` | **SECRET (Backend Only)** | Dedicated 16-character Google App Password used for authenticating with Gmail SMTP servers (`smtp.gmail.com:587` / `465`) without exposing master Google Account credentials. |
+| `OpenStreetMap Nominatim API` | `https://nominatim.openstreetmap.org` | `myapp/lib/services/location_service.dart`<br/>`myapp/lib/widgets/common/place_search_dialog.dart` | **Public Open API** | Free geocoding service. Reverse-geocodes GPS coordinates into human-readable localities and resolves 6-digit Indian PIN codes. Uses identifying header `User-Agent: TribeX-Flutter-App/1.0 (contact: tribex.apk@gmail.com)`. |
+| `Photon Geocoding API` | `https://photon.komoot.io/api/` | `myapp/lib/services/location_service.dart`<br/>`myapp/lib/widgets/common/place_search_dialog.dart` | **Public Open API** | High-performance search autocomplete endpoint for searching places, venues, and landmarks in India. No API key required. |
+| `Supabase Storage Buckets` | `activity-covers`, `avatars`, `event-memories` | `myapp/lib/services/storage_service.dart` | **Public Storage Buckets** | S3-compatible cloud storage buckets for plan covers, profile avatars, and post-event memories. Publicly readable via CDN URLs; upload-restricted to authenticated sessions. |
+
+---
+
+### 2.2 Detailed Usage & Integration Points
+
+#### 1. Supabase Client Initialization (`SupabaseService`)
+- **Location:** `myapp/lib/services/supabase_service.dart`
+- **Code Implementation:**
+  ```dart
+  static const String supabaseUrl = 'https://ovknvssfrsuufuopbeqf.supabase.co';
+  static const String supabaseAnonKey = 'sb_publishable_k8-EYhRp1ixYnTUCkWPaVQ_pbhzebqL';
+
+  static Future<void> initialize() async {
+    await Supabase.initialize(
+      url: supabaseUrl,
+      publishableKey: supabaseAnonKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
+    );
+  }
+  ```
+- **How It Is Used:**
+  - **Authentication:** Manages session lifecycle (`client.auth.signInWithPassword`, `client.auth.signUp`, `client.auth.signOut`).
+  - **Database Queries:** Queries `activities`, `join_requests`, `messages`, `polls`, and `expenses`.
+  - **Stored Procedures (RPC):** Executes backend functions `get_nearby_activities`, `list_activity_join_profiles`, `check_in_activity`, `accept_join_request`, and `mark_no_show`.
+  - **Realtime Engine:** Maintains WebSocket subscriptions for live chat messages, attendee updates, and plan notifications.
+
+#### 2. Backend Migrations & Database Administration (`SUPABASE_SERVICE_ROLE_KEY`)
+- **Location:** `.env` (Project Root)
+- **How It Is Used:**
+  Used by the Supabase CLI (`npx supabase db push`) and administrative scripts to execute DDL migrations and bypass RLS when managing system-level records:
+  ```powershell
+  npx supabase db push
+  ```
+- **Security Rule:** This key is strictly isolated in the root environment file and is never imported, referenced, or bundled into `/myapp` Flutter release binaries.
+
+#### 3. Reverse & Forward Geocoding (`Nominatim` & `Photon`)
+- **Location:** `myapp/lib/services/location_service.dart` & `myapp/lib/widgets/common/place_search_dialog.dart`
+- **How It Is Used:**
+  - **GPS Reverse Geocoding:** When a user taps **"Use Current Location"** on the Edit Profile or Create Plan screens, `LocationService.reverseGeocode(lat, lon)` requests:
+    `https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lon&zoom=18&addressdetails=1`
+    It parses the response into local sub-district, city (e.g. *"Bandra West, Mumbai"*), state, and postal code.
+  - **Indian PIN Code Resolution:** If the user enters a 6-digit PIN code (e.g. `400050`), `_searchNominatimPincode()` queries:
+    `https://nominatim.openstreetmap.org/search?format=json&postalcode=400050&countrycodes=in`
+  - **Fast Venue Autocomplete:** When searching for a meeting point or stadium, `_searchPhoton(query)` queries:
+    `https://photon.komoot.io/api/?q=$query&limit=8`
+  - **Compliance:** In accordance with OpenStreetMap Nominatim Usage Policy, all requests include a custom user-agent header:
+    `User-Agent: TribeX-Flutter-App/1.0 (contact: tribex.apk@gmail.com)`.
+
+#### 4. Transactional Alerts & System Email (`GMAIL_APP_PASS`)
+- **Location:** `.env`
+- **Credentials:**
+  - Email: `tribex.apk@gmail.com`
+  - App Password: `xmva hdqc hoqq xkly`
+- **How It Is Used:**
+  Configured for SMTP delivery over TLS (`smtp.gmail.com:587`). Used by administrative notification services to dispatch transactional emails, OTP verification fallbacks, and engineering error reports.
+
+#### 5. Supabase Storage Buckets
+- **Location:** `myapp/lib/services/storage_service.dart`
+- **Buckets Configured:**
+  - `activity-covers`: Stores cover banners uploaded during Step 1 of plan creation (max 5 MB).
+  - `avatars`: Stores user profile pictures.
+  - `event-memories`: Stores photo memories uploaded after activity completion.
+- **Upload Flow:**
+  ```dart
+  final path = 'covers/${DateTime.now().millisecondsSinceEpoch}_$filename';
+  await client.storage.from('activity-covers').uploadBinary(path, fileBytes);
+  final publicUrl = client.storage.from('activity-covers').getPublicUrl(path);
+  ```
+
+---
+
+### 2.3 Security Boundaries & Client Protection Rules
+
+1. **Zero Secret Leakage in Flutter:** Only public client keys (`SUPABASE_PUBLISHABLE_KEY` and public REST endpoints) reside in the client application. The `SUPABASE_SERVICE_ROLE_KEY` and `GMAIL_APP_PASS` exist exclusively in backend configurations.
+2. **Row-Level Security Defense:** Even if an attacker extracts the `supabaseAnonKey` from the APK binary, they cannot read other users' private profiles, alter plan capacities, or bypass host checks because all operations are guarded server-side by Postgres RLS.
+3. **Security-Definer View Protections:** The `profiles_public` view exposes only non-sensitive columns (`full_name`, `username`, `avatar_url`, `rating`, `reliability_score`, `is_verified`). Private user columns (`phone`, `email`, `gender`, `terms_accepted_at`) are never queryable through public keys.
+
+---
+
+## 3. End-to-End System Architecture
 
 ```mermaid
 graph TB
@@ -87,7 +189,7 @@ graph TB
 
 ---
 
-## 3. User Flow & Lifecycle Journeys
+## 4. User Flow & Lifecycle Journeys
 
 ### 3.1 User Authentication & Profile Onboarding
 
@@ -278,7 +380,7 @@ sequenceDiagram
 
 ---
 
-## 4. State Management Architecture (`/myapp/lib/state`)
+## 5. State Management Architecture (`/myapp/lib/state`)
 
 The Flutter application strictly isolates state from presentation using Provider:
 
@@ -302,7 +404,7 @@ myapp/lib/state/
 
 ---
 
-## 5. Database Architecture & Data Flow
+## 6. Database Architecture & Data Flow
 
 ### 5.1 Entity Relationship Diagram
 
@@ -444,7 +546,7 @@ WITH CHECK (
 
 ---
 
-## 6. Subsystems Deep Dive
+## 7. Subsystems Deep Dive
 
 ### A. Show Plan & 15 KM Spatial Logic
 
@@ -528,7 +630,7 @@ WITH CHECK (
 
 ---
 
-## 7. Android Platform Permissions & Notifications
+## 8. Android Platform Permissions & Notifications
 
 ### Location Permissions (`LocationService`)
 
@@ -550,7 +652,7 @@ Android 12+ (API 31+) Precise / Coarse Location Handling
 
 ---
 
-## 8. Testing & Build Verification
+## 9. Testing & Build Verification
 
 The application is validated through an extensive automated test suite covering unit models, business logic states, and widget interactions:
 
