@@ -1501,6 +1501,88 @@ class ActivitiesState extends ChangeNotifier {
     return _requestsByActivity[activityId] ?? const [];
   }
 
+  /// Fetches join requests with their requester profiles for an activity.
+  /// Calls the security-definer RPC `list_activity_join_profiles` first (authorized for hosts),
+  /// falling back to direct queries on `join_requests` and `profiles_public`.
+  Future<List<JoinRequest>> fetchRequestsForActivity(String activityId) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed || activityId.isEmpty) {
+      return getRequestsForActivity(activityId);
+    }
+
+    try {
+      // 1. Try host RPC list_activity_join_profiles
+      dynamic rpcRes;
+      try {
+        rpcRes = await client.rpc(
+          'list_activity_join_profiles',
+          params: {'_activity_id': activityId},
+        );
+      } catch (_) {
+        rpcRes = null;
+      }
+
+      if (rpcRes is List<dynamic>) {
+        final list = rpcRes
+            .map((json) => JoinRequest.fromJson(json as Map<String, dynamic>))
+            .toList();
+
+        for (final req in list) {
+          if (req.user != null) {
+            _profileCache[req.userId] = req.user!;
+          }
+        }
+
+        _updateRequestsForActivity(activityId, list);
+        if (!_isDisposed) notifyListeners();
+        return getRequestsForActivity(activityId);
+      }
+
+      // 2. Fallback to querying join_requests directly
+      dynamic reqsRes;
+      try {
+        reqsRes = await client
+            .from('join_requests')
+            .select('*, profiles_public(*)')
+            .eq('activity_id', activityId);
+      } catch (_) {
+        try {
+          reqsRes = await client
+              .from('join_requests')
+              .select('*, profiles(*)')
+              .eq('activity_id', activityId);
+        } catch (_) {
+          reqsRes = await client
+              .from('join_requests')
+              .select('*')
+              .eq('activity_id', activityId);
+        }
+      }
+
+      if (reqsRes is List<dynamic>) {
+        final list = reqsRes
+            .map((json) => JoinRequest.fromJson(json as Map<String, dynamic>))
+            .toList();
+        await _enrichJoinRequestProfiles(list);
+        _updateRequestsForActivity(activityId, list);
+        if (!_isDisposed) notifyListeners();
+        return getRequestsForActivity(activityId);
+      }
+    } catch (_) {}
+
+    return getRequestsForActivity(activityId);
+  }
+
+  void _updateRequestsForActivity(
+    String activityId,
+    List<JoinRequest> newRequests,
+  ) {
+    final otherRequests =
+        _joinRequests.where((r) => r.activityId != activityId).toList();
+    _joinRequests = [...otherRequests, ...newRequests];
+    _rebuildJoinRequestIndices();
+  }
+
   int getPendingCountForActivity(String activityId) {
     return _pendingCountByActivity[activityId] ?? 0;
   }

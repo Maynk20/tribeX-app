@@ -82,6 +82,36 @@ void main() {
       expect(req.userId, equals('user_003'));
       expect(req.user, isNull);
     });
+
+    test(
+        'JoinRequest.fromJson correctly parses flat RPC row from list_activity_join_profiles',
+        () {
+      final jsonRpc = {
+        'join_request_id': 'req_rpc_01',
+        'activity_id': 'act_rpc_01',
+        'user_id': 'user_rpc_01',
+        'status': 'pending',
+        'requested_at': '2026-10-18T10:00:00Z',
+        'full_name': 'Rohan Varma',
+        'username': 'rohan_v',
+        'avatar_url': 'https://example.com/rohan.jpg',
+        'rating': 4.8,
+        'reliability_score': 95,
+        'is_verified': true,
+      };
+
+      final req = JoinRequest.fromJson(jsonRpc);
+
+      expect(req.id, equals('req_rpc_01'));
+      expect(req.activityId, equals('act_rpc_01'));
+      expect(req.userId, equals('user_rpc_01'));
+      expect(req.user, isNotNull);
+      expect(req.user!.fullName, equals('Rohan Varma'));
+      expect(req.user!.username, equals('rohan_v'));
+      expect(req.user!.avatarUrl, equals('https://example.com/rohan.jpg'));
+      expect(req.user!.rating, equals(4.8));
+      expect(req.user!.isVerified, isTrue);
+    });
   });
 
   group('Part B: Display Name & Placeholder Cleanup Resolution', () {
@@ -340,6 +370,173 @@ void main() {
       // Verify Accept and Decline buttons are present for this request
       expect(find.text('Accept'), findsOneWidget);
       expect(find.text('Decline'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Multiple requesters with full name, username-only, and missing avatar display correct individual names',
+        (tester) async {
+      final actState = ActivitiesState();
+      final authState = AuthState();
+
+      final host = UserProfile(
+        id: 'host_007',
+        fullName: 'Captain Vikram',
+        username: 'captain_v',
+      );
+
+      final activity = Activity(
+        id: 'act_multi',
+        title: 'Football Night',
+        description: 'Casual match',
+        dateTime: DateTime.now().add(const Duration(hours: 4)),
+        location: 'Andheri, Mumbai',
+        hostId: host.id,
+        host: host,
+        category: 'Sports',
+        totalSlots: 10,
+        slotsLeft: 5,
+        costPerHead: 0,
+      );
+
+      // Requester 1: Valid full name, NO avatar
+      final req1User = UserProfile(
+        id: 'u_full',
+        fullName: 'Devendra Joshi',
+        username: 'dev_j',
+        avatarUrl: null,
+      );
+      final req1 = JoinRequest(
+        id: 'req_11',
+        activityId: activity.id,
+        userId: req1User.id,
+        status: JoinStatus.pending,
+        requestedAt: DateTime.now(),
+        user: req1User,
+      );
+
+      // Requester 2: Only username, fullName is generic "User"
+      final req2User = UserProfile(
+        id: 'u_user_only',
+        fullName: 'User',
+        username: 'speedy_striker',
+        avatarUrl: null,
+      );
+      final req2 = JoinRequest(
+        id: 'req_12',
+        activityId: activity.id,
+        userId: req2User.id,
+        status: JoinStatus.pending,
+        requestedAt: DateTime.now(),
+        user: req2User,
+      );
+
+      actState.setJoinRequestsForTest([req1, req2]);
+      actState.cacheUserProfile(req1User);
+      actState.cacheUserProfile(req2User);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ActivitiesState>.value(value: actState),
+            ChangeNotifierProvider<AuthState>.value(value: authState),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ManageRequestsModal(
+                activityId: activity.id,
+                activityTitle: activity.title,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify both names appear correctly
+      expect(find.text('Devendra Joshi'), findsOneWidget);
+      expect(find.text('speedy_striker'), findsOneWidget);
+
+      // Neither shows 'Unknown user'
+      expect(find.text('Unknown user'), findsNothing);
+      expect(find.text('Squad Mate'), findsNothing);
+
+      // Initial letter avatars are rendered
+      expect(find.text('D'), findsOneWidget);
+      expect(find.text('S'), findsOneWidget);
+    });
+
+    testWidgets('Refreshing request list preserves correct names',
+        (tester) async {
+      final actState = ActivitiesState();
+      final authState = AuthState();
+
+      final host = UserProfile(
+        id: 'host_refresh',
+        fullName: 'Host Tanya',
+        username: 'tanya_h',
+      );
+
+      final activity = Activity(
+        id: 'act_refresh',
+        title: 'Morning Yoga',
+        description: 'Sunrise flow',
+        dateTime: DateTime.now().add(const Duration(hours: 2)),
+        location: 'Juhu Beach, Mumbai',
+        hostId: host.id,
+        host: host,
+        category: 'Fitness',
+        totalSlots: 6,
+        slotsLeft: 3,
+        costPerHead: 0,
+      );
+
+      final user1 = UserProfile(
+        id: 'u_refresh_1',
+        fullName: 'Meera Rajput',
+        username: 'meera_r',
+      );
+
+      final req = JoinRequest(
+        id: 'req_ref_1',
+        activityId: activity.id,
+        userId: user1.id,
+        status: JoinStatus.pending,
+        requestedAt: DateTime.now(),
+        user: user1,
+      );
+
+      actState.setJoinRequestsForTest([req]);
+      actState.cacheUserProfile(user1);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ActivitiesState>.value(value: actState),
+            ChangeNotifierProvider<AuthState>.value(value: authState),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ManageRequestsModal(
+                activityId: activity.id,
+                activityTitle: activity.title,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('Meera Rajput'), findsOneWidget);
+
+      // Refresh / update request list with accepted status
+      final updatedReq = req.copyWith(status: JoinStatus.accepted);
+      actState.setJoinRequestsForTest([updatedReq]);
+      await tester.pumpAndSettle();
+
+      // Name is preserved and status badge reflects JOINED
+      expect(find.text('Meera Rajput'), findsOneWidget);
+      expect(find.text('JOINED'), findsOneWidget);
     });
   });
 }
