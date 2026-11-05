@@ -4,7 +4,7 @@ import { X, Check, ImageIcon, Trash2, Lock, Link as LinkIcon } from "lucide-reac
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { updateActivity, uploadActivityImage, type Activity } from "@/lib/services";
+import { getMeetingLink, updateActivity, uploadActivityImage, type Activity } from "@/lib/services";
 import { useAuth } from "@/hooks/use-auth";
 import { friendlyError } from "@/lib/friendly-error";
 import { CATEGORIES, CATEGORY_GROUPS, AMENITIES, type AmenityKey } from "@/lib/categories";
@@ -75,6 +75,10 @@ export function EditPlanModal({
 
   useEffect(() => {
     if (!activity) return;
+    let cancelled = false;
+    // Only reset the form when the modal opens for a *different* plan.
+    // Depending on `activity` reference re-runs whenever React Query refetches
+    // that same row in the background, wiping the user's in-progress edits.
     const { date, time } = toLocalDateTime(activity.date_time);
     setForm({
       title: activity.title,
@@ -96,9 +100,22 @@ export function EditPlanModal({
     setImageFile(null);
     setImagePreview(null);
     setImageCleared(false);
-    // Only reset the form when the modal opens for a *different* plan.
-    // Depending on `activity` reference re-runs whenever React Query refetches
-    // that same row in the background, wiping the user's in-progress edits.
+    if (activity.is_online && !activity.meeting_link) {
+      getMeetingLink(activity.id)
+        .then((meetingLink) => {
+          if (!cancelled && meetingLink) {
+            setForm((current) => ({ ...current, meeting_link: meetingLink }));
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            console.error("[edit-plan] meeting link fetch failed", error);
+          }
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [activity?.id]);
 
   const mutation = useMutation({
