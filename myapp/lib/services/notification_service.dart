@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -28,6 +26,7 @@ class NotificationService {
 
   /// Initializes the local notification plugin and configures Android notification channels.
   Future<void> initialize() async {
+    if (kIsWeb) return;
     if (_isInitialized) return;
 
     try {
@@ -51,7 +50,7 @@ class NotificationService {
         },
       );
 
-      if (!kIsWeb && Platform.isAndroid) {
+      if (defaultTargetPlatform == TargetPlatform.android) {
         final androidImpl = _localNotifications
             .resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin>();
@@ -107,13 +106,13 @@ class NotificationService {
     if (kIsWeb) return false;
 
     try {
-      if (Platform.isAndroid) {
+      if (defaultTargetPlatform == TargetPlatform.android) {
         final androidImpl = _localNotifications
             .resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin>();
         final granted = await androidImpl?.requestNotificationsPermission();
         return granted ?? false;
-      } else if (Platform.isIOS) {
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         final iosImpl = _localNotifications
             .resolvePlatformSpecificImplementation<
                 IOSFlutterLocalNotificationsPlugin>();
@@ -152,6 +151,8 @@ class NotificationService {
     NotificationChannelType channelType = NotificationChannelType.messages,
     String? deduplicationKey,
   }) async {
+    if (kIsWeb) return;
+
     if (!_isInitialized) {
       await initialize();
     }

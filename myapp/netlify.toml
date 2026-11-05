@@ -1,6 +1,11 @@
 [build]
-  command = "[ -d flutter ] || git clone https://github.com/flutter/flutter.git --depth 1 -b stable && export PATH=\"$PATH:$(pwd)/flutter/bin\" && flutter config --enable-web && flutter pub get && flutter build web --release"
+  command = "[ -d flutter ] || git clone https://github.com/flutter/flutter.git --depth 1 -b stable && export PATH=\"$PATH:$(pwd)/flutter/bin\" && flutter config --enable-web && flutter pub get && flutter build web --release --no-tree-shake-icons --base-href /"
   publish = "build/web"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [[headers]]
   for = "/*"
@@ -33,4 +38,3 @@
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
-
