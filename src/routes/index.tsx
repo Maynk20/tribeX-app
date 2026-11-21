@@ -53,7 +53,13 @@ import {
   type Activity,
 } from "@/lib/services";
 import { supabase } from "@/integrations/supabase/client";
-import { CATEGORIES, CATEGORY_GROUPS, emojiForCategory, AMENITY_MAP, type AmenityKey } from "@/lib/categories";
+import {
+  CATEGORIES,
+  CATEGORY_GROUPS,
+  emojiForCategory,
+  AMENITY_MAP,
+  type AmenityKey,
+} from "@/lib/categories";
 import { notifyUrgentSpot } from "@/lib/urgent-push.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "@/hooks/use-location";
@@ -83,7 +89,8 @@ function formatWhen(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
-  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
   const isTom = d.toDateString() === tomorrow.toDateString();
   const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   if (sameDay) return `Today · ${time}`;
@@ -135,11 +142,17 @@ function Explore() {
     return lat != null && lon != null ? { lat, lon } : null;
   }, [place, viewerProfile]);
 
-  const { data: activities = [], isLoading, error, refetch } = useQuery({
+  const {
+    data: activities = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["activities", viewerCoords?.lat, viewerCoords?.lon],
-    queryFn: () => viewerCoords
-      ? fetchNearbyActivities(viewerCoords.lat, viewerCoords.lon, 15.0, 60, 0)
-      : listActivities(),
+    queryFn: () =>
+      viewerCoords
+        ? fetchNearbyActivities(viewerCoords.lat, viewerCoords.lon, 15.0, 60, 0)
+        : listActivities(),
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
@@ -155,7 +168,10 @@ function Explore() {
     if (mineError) console.error("[explore] user-activities failed", mineError);
   }, [mineError]);
   const mineIds = useMemo(() => new Set((mineJoined?.hosted ?? []).map((a) => a.id)), [mineJoined]);
-  const joinedIds = useMemo(() => new Set((mineJoined?.joined ?? []).map((a) => a.id)), [mineJoined]);
+  const joinedIds = useMemo(
+    () => new Set((mineJoined?.joined ?? []).map((a) => a.id)),
+    [mineJoined],
+  );
 
   const { data: myRequests = [] } = useQuery({
     queryKey: ["my-join-requests", user?.id],
@@ -169,7 +185,9 @@ function Explore() {
     return ["female", "woman", "f", "w"].includes(g);
   })();
   const viewerIsVerified = !!viewerProfile?.is_verified;
-  const hasProfileGpsLocation = !user || (!!viewerProfile?.city && viewerProfile.latitude != null && viewerProfile.longitude != null);
+  const hasProfileGpsLocation =
+    !user ||
+    (!!viewerProfile?.city && viewerProfile.latitude != null && viewerProfile.longitude != null);
   const requestedIds = useMemo(
     () => new Set(myRequests.filter((r) => r.status === "pending").map((r) => r.activity_id)),
     [myRequests],
@@ -214,31 +232,23 @@ function Explore() {
   useEffect(() => {
     const actChannel = supabase
       .channel("public:activities")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activities" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["activities"] });
-          if (user?.id) {
-            qc.invalidateQueries({ queryKey: ["user-activities", user.id] });
-          }
-        },
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "activities" }, () => {
+        qc.invalidateQueries({ queryKey: ["activities"] });
+        if (user?.id) {
+          qc.invalidateQueries({ queryKey: ["user-activities", user.id] });
+        }
+      })
       .subscribe();
 
     let blockChannel: ReturnType<typeof supabase.channel> | null = null;
     if (user?.id) {
       blockChannel = supabase
         .channel(`blocks:${user.id}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "blocks" },
-          () => {
-            qc.invalidateQueries({ queryKey: ["blocked-ids", user.id] });
-            qc.invalidateQueries({ queryKey: ["activities"] });
-            qc.invalidateQueries({ queryKey: ["my-join-requests", user.id] });
-          },
-        )
+        .on("postgres_changes", { event: "*", schema: "public", table: "blocks" }, () => {
+          qc.invalidateQueries({ queryKey: ["blocked-ids", user.id] });
+          qc.invalidateQueries({ queryKey: ["activities"] });
+          qc.invalidateQueries({ queryKey: ["my-join-requests", user.id] });
+        })
         .subscribe();
     }
 
@@ -357,15 +367,19 @@ function Explore() {
       scope === "hosting" && user
         ? ((mineJoined?.hosted ?? []) as ActivityWithHost[])
         : scope === "joined" && user
-        ? ((mineJoined?.joined ?? []) as ActivityWithHost[])
-        : activities;
+          ? ((mineJoined?.joined ?? []) as ActivityWithHost[])
+          : activities;
 
     // Attach true geographic distance in km (matching Android LocationService.haversineKm)
     const sourceWithDistance = source.map((a) => {
       let distanceKm: number | null = null;
       // In-person uses venue coordinates; virtual plans use creator location anchor
-      const targetLat = !a.is_online ? a.latitude : (a.latitude ?? (a.host as unknown as { latitude?: number | null })?.latitude ?? null);
-      const targetLon = !a.is_online ? a.longitude : (a.longitude ?? (a.host as unknown as { longitude?: number | null })?.longitude ?? null);
+      const targetLat = !a.is_online
+        ? a.latitude
+        : (a.latitude ?? (a.host as unknown as { latitude?: number | null })?.latitude ?? null);
+      const targetLon = !a.is_online
+        ? a.longitude
+        : (a.longitude ?? (a.host as unknown as { longitude?: number | null })?.longitude ?? null);
       if (targetLat != null && targetLon != null && viewerLat != null && viewerLon != null) {
         distanceKm = haversineKm(viewerLat, viewerLon, targetLat, targetLon);
       }
@@ -449,7 +463,29 @@ function Explore() {
     }
 
     return sorted.map((a) => maskActivityForViewer(a, user?.id ?? null, acceptedRequestIds));
-  }, [activities, mineJoined, active, activeGroup, modeFilter, query, sort, location, place, viewerProfile, applyRadiusFilter, scope, mineIds, joinedIds, user, acceptedRequestIds, freeOnly, spotsOnly, todayOnly, weekendOnly, verifiedHostsOnly, blockedIds]);
+  }, [
+    activities,
+    mineJoined,
+    active,
+    activeGroup,
+    modeFilter,
+    query,
+    sort,
+    place,
+    viewerProfile,
+    applyRadiusFilter,
+    scope,
+    mineIds,
+    joinedIds,
+    user,
+    acceptedRequestIds,
+    freeOnly,
+    spotsOnly,
+    todayOnly,
+    weekendOnly,
+    verifiedHostsOnly,
+    blockedIds,
+  ]);
 
   async function handleUseGPS() {
     try {
@@ -468,7 +504,10 @@ function Explore() {
             <div className="flex items-center gap-2">
               <PlaceSearch
                 value={location}
-                onSelect={(p) => { setPlace(p); toast.success(`Showing plans near ${p.short}`); }}
+                onSelect={(p) => {
+                  setPlace(p);
+                  toast.success(`Showing plans near ${p.short}`);
+                }}
               />
               <button
                 onClick={handleUseGPS}
@@ -499,24 +538,20 @@ function Explore() {
               onOpenChat={(id) => navigate({ to: "/chat/$activityId", params: { activityId: id } })}
             />
             <button
-            onClick={() => navigate({ to: "/profile" })}
-            className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-primary text-primary-foreground font-semibold transition hover:scale-105 active:scale-95"
-            aria-label="Open profile"
+              onClick={() => navigate({ to: "/profile" })}
+              className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-primary text-primary-foreground font-semibold transition hover:scale-105 active:scale-95"
+              aria-label="Open profile"
             >
-            {viewerProfile?.avatar_url ? (
-              <img
-                src={viewerProfile.avatar_url}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center">
-                {(viewerProfile?.full_name ||
-                  (user.user_metadata?.full_name as string | undefined) ||
-                  user.email ||
-                  "U")[0]?.toUpperCase()}
-              </span>
-            )}
+              {viewerProfile?.avatar_url ? (
+                <img src={viewerProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center">
+                  {(viewerProfile?.full_name ||
+                    (user.user_metadata?.full_name as string | undefined) ||
+                    user.email ||
+                    "U")[0]?.toUpperCase()}
+                </span>
+              )}
             </button>
           </div>
         ) : (
@@ -555,13 +590,17 @@ function Explore() {
           {sortOpen && (
             <div className="absolute right-0 top-14 z-30 w-72 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-xl">
               <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sort & Filter</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Sort & Filter
+                </p>
                 {(activeFilterCount > 0 || sort !== "date") && (
                   <button
                     onClick={() => {
                       setSort("date");
-                      setFreeOnly(false); setSpotsOnly(false);
-                      setTodayOnly(false); setWeekendOnly(false);
+                      setFreeOnly(false);
+                      setSpotsOnly(false);
+                      setTodayOnly(false);
+                      setWeekendOnly(false);
                       setVerifiedHostsOnly(false);
                     }}
                     className="text-[10px] font-semibold uppercase tracking-wider text-primary hover:underline"
@@ -591,14 +630,46 @@ function Explore() {
                 </div>
               </div>
               <div className="px-4 pb-4 pt-3">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Quick filters</p>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Quick filters
+                </p>
                 <div className="flex flex-col gap-1.5">
                   {[
-                    { k: "free", label: "Free entry", icon: IndianRupee, on: freeOnly, set: setFreeOnly },
-                    { k: "spots", label: "Has open spots", icon: Users, on: spotsOnly, set: setSpotsOnly },
-                    { k: "today", label: "Today only", icon: Clock, on: todayOnly, set: setTodayOnly },
-                    { k: "weekend", label: "This weekend", icon: CalendarDays, on: weekendOnly, set: setWeekendOnly },
-                    { k: "verified", label: "Verified hosts only", icon: BadgeCheck, on: verifiedHostsOnly, set: setVerifiedHostsOnly },
+                    {
+                      k: "free",
+                      label: "Free entry",
+                      icon: IndianRupee,
+                      on: freeOnly,
+                      set: setFreeOnly,
+                    },
+                    {
+                      k: "spots",
+                      label: "Has open spots",
+                      icon: Users,
+                      on: spotsOnly,
+                      set: setSpotsOnly,
+                    },
+                    {
+                      k: "today",
+                      label: "Today only",
+                      icon: Clock,
+                      on: todayOnly,
+                      set: setTodayOnly,
+                    },
+                    {
+                      k: "weekend",
+                      label: "This weekend",
+                      icon: CalendarDays,
+                      on: weekendOnly,
+                      set: setWeekendOnly,
+                    },
+                    {
+                      k: "verified",
+                      label: "Verified hosts only",
+                      icon: BadgeCheck,
+                      on: verifiedHostsOnly,
+                      set: setVerifiedHostsOnly,
+                    },
                   ].map(({ k, label, icon: Icon, on, set }) => (
                     <button
                       key={k}
@@ -638,7 +709,10 @@ function Explore() {
       <div className="flex items-center justify-between">
         <div className="-mx-5 flex gap-2 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
-            onClick={() => { setActiveGroup("All"); setActive("All"); }}
+            onClick={() => {
+              setActiveGroup("All");
+              setActive("All");
+            }}
             className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all active:scale-95 ${
               activeGroup === "All" && active === "All"
                 ? "border-primary bg-primary text-primary-foreground shadow-sm"
@@ -650,7 +724,10 @@ function Explore() {
           {CATEGORY_GROUPS.map((g) => (
             <button
               key={g}
-              onClick={() => { setActiveGroup(g); setActive("All"); }}
+              onClick={() => {
+                setActiveGroup(g);
+                setActive("All");
+              }}
               className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all active:scale-95 ${
                 activeGroup === g
                   ? "border-primary bg-primary text-primary-foreground shadow-sm"
@@ -668,7 +745,9 @@ function Explore() {
           <button
             onClick={() => setActive("All")}
             className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition ${
-              active === "All" ? "border-primary bg-primary/10 text-primary" : "border-border/60 bg-card text-muted-foreground"
+              active === "All"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border/60 bg-card text-muted-foreground"
             }`}
           >
             All in group
@@ -681,7 +760,9 @@ function Explore() {
                 key={c.key}
                 onClick={() => setActive(c.key)}
                 className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition ${
-                  on ? "border-primary bg-primary/10 text-primary" : "border-border/60 bg-card text-muted-foreground hover:border-primary/50"
+                  on
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border/60 bg-card text-muted-foreground hover:border-primary/50"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -693,11 +774,13 @@ function Explore() {
       )}
 
       <div className="flex rounded-full border border-border/60 bg-card p-1 text-xs">
-        {([
-          { k: "all", label: "All", icon: null },
-          { k: "in_person", label: "In-Person", icon: <MapPin className="h-3 w-3" /> },
-          { k: "online", label: "Virtual", icon: <Monitor className="h-3 w-3" /> },
-        ] as { k: ModeFilter; label: string; icon: React.ReactNode }[]).map((m) => (
+        {(
+          [
+            { k: "all", label: "All", icon: null },
+            { k: "in_person", label: "In-Person", icon: <MapPin className="h-3 w-3" /> },
+            { k: "online", label: "Virtual", icon: <Monitor className="h-3 w-3" /> },
+          ] as { k: ModeFilter; label: string; icon: React.ReactNode }[]
+        ).map((m) => (
           <button
             key={m.k}
             onClick={() => setModeFilter(m.k)}
@@ -713,11 +796,13 @@ function Explore() {
 
       {user && (
         <div className="flex rounded-full border border-border/60 bg-card p-1 text-xs">
-          {([
-            { k: "discover", label: "Discover" },
-            { k: "joined", label: "Joined" },
-            { k: "hosting", label: "Hosting" },
-          ] as { k: Scope; label: string }[]).map((s) => (
+          {(
+            [
+              { k: "discover", label: "Discover" },
+              { k: "joined", label: "Joined" },
+              { k: "hosting", label: "Hosting" },
+            ] as { k: Scope; label: string }[]
+          ).map((s) => (
             <button
               key={s.k}
               onClick={() => setScope(s.k)}
@@ -738,9 +823,7 @@ function Explore() {
             <span className="font-semibold text-primary truncate">
               {applyRadiusFilter ? "Plans within 15 km" : "All nearby plans"}
             </span>
-            <span className="text-muted-foreground truncate">
-              · {location || "Bengaluru"}
-            </span>
+            <span className="text-muted-foreground truncate">· {location || "Bengaluru"}</span>
           </div>
           <button
             onClick={() => setApplyRadiusFilter((v) => !v)}
@@ -754,7 +837,9 @@ function Explore() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold tracking-tight">
           {!user || scope === "discover"
-            ? (applyRadiusFilter ? "Plans within 15 km" : "Happening nearby")
+            ? applyRadiusFilter
+              ? "Plans within 15 km"
+              : "Happening nearby"
             : scope === "joined"
               ? "Plans you've joined"
               : "Plans you're hosting"}
@@ -772,7 +857,9 @@ function Explore() {
         !user ? (
           <div className="flex flex-col items-start gap-3 rounded-2xl border border-border/60 bg-card p-4 text-sm">
             <p className="font-semibold">Sign in to see plans near you</p>
-            <p className="text-xs text-muted-foreground">Join the tribe to discover activities, chat with hosts, and RSVP in seconds.</p>
+            <p className="text-xs text-muted-foreground">
+              Join the tribe to discover activities, chat with hosts, and RSVP in seconds.
+            </p>
             <button
               onClick={() => navigate({ to: "/auth" })}
               className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground transition hover:scale-105 active:scale-95"
@@ -801,7 +888,9 @@ function Explore() {
                 ? "You haven't joined any plans yet."
                 : "No plans match your filters right now."}
           </p>
-          <p className="text-[11px] text-muted-foreground/70">Tap the + button above or the Create tab to post one.</p>
+          <p className="text-[11px] text-muted-foreground/70">
+            Tap the + button above or the Create tab to post one.
+          </p>
         </div>
       ) : (
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
@@ -842,7 +931,10 @@ function Explore() {
               onToggleUrgent={() => handleToggleUrgent(a)}
               urgentBusy={urgentBusyId === a.id}
               onJoin={() => {
-                if (!user) { navigate({ to: "/auth" }); return; }
+                if (!user) {
+                  navigate({ to: "/auth" });
+                  return;
+                }
                 if (!hasProfileGpsLocation) {
                   toast.error("Add your GPS profile location first", {
                     description: "Open Profile → Edit details → Use current location.",
@@ -852,7 +944,10 @@ function Explore() {
                 setPendingJoinId(a.id);
               }}
               onMessage={() => {
-                if (!user) { navigate({ to: "/auth" }); return; }
+                if (!user) {
+                  navigate({ to: "/auth" });
+                  return;
+                }
                 navigate({ to: "/chat/$activityId", params: { activityId: a.id } });
               }}
               joining={join.isPending}
@@ -889,41 +984,43 @@ function Explore() {
           targetTitle={reportingPlan.title}
         />
       )}
-      {deletingPlan && typeof document !== "undefined" && createPortal(
-        <>
-          <div
-            className="fixed inset-0 z-[99998] bg-black/80 backdrop-blur-md"
-            onClick={() => !deleteMut.isPending && setDeletingPlan(null)}
-          />
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[99999] w-[92vw] max-w-sm rounded-2xl p-6 bg-card border shadow-2xl max-h-[85vh] overflow-y-auto"
-          >
-            <h3 className="text-lg font-bold">Delete this plan?</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              "{deletingPlan.title}" will be removed for everyone. This can't be undone.
-            </p>
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button
-                onClick={() => setDeletingPlan(null)}
-                disabled={deleteMut.isPending}
-                className="rounded-full border border-border/60 px-4 py-2 text-xs font-semibold transition hover:bg-accent disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteMut.mutate(deletingPlan.id)}
-                disabled={deleteMut.isPending}
-                className="flex items-center gap-1.5 rounded-full bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground transition hover:scale-[1.02] active:scale-95 disabled:opacity-60"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                {deleteMut.isPending ? "Deleting…" : "Delete"}
-              </button>
+      {deletingPlan &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[99998] bg-black/80 backdrop-blur-md"
+              onClick={() => !deleteMut.isPending && setDeletingPlan(null)}
+            />
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[99999] w-[92vw] max-w-sm rounded-2xl p-6 bg-card border shadow-2xl max-h-[85vh] overflow-y-auto"
+            >
+              <h3 className="text-lg font-bold">Delete this plan?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                "{deletingPlan.title}" will be removed for everyone. This can't be undone.
+              </p>
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setDeletingPlan(null)}
+                  disabled={deleteMut.isPending}
+                  className="rounded-full border border-border/60 px-4 py-2 text-xs font-semibold transition hover:bg-accent disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteMut.mutate(deletingPlan.id)}
+                  disabled={deleteMut.isPending}
+                  className="flex items-center gap-1.5 rounded-full bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground transition hover:scale-[1.02] active:scale-95 disabled:opacity-60"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {deleteMut.isPending ? "Deleting…" : "Delete"}
+                </button>
+              </div>
             </div>
-          </div>
-        </>,
-        document.body,
-      )}
+          </>,
+          document.body,
+        )}
       {lightbox && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
@@ -989,9 +1086,14 @@ function ActivityCard({
   const hostName = a.host?.full_name || a.host?.username || "Host";
   const urgentActive = isUrgentActive(a);
   const shielded = hasSafetyShield(a);
-  const shieldLabel = a.women_only && a.verified_only
-    ? "Women & verified only"
-    : a.women_only ? "Women only" : a.verified_only ? "Verified only" : null;
+  const shieldLabel =
+    a.women_only && a.verified_only
+      ? "Women & verified only"
+      : a.women_only
+        ? "Women only"
+        : a.verified_only
+          ? "Verified only"
+          : null;
   // Safety gate: block join if viewer doesn't meet the plan's restrictions.
   const blockedByWomenOnly = !!a.women_only && !viewerIsFemale;
   const blockedByVerified = !!a.verified_only && !viewerIsVerified;
@@ -1001,7 +1103,7 @@ function ActivityCard({
       ? "Verification Required"
       : !hasProfileGpsLocation
         ? "Add GPS Location"
-      : null;
+        : null;
 
   return (
     <li className="group relative flex h-full flex-col overflow-hidden rounded-3xl border border-border/60 bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md active:scale-[0.99]">
@@ -1027,7 +1129,10 @@ function ActivityCard({
       {a.image_url && (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onImage(a.image_url!); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onImage(a.image_url!);
+          }}
           className="-mx-4 -mt-4 mb-3 block h-36 w-[calc(100%+2rem)] overflow-hidden bg-secondary"
           aria-label="View photo"
         >
@@ -1040,12 +1145,16 @@ function ActivityCard({
         </button>
       )}
       <div className="flex items-start gap-3">
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl leading-none transition group-hover:scale-105 ${accent}`}>
+        <div
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl leading-none transition group-hover:scale-105 ${accent}`}
+        >
           <span aria-hidden>{emojiForCategory(a.category)}</span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${accent}`}>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${accent}`}
+            >
               {a.category}
             </span>
             {a.is_online && (
@@ -1082,10 +1191,15 @@ function ActivityCard({
             <MapPin className="h-3 w-3 shrink-0" />
             {!a.is_online && distanceKm != null && (
               <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                {distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m away` : `${distanceKm.toFixed(1)} km away`}
+                {distanceKm < 1
+                  ? `${Math.round(distanceKm * 1000)} m away`
+                  : `${distanceKm.toFixed(1)} km away`}
               </span>
             )}
-            <span className="truncate">{a.is_masked ? "~ " : ""}{a.location}</span>
+            <span className="truncate">
+              {a.is_masked ? "~ " : ""}
+              {a.location}
+            </span>
           </div>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" /> {formatWhen(a.date_time)}
@@ -1096,14 +1210,21 @@ function ActivityCard({
                 const meta = AMENITY_MAP[k as AmenityKey];
                 if (!meta) return null;
                 return (
-                  <span key={k} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-foreground/80">
+                  <span
+                    key={k}
+                    className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-foreground/80"
+                  >
                     {meta.badge}
                   </span>
                 );
               })}
               {(a.topic_tags ?? []).slice(0, 3).map((t) => (
-                <span key={t} className="flex items-center gap-0.5 rounded-full border border-border/60 bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  <Hash className="h-2.5 w-2.5" />{t}
+                <span
+                  key={t}
+                  className="flex items-center gap-0.5 rounded-full border border-border/60 bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                >
+                  <Hash className="h-2.5 w-2.5" />
+                  {t}
                 </span>
               ))}
             </div>
@@ -1124,7 +1245,9 @@ function ActivityCard({
             {Number(a.host?.rating ?? 5).toFixed(1)}
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-1 text-muted-foreground">
-            <span aria-hidden className="shrink-0">·</span>
+            <span aria-hidden className="shrink-0">
+              ·
+            </span>
             {a.host?.avatar_url ? (
               <img
                 src={a.host.avatar_url}
@@ -1148,7 +1271,9 @@ function ActivityCard({
             <button
               onClick={onToggleUrgent}
               disabled={urgentBusy}
-              title={urgentActive ? "Cancel urgent alert" : "Send urgent spot alert to nearby players"}
+              title={
+                urgentActive ? "Cancel urgent alert" : "Send urgent spot alert to nearby players"
+              }
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-50 ${
                 urgentActive
                   ? "bg-red-500 text-white shadow-sm animate-pulse hover:bg-red-600"
@@ -1215,36 +1340,36 @@ function ActivityCard({
                 </button>
               )}
               {myStatus === "pending" || hasRequested ? (
-            <button
-              disabled
-              className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-full border border-border/60 bg-secondary px-3 py-2 text-xs font-semibold text-muted-foreground disabled:cursor-not-allowed"
-            >
-              <Hourglass className="h-3 w-3" /> Request Pending
-            </button>
-          ) : myStatus === "confirmed" ? (
-            <button
-              onClick={onMessage}
-              className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-full bg-emerald-500/15 px-4 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 transition hover:bg-emerald-500/25 active:scale-95"
-            >
-              <Check className="h-3.5 w-3.5" /> Joined
-            </button>
-          ) : safetyBlock ? (
-            <button
-              disabled
-              title={safetyBlock}
-              className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-full border border-border/60 bg-secondary px-3 py-2 text-xs font-semibold text-muted-foreground disabled:cursor-not-allowed"
-            >
-              <Shield className="h-3 w-3" /> {safetyBlock}
-            </button>
-          ) : (
-            <button
-              onClick={onJoin}
-              disabled={joining || a.slots_left <= 0}
-              className="min-w-0 flex-1 truncate rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-transform hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-            >
-              {a.slots_left <= 0 ? "Full" : joining ? "…" : "Request to Join"}
-            </button>
-          )}
+                <button
+                  disabled
+                  className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-full border border-border/60 bg-secondary px-3 py-2 text-xs font-semibold text-muted-foreground disabled:cursor-not-allowed"
+                >
+                  <Hourglass className="h-3 w-3" /> Request Pending
+                </button>
+              ) : myStatus === "confirmed" ? (
+                <button
+                  onClick={onMessage}
+                  className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-full bg-emerald-500/15 px-4 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 transition hover:bg-emerald-500/25 active:scale-95"
+                >
+                  <Check className="h-3.5 w-3.5" /> Joined
+                </button>
+              ) : safetyBlock ? (
+                <button
+                  disabled
+                  title={safetyBlock}
+                  className="flex min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-full border border-border/60 bg-secondary px-3 py-2 text-xs font-semibold text-muted-foreground disabled:cursor-not-allowed"
+                >
+                  <Shield className="h-3 w-3" /> {safetyBlock}
+                </button>
+              ) : (
+                <button
+                  onClick={onJoin}
+                  disabled={joining || a.slots_left <= 0}
+                  className="min-w-0 flex-1 truncate rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-transform hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  {a.slots_left <= 0 ? "Full" : joining ? "…" : "Request to Join"}
+                </button>
+              )}
             </>
           )}
         </div>

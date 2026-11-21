@@ -2,11 +2,37 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, UserX, CheckCircle2, Loader2, Plus, Flag, LogOut, ShieldAlert } from "lucide-react";
+import {
+  ArrowLeft,
+  Send,
+  MapPin,
+  Clock,
+  IndianRupee,
+  ShieldCheck,
+  MapPinned,
+  UserX,
+  CheckCircle2,
+  Loader2,
+  Plus,
+  Flag,
+  LogOut,
+  ShieldAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { listMessages, sendMessage, emojiFor, listAttendees, checkInActivity, markNoShow, blockUser, leaveActivity, type MessageWithSender, type JoinRequestWithUser } from "@/lib/services";
+import {
+  listMessages,
+  sendMessage,
+  emojiFor,
+  listAttendees,
+  checkInActivity,
+  markNoShow,
+  blockUser,
+  leaveActivity,
+  type MessageWithSender,
+  type JoinRequestWithUser,
+} from "@/lib/services";
 import { friendlyError } from "@/lib/friendly-error";
 import { ExpenseCard, isExpenseMessage } from "@/components/expense-card";
 import { SplitExpenseModal } from "@/components/split-expense-modal";
@@ -39,7 +65,9 @@ function ChatPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("activities")
-        .select("id, title, category, location, date_time, host_id, latitude, longitude, host:profiles!activities_host_id_fkey(id, full_name, username, avatar_url)")
+        .select(
+          "id, title, category, location, date_time, host_id, latitude, longitude, host:profiles!activities_host_id_fkey(id, full_name, username, avatar_url)",
+        )
         .eq("id", activityId)
         .maybeSingle();
       if (error) throw error;
@@ -53,7 +81,12 @@ function ChatPage() {
     enabled: !!user,
   });
 
-  const { data: messages = [], isLoading, error, refetch } = useQuery({
+  const {
+    data: messages = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["messages", activityId],
     queryFn: () => listMessages(activityId),
     enabled: !!user,
@@ -111,15 +144,26 @@ function ChatPage() {
   const when = useMemo(() => {
     if (!activity?.date_time) return "";
     const d = new Date(activity.date_time);
-    return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return d.toLocaleString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
   }, [activity?.date_time]);
 
   if (!loading && !user) {
     return (
       <div className="page-in flex flex-col items-start gap-4 px-5 pt-8">
         <h1 className="text-2xl font-bold tracking-tight">Sign in to chat</h1>
-        <p className="text-sm text-muted-foreground">You need an account to message hosts and squads.</p>
-        <button onClick={() => navigate({ to: "/auth" })} className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground">
+        <p className="text-sm text-muted-foreground">
+          You need an account to message hosts and squads.
+        </p>
+        <button
+          onClick={() => navigate({ to: "/auth" })}
+          className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
+        >
           Sign in
         </button>
       </div>
@@ -147,9 +191,13 @@ function ChatPage() {
   }
 
   return (
-    <div className="page-in flex h-[calc(100dvh-5rem)] flex-col">
-      <header className="flex items-center gap-3 border-b border-border/60 bg-background/90 px-4 py-3 backdrop-blur">
-        <Link to="/messages" className="rounded-full p-1.5 transition hover:bg-accent active:scale-95" aria-label="Back">
+    <div className="page-in flex h-dvh flex-col">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border/60 bg-background/90 px-4 py-3 backdrop-blur">
+        <Link
+          to="/messages"
+          className="rounded-full p-1.5 transition hover:bg-accent active:scale-95"
+          aria-label="Back"
+        >
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-secondary text-lg">
@@ -160,9 +208,15 @@ function ChatPage() {
           <p className="flex items-center gap-2 truncate text-[11px] text-muted-foreground">
             <span className="truncate">Host · {hostName}</span>
             {activity?.location && (
-              <span className="hidden items-center gap-0.5 sm:inline-flex"><MapPin className="h-3 w-3" /> {activity.location}</span>
+              <span className="hidden items-center gap-0.5 sm:inline-flex">
+                <MapPin className="h-3 w-3" /> {activity.location}
+              </span>
             )}
-            {when && <span className="hidden items-center gap-0.5 sm:inline-flex"><Clock className="h-3 w-3" /> {when}</span>}
+            {when && (
+              <span className="hidden items-center gap-0.5 sm:inline-flex">
+                <Clock className="h-3 w-3" /> {when}
+              </span>
+            )}
           </p>
         </div>
         {!isHost && activity?.host_id && (
@@ -198,7 +252,7 @@ function ChatPage() {
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {activity && (
           <CheckInPanel
             activity={activity}
@@ -209,20 +263,23 @@ function ChatPage() {
           />
         )}
         {activity && isMember && (
-          <MemoryBanner
-            activity={activity}
-            canUpload={isMember}
-            userId={user?.id}
-          />
+          <MemoryBanner activity={activity} canUpload={isMember} userId={user?.id} />
         )}
         {isLoading ? (
           <div className="flex flex-col gap-2">
-            {[0,1,2].map((i) => <div key={i} className="h-12 animate-pulse rounded-2xl bg-card" />)}
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-12 animate-pulse rounded-2xl bg-card" />
+            ))}
           </div>
         ) : error ? (
           <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
             <p className="mb-2">{friendlyError(error, "Couldn't load messages.")}</p>
-            <button onClick={() => refetch()} className="rounded-full bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground">Retry</button>
+            <button
+              onClick={() => refetch()}
+              className="rounded-full bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground"
+            >
+              Retry
+            </button>
           </div>
         ) : messages.length === 0 ? (
           <div className="mt-10 rounded-3xl border border-dashed border-border bg-card/40 p-6 text-center text-sm text-muted-foreground">
@@ -248,7 +305,10 @@ function ChatPage() {
         )}
       </div>
 
-      <form onSubmit={onSend} className="relative flex items-center gap-2 border-t border-border/60 bg-background px-4 py-3">
+      <form
+        onSubmit={onSend}
+        className="relative shrink-0 flex items-center gap-2 border-t border-border/60 bg-background px-4 py-3"
+      >
         {attachOpen && (
           <>
             <button
@@ -260,7 +320,10 @@ function ChatPage() {
             <div className="absolute bottom-full left-3 z-40 mb-2 w-56 overflow-hidden rounded-2xl border border-border/60 bg-popover shadow-xl">
               <button
                 type="button"
-                onClick={() => { setAttachOpen(false); setSplitOpen(true); }}
+                onClick={() => {
+                  setAttachOpen(false);
+                  setSplitOpen(true);
+                }}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-accent"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
@@ -268,7 +331,9 @@ function ChatPage() {
                 </span>
                 <span>
                   <span className="block font-semibold">Split expense</span>
-                  <span className="block text-[11px] text-muted-foreground">Post a bill with UPI split</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    Post a bill with UPI split
+                  </span>
                 </span>
               </button>
             </div>
@@ -388,7 +453,8 @@ function ChatPage() {
                 </div>
                 <h3 className="text-lg font-bold text-foreground">Block {hostName}?</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  You won't see their events or messages anymore. You can unblock them anytime from Settings.
+                  You won't see their events or messages anymore. You can unblock them anytime from
+                  Settings.
                 </p>
               </div>
               <div className="mt-6 flex flex-col gap-2">
@@ -420,11 +486,16 @@ function ChatPage() {
 }
 
 function MessageBubble({ m, mine }: { m: MessageWithSender; mine: boolean }) {
-  const time = new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const time = new Date(m.created_at).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
   const rawName = m.sender?.full_name?.trim();
   const rawUname = m.sender?.username?.trim();
-  const isGeneric = !rawName || ["user", "squad member", "squad mate", "unknown user"].includes(rawName.toLowerCase());
-  const senderName = !isGeneric ? rawName : (rawUname ? `@${rawUname}` : (mine ? "You" : "Member"));
+  const isGeneric =
+    !rawName ||
+    ["user", "squad member", "squad mate", "unknown user"].includes(rawName.toLowerCase());
+  const senderName = !isGeneric ? rawName : rawUname ? `@${rawUname}` : mine ? "You" : "Member";
   const avatarUrl = m.sender?.avatar_url;
   const initial = (senderName.replace(/^@/, "") || "U")[0]?.toUpperCase() ?? "U";
 
@@ -439,12 +510,16 @@ function MessageBubble({ m, mine }: { m: MessageWithSender; mine: boolean }) {
           )}
         </div>
       )}
-      <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-card border border-border/60"}`}>
-        {!mine && (
-          <p className="mb-0.5 text-[11px] font-semibold text-primary">{senderName}</p>
-        )}
+      <div
+        className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-card border border-border/60"}`}
+      >
+        {!mine && <p className="mb-0.5 text-[11px] font-semibold text-primary">{senderName}</p>}
         <p className="whitespace-pre-wrap break-words">{m.text}</p>
-        <p className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{time}</p>
+        <p
+          className={`mt-1 text-[10px] ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+        >
+          {time}
+        </p>
       </div>
     </li>
   );
@@ -461,7 +536,13 @@ function CheckInPanel({
   myRequest,
   onChanged,
 }: {
-  activity: { id: string; date_time: string; latitude: number | null; longitude: number | null; host_id: string };
+  activity: {
+    id: string;
+    date_time: string;
+    latitude: number | null;
+    longitude: number | null;
+    host_id: string;
+  };
   isHost: boolean;
   attendees: JoinRequestWithUser[];
   myRequest: JoinRequestWithUser | undefined;
@@ -488,7 +569,9 @@ function CheckInPanel({
       } else if (res.status === "already") {
         toast.info("You're already checked in for this plan.");
       } else if (res.status === "too_far") {
-        toast.error(`Too far — you're ${Math.round(res.distance_m)} m from the venue (150 m limit).`);
+        toast.error(
+          `Too far — you're ${Math.round(res.distance_m)} m from the venue (150 m limit).`,
+        );
       }
     } catch (err) {
       toast.error(friendlyError(err, "Couldn't check you in"));
@@ -535,7 +618,11 @@ function CheckInPanel({
             disabled={busy}
             className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
           >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MapPinned className="h-3.5 w-3.5" />}
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <MapPinned className="h-3.5 w-3.5" />
+            )}
             {busy ? "Checking…" : "Check in"}
           </button>
         )}
@@ -557,7 +644,10 @@ function CheckInPanel({
               const verified = !!r.checked_in_at;
               const noShow = r.no_show;
               return (
-                <li key={r.id} className="flex items-center gap-2 rounded-xl bg-background/60 px-2.5 py-1.5">
+                <li
+                  key={r.id}
+                  className="flex items-center gap-2 rounded-xl bg-background/60 px-2.5 py-1.5"
+                >
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-[10px] font-bold text-primary">
                     {r.user?.avatar_url ? (
                       <img src={r.user.avatar_url} alt="" className="h-full w-full object-cover" />

@@ -15,7 +15,9 @@ function getInitialSession(): { session: Session | null; user: User | null } {
         return { session: sess as Session, user: sess.user as User };
       }
     }
-  } catch {}
+  } catch {
+    /* ignore storage read error */
+  }
   return { session: null, user: null };
 }
 

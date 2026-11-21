@@ -84,10 +84,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "tribeX — Find your crew, join the plan" },
-      { name: "description", content: "tribeX is a hyper-local activity discovery app. Find box cricket, treks, jams, and pickup games happening near you tonight." },
+      {
+        name: "description",
+        content:
+          "tribeX is a hyper-local activity discovery app. Find box cricket, treks, jams, and pickup games happening near you tonight.",
+      },
       { name: "author", content: "tribeX" },
       { property: "og:title", content: "tribeX — Find your crew, join the plan" },
-      { property: "og:description", content: "Discover activities happening near you and join a squad in seconds." },
+      {
+        property: "og:description",
+        content: "Discover activities happening near you and join a squad in seconds.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -103,7 +110,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "dns-prefetch", href: "https://ovknvssfrsuufuopbeqf.supabase.co" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&display=swap",
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -136,7 +146,12 @@ function RootComponent() {
   );
 }
 
-const ONBOARDING_ALLOWED = new Set<string>(["/onboarding", "/auth", "/terms-and-policies", "/complete-profile"]);
+const ONBOARDING_ALLOWED = new Set<string>([
+  "/onboarding",
+  "/auth",
+  "/terms-and-policies",
+  "/complete-profile",
+]);
 const PROFILE_ALLOWED = new Set<string>(["/complete-profile", "/auth", "/terms-and-policies"]);
 
 function AppShell() {
@@ -202,7 +217,12 @@ function AppShell() {
     saveVerifiedProfileLocation(user.id).catch(() => {});
   }, [user, profile, needsOnboarding, needsProfile]);
 
-  const hideChrome = pathname === "/onboarding" || pathname === "/complete-profile";
+  const hideChrome =
+    pathname === "/onboarding" ||
+    pathname === "/complete-profile" ||
+    pathname === "/auth" ||
+    pathname.startsWith("/chat/") ||
+    pathname.startsWith("/profile/settings");
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-background text-foreground">

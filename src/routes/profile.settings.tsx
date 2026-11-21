@@ -353,7 +353,7 @@ function SettingsPage() {
       await supabase.auth.signOut();
       navigate({ to: "/", replace: true });
     },
-    onError: (e: any) => {
+    onError: (e: Error | unknown) => {
       toast.error(friendlyError(e, "Account deletion failed. Try again later."));
     },
   });
@@ -495,7 +495,9 @@ function SettingsPage() {
             )}
             Push Notifications
           </span>
-          <span className={`text-xs font-bold ${pushOn ? "text-primary" : "text-muted-foreground"}`}>
+          <span
+            className={`text-xs font-bold ${pushOn ? "text-primary" : "text-muted-foreground"}`}
+          >
             {pushOn ? "ENABLED" : "DISABLED"}
           </span>
         </button>
@@ -622,7 +624,11 @@ function SettingsPage() {
                   <div className="relative">
                     <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary text-3xl font-bold text-primary-foreground border-2 border-border/60">
                       {modalAvatarPreview && !modalAvatarRemoved ? (
-                        <img src={modalAvatarPreview} alt="Preview" className="h-full w-full object-cover" />
+                        <img
+                          src={modalAvatarPreview}
+                          alt="Preview"
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
                         initial
                       )}
@@ -674,9 +680,7 @@ function SettingsPage() {
                   </span>
                   <input
                     value={editDraft.full_name}
-                    onChange={(e) =>
-                      setEditDraft((d) => ({ ...d, full_name: e.target.value }))
-                    }
+                    onChange={(e) => setEditDraft((d) => ({ ...d, full_name: e.target.value }))}
                     maxLength={80}
                     className="rounded-2xl border border-border/60 bg-background px-3 py-2 outline-none focus:border-primary"
                   />
@@ -687,9 +691,7 @@ function SettingsPage() {
                   </span>
                   <input
                     value={editDraft.username}
-                    onChange={(e) =>
-                      setEditDraft((d) => ({ ...d, username: e.target.value }))
-                    }
+                    onChange={(e) => setEditDraft((d) => ({ ...d, username: e.target.value }))}
                     maxLength={24}
                     className="rounded-2xl border border-border/60 bg-background px-3 py-2 outline-none focus:border-primary"
                   />
@@ -827,9 +829,7 @@ function SettingsPage() {
                             {u.full_name || u.username || "User"}
                           </p>
                           {u.username && (
-                            <p className="truncate text-xs text-muted-foreground">
-                              @{u.username}
-                            </p>
+                            <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
                           )}
                         </div>
                       </div>
@@ -885,9 +885,7 @@ function SettingsPage() {
                       )}
                     </button>
                     {openFaqIndex === i && (
-                      <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                        {faq.a}
-                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{faq.a}</p>
                     )}
                   </div>
                 ))}
@@ -1093,8 +1091,7 @@ function SettingsPage() {
                 <h3 className="text-lg font-bold text-destructive">Final Confirmation</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   To permanently delete your user profile and all associated data, type{" "}
-                  <strong className="text-destructive font-bold">DELETE</strong> in the box
-                  below.
+                  <strong className="text-destructive font-bold">DELETE</strong> in the box below.
                 </p>
               </div>
               <div className="mt-4">
