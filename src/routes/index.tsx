@@ -31,9 +31,11 @@ import {
   CalendarDays,
   Sparkles,
   UserX,
+  Flag,
 } from "lucide-react";
 import {
   listActivities,
+  fetchNearbyActivities,
   requestToJoin,
   getUserActivities,
   listMyJoinRequests,
@@ -62,6 +64,7 @@ import { SafetyDisclaimerModal } from "@/components/safety-disclaimer-modal";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { ManageRequestsModal } from "@/components/manage-requests-modal";
 import { EditPlanModal } from "@/components/edit-plan-modal";
+import { ReportModal } from "@/components/report-modal";
 
 export const Route = createFileRoute("/")({
   component: Explore,
@@ -117,10 +120,19 @@ function Explore() {
   const [urgentBusyId, setUrgentBusyId] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<Activity | null>(null);
   const [deletingPlan, setDeletingPlan] = useState<Activity | null>(null);
+  const [reportingPlan, setReportingPlan] = useState<Activity | null>(null);
+
+  const viewerCoords = useMemo(() => {
+    const lat = place?.lat ?? viewerProfile?.latitude;
+    const lon = place?.lon ?? viewerProfile?.longitude;
+    return lat != null && lon != null ? { lat, lon } : null;
+  }, [place, viewerProfile]);
 
   const { data: activities = [], isLoading, error, refetch } = useQuery({
-    queryKey: ["activities"],
-    queryFn: listActivities,
+    queryKey: ["activities", viewerCoords?.lat, viewerCoords?.lon],
+    queryFn: () => viewerCoords
+      ? fetchNearbyActivities(viewerCoords.lat, viewerCoords.lon, 15.0, 60, 0)
+      : listActivities(),
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
@@ -350,8 +362,11 @@ function Explore() {
     // Attach true geographic distance in km (matching Android LocationService.haversineKm)
     const sourceWithDistance = source.map((a) => {
       let distanceKm: number | null = null;
-      if (!a.is_online && a.latitude != null && a.longitude != null && viewerLat != null && viewerLon != null) {
-        distanceKm = haversineKm(viewerLat, viewerLon, a.latitude, a.longitude);
+      // In-person uses venue coordinates; virtual plans use creator location anchor
+      const targetLat = !a.is_online ? a.latitude : (a.latitude ?? (a.host as unknown as { latitude?: number | null })?.latitude ?? null);
+      const targetLon = !a.is_online ? a.longitude : (a.longitude ?? (a.host as unknown as { longitude?: number | null })?.longitude ?? null);
+      if (targetLat != null && targetLon != null && viewerLat != null && viewerLon != null) {
+        distanceKm = haversineKm(viewerLat, viewerLon, targetLat, targetLon);
       }
       return { ...a, distanceKm };
     });
@@ -387,6 +402,11 @@ function Explore() {
       if (scope === "discover" && applyRadiusFilter) {
         if (!a.is_online) {
           if (a.distanceKm == null || a.distanceKm > 15.001) {
+            return false;
+          }
+        } else {
+          // Virtual plans: if proximity anchor distance is computed, enforce 15 km
+          if (a.distanceKm != null && a.distanceKm > 15.001) {
             return false;
           }
         }
@@ -814,6 +834,10 @@ function Explore() {
                 const full = activities.find((x) => x.id === a.id);
                 if (full) setDeletingPlan(full);
               }}
+              onReport={() => {
+                const full = activities.find((x) => x.id === a.id);
+                if (full) setReportingPlan(full);
+              }}
               onToggleUrgent={() => handleToggleUrgent(a)}
               urgentBusy={urgentBusyId === a.id}
               onJoin={() => {
@@ -855,6 +879,15 @@ function Explore() {
         activity={editingPlan}
         onClose={() => setEditingPlan(null)}
       />
+      {reportingPlan && (
+        <ReportModal
+          open={!!reportingPlan}
+          onClose={() => setReportingPlan(null)}
+          targetType="activity"
+          targetId={reportingPlan.id}
+          targetTitle={reportingPlan.title}
+        />
+      )}
       {deletingPlan && typeof document !== "undefined" && createPortal(
         <>
           <div
@@ -928,6 +961,7 @@ function ActivityCard({
   urgentBusy,
   onEdit,
   onDelete,
+  onReport,
 }: {
   activity: MaskedActivity<ActivityWithHost>;
   onJoin: () => void;
@@ -947,6 +981,7 @@ function ActivityCard({
   urgentBusy: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onReport?: () => void;
 }) {
   const accent = "bg-primary/15 text-primary";
   const urgent = a.slots_left <= 3;
@@ -1168,6 +1203,16 @@ function ActivityCard({
               >
                 <MessageCircle className="h-3.5 w-3.5" />
               </button>
+              {onReport && (
+                <button
+                  onClick={onReport}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
+                  aria-label="Report plan"
+                  title="Report plan"
+                >
+                  <Flag className="h-3.5 w-3.5" />
+                </button>
+              )}
               {myStatus === "pending" || hasRequested ? (
             <button
               disabled

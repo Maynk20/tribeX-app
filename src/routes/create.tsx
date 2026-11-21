@@ -29,13 +29,16 @@ import {
   Link as LinkIcon,
   Hash,
   Lock,
+  ArrowLeft,
+  ArrowRight,
+  Eye,
 } from "lucide-react";
 
 export const Route = createFileRoute("/create")({
   head: () => ({
     meta: [
-      { title: "Create a plan · tribeX" },
-      { name: "description", content: "Post a plan and let your neighborhood join." },
+      { title: "Host a plan · tribeX" },
+      { name: "description", content: "Post a plan and let your squad find you." },
     ],
   }),
   component: Create,
@@ -93,7 +96,7 @@ const planSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["location"],
-        message: "Add a venue or area",
+        message: "Add a venue or area (at least 3 characters)",
       });
     }
   }
@@ -129,10 +132,13 @@ const empty: PlanForm = {
   topic_tags: "",
 };
 
+const STEP_TITLES = ["What & when", "Where & who", "Details & preview"];
+
 function Create() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [currentStep, setCurrentStep] = useState<number>(0);
   const [form, setForm] = useState<PlanForm>(empty);
   const [errors, setErrors] = useState<FieldErrors>({});
   const fileRef = useRef<HTMLInputElement>(null);
@@ -157,9 +163,8 @@ function Create() {
       setErrors({});
       setImageFile(null);
       setImagePreview(null);
+      setCurrentStep(0);
       toast.success("Plan published — your squad will find you.");
-      // Fan out web-push notifications to matching users. Fire-and-forget —
-      // the in-app notifications table is already populated by a DB trigger.
       if (created?.id) {
         notifyMatchingUsersPush({ data: { activityId: created.id } }).catch(
           (e) => console.warn("[push] dispatch failed", e),
@@ -200,9 +205,55 @@ function Create() {
     setImagePreview(null);
   }
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  function validateStep1(): boolean {
+    const errs: FieldErrors = {};
+    if (!form.category) errs.category = "Please select a category";
+    if (form.title.trim().length < 4) errs.title = "Title must be at least 4 characters";
+    if (form.description.trim().length < 10) errs.description = "Add a bit more detail (10+ characters)";
+    if (!form.date) errs.date = "Pick a date";
+    if (!form.time) errs.time = "Pick a time";
+
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.error("Please fill in the required fields to continue");
+      return false;
+    }
+    return true;
+  }
+
+  function validateStep2(): boolean {
+    const errs: FieldErrors = {};
+    const slotsNum = Number(form.slots);
+    if (isNaN(slotsNum) || slotsNum < 1 || slotsNum > 50) {
+      errs.slots = "Slots must be between 1 and 50";
+    }
+
+    if (form.is_online) {
+      const link = form.meeting_link.trim();
+      if (!link) {
+        errs.meeting_link = "Meeting link is required for virtual plans";
+      } else if (!/^https?:\/\/\S+$/i.test(link)) {
+        errs.meeting_link = "Enter a valid URL (https://...)";
+      }
+    } else {
+      if (form.location.trim().length < 3) {
+        errs.location = "Add a venue or area (at least 3 characters)";
+      }
+    }
+
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.error("Please fix the highlighted fields to continue");
+      return false;
+    }
+    return true;
+  }
+
+  const onSubmit = async () => {
     if (!user) { navigate({ to: "/auth" }); return; }
+    if (!validateStep1()) { setCurrentStep(0); return; }
+    if (!validateStep2()) { setCurrentStep(1); return; }
+
     const parsed = planSchema.safeParse({
       ...form,
       slots: Number(form.slots),
@@ -218,6 +269,7 @@ function Create() {
       toast.error("Please fix the highlighted fields");
       return;
     }
+
     const p = parsed.data;
     const cleanTags = p.topic_tags
       ? p.topic_tags
@@ -226,6 +278,7 @@ function Create() {
           .filter(Boolean)
           .slice(0, 8)
       : [];
+
     let image_url: string | null = null;
     if (imageFile) {
       setUploading(true);
@@ -258,7 +311,6 @@ function Create() {
           // fallback
         }
       }
-      // Guaranteed coordinate fallback matching Android CreatePlanScreen:
       if (finalLat == null || finalLon == null) {
         finalLat = DEFAULT_LAT;
         finalLon = DEFAULT_LON;
@@ -273,7 +325,7 @@ function Create() {
       location: p.is_online ? (p.location.trim() || "Online") : p.location,
       total_slots: p.slots,
       cost_per_head: p.cost,
-      image_url,
+      image_url: image_url ?? "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
       latitude: p.is_online ? null : finalLat,
       longitude: p.is_online ? null : finalLon,
       women_only: womenOnly,
@@ -298,235 +350,300 @@ function Create() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="page-in flex flex-col gap-4 px-5 pt-6">
+    <div className="page-in flex flex-col gap-5 px-5 pt-6 pb-28">
+      {/* Step Header matching Android CreatePlanScreen */}
       <header>
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          New plan
+        <h1 className="text-2xl font-bold tracking-tight">Host a plan</h1>
+        <p className="mt-1 text-xs font-medium text-muted-foreground">
+          Step {currentStep + 1} of 3 · {STEP_TITLES[currentStep]}
         </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Post a plan</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Fill in the essentials. Your squad will find you.
-        </p>
+        <div className="mt-3 flex items-center gap-1.5">
+          {STEP_TITLES.map((_, idx) => {
+            const isCompleted = idx < currentStep;
+            const isCurrent = idx === currentStep;
+            return (
+              <div
+                key={idx}
+                className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                  isCurrent
+                    ? "bg-primary"
+                    : isCompleted
+                      ? "bg-primary/50"
+                      : "bg-secondary"
+                }`}
+              />
+            );
+          })}
+        </div>
       </header>
 
-      <div>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
-        {imagePreview ? (
-          <div className="relative overflow-hidden rounded-3xl border border-border/60">
-            <img src={imagePreview} alt="Cover preview" className="h-48 w-full object-cover" />
-            <button
-              type="button"
-              onClick={clearImage}
-              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 shadow transition hover:scale-105 active:scale-95"
-              aria-label="Remove photo"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="absolute bottom-2 right-2 rounded-full bg-background/90 px-3 py-1 text-xs font-semibold shadow transition hover:scale-105 active:scale-95"
-            >
-              Replace
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="flex h-36 w-full items-center justify-center rounded-3xl border border-dashed border-border bg-card/50 text-muted-foreground transition hover:border-primary/60 hover:text-primary active:scale-[0.99]"
-          >
-            <div className="flex flex-col items-center gap-1 text-xs">
-              <ImageIcon className="h-5 w-5" />
-              Add a cover photo (optional)
+      {/* STEP 0: What & when */}
+      {currentStep === 0 && (
+        <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+          <div>
+            <Label icon={<Tag className="h-3.5 w-3.5" />}>Select Category</Label>
+            <div className="-mx-5 mt-2 flex gap-1.5 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {CATEGORY_GROUPS.map((g) => (
+                <button
+                  type="button"
+                  key={g}
+                  onClick={() => setGroupFilter(g)}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition ${
+                    groupFilter === g
+                      ? "border-primary/60 bg-primary/10 text-primary"
+                      : "border-border/60 bg-card text-muted-foreground"
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
             </div>
-          </button>
-        )}
-      </div>
+            <div className="-mx-5 mt-2 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {CATEGORIES.filter((c) => c.group === groupFilter).map((c) => {
+                const active = form.category === c.key;
+                const Icon = c.icon;
+                return (
+                  <button
+                    type="button"
+                    key={c.key}
+                    onClick={() => {
+                      set("category", c.key);
+                      if (c.defaultMode === "online" && !form.is_online) set("is_online", true);
+                      if (c.defaultMode === "in_person" && form.is_online) set("is_online", false);
+                    }}
+                    className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition ${
+                      active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border/60 bg-card text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+            {errors.category && (
+              <p className="mt-1.5 text-[11px] font-medium text-destructive">{errors.category}</p>
+            )}
+          </div>
 
-      <Field
-        label="Title"
-        icon={<Type className="h-3.5 w-3.5" />}
-        error={errors.title}
-        hint={`${form.title.length}/80`}
-      >
-        <input
-          value={form.title}
-          onChange={(e) => set("title", e.target.value)}
-          maxLength={80}
-          placeholder="Box cricket at Turf Arena"
-          className="w-full bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground"
-        />
-      </Field>
-
-      <Field
-        label="Description"
-        icon={<AlignLeft className="h-3.5 w-3.5" />}
-        error={errors.description}
-        hint={`${form.description.length}/500`}
-      >
-        <textarea
-          value={form.description}
-          onChange={(e) => set("description", e.target.value)}
-          maxLength={500}
-          rows={3}
-          placeholder="Chill 6-a-side, all levels welcome. Bring water."
-          className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-      </Field>
-
-      <div>
-        <Label icon={<Tag className="h-3.5 w-3.5" />}>Category</Label>
-        <div className="-mx-5 mt-2 flex gap-1.5 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {CATEGORY_GROUPS.map((g) => (
-            <button
-              type="button"
-              key={g}
-              onClick={() => setGroupFilter(g)}
-              className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition ${
-                groupFilter === g
-                  ? "border-primary/60 bg-primary/10 text-primary"
-                  : "border-border/60 bg-card text-muted-foreground"
-              }`}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-        <div className="-mx-5 mt-2 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {CATEGORIES.filter((c) => c.group === groupFilter).map((c) => {
-            const active = form.category === c.key;
-            const Icon = c.icon;
-            return (
-              <button
-                type="button"
-                key={c.key}
-                onClick={() => {
-                  set("category", c.key);
-                  if (c.defaultMode === "online" && !form.is_online) set("is_online", true);
-                  if (c.defaultMode === "in_person" && form.is_online) set("is_online", false);
-                }}
-                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition ${
-                  active
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border/60 bg-card text-muted-foreground hover:border-primary/50"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
-        {errors.category && (
-          <p className="mt-1.5 text-[11px] font-medium text-destructive">{errors.category}</p>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Date" icon={<CalendarIcon className="h-3.5 w-3.5" />} error={errors.date}>
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => set("date", e.target.value)}
-            className="w-full bg-transparent text-sm outline-none [color-scheme:light] dark:[color-scheme:dark]"
-          />
-        </Field>
-        <Field label="Time" icon={<Clock className="h-3.5 w-3.5" />} error={errors.time}>
-          <input
-            type="time"
-            value={form.time}
-            onChange={(e) => set("time", e.target.value)}
-            className="w-full bg-transparent text-sm outline-none [color-scheme:light] dark:[color-scheme:dark]"
-          />
-        </Field>
-      </div>
-
-      <div>
-        <Label icon={<MonitorSmartphone className="h-3.5 w-3.5" />}>Where does it happen?</Label>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {[
-            { on: false, emoji: "📍", label: "In-Person Venue" },
-            { on: true, emoji: "💻", label: "Online / Virtual" },
-          ].map((opt) => {
-            const active = form.is_online === opt.on;
-            return (
-              <button
-                type="button"
-                key={opt.label}
-                onClick={() => set("is_online", opt.on)}
-                className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-xs font-semibold transition ${
-                  active
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border/60 bg-card text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                <span className="text-base leading-none">{opt.emoji}</span>
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {form.is_online ? (
-        <>
           <Field
-            label="Meeting link"
-            icon={<LinkIcon className="h-3.5 w-3.5" />}
-            error={errors.meeting_link}
-            hint="Google Meet, Discord, Zoom…"
+            label="Plan Title"
+            icon={<Type className="h-3.5 w-3.5" />}
+            error={errors.title}
+            hint={`${form.title.length}/80`}
           >
             <input
-              type="url"
-              value={form.meeting_link}
-              onChange={(e) => set("meeting_link", e.target.value)}
+              value={form.title}
+              onChange={(e) => set("title", e.target.value)}
+              maxLength={80}
+              placeholder="e.g. Weekend Box Cricket Turf Match"
+              className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+            />
+          </Field>
+
+          <Field
+            label="Description"
+            icon={<AlignLeft className="h-3.5 w-3.5" />}
+            error={errors.description}
+            hint={`${form.description.length}/500`}
+          >
+            <textarea
+              value={form.description}
+              onChange={(e) => set("description", e.target.value)}
               maxLength={500}
-              placeholder="https://meet.google.com/xyz-abcd-efg"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              rows={3}
+              placeholder="Tell attendees what to expect, skill level, what to bring, etc."
+              className="w-full resize-none bg-transparent text-xs outline-none placeholder:text-muted-foreground"
             />
           </Field>
-          <p className="-mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Lock className="h-3 w-3 text-primary" />
-            Link stays private — only accepted attendees can see it.
-          </p>
-        </>
-      ) : (
-        <>
-          <Field label="Venue / Location" icon={<MapPin className="h-3.5 w-3.5" />} error={errors.location}>
-            <input
-              value={form.location}
-              onChange={(e) => set("location", e.target.value)}
-              maxLength={120}
-              placeholder={isIndoorCategory ? "Third Wave Coffee, Indiranagar" : "Turf Arena, Indiranagar"}
-              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
-          </Field>
-          <div className="-mt-2 flex items-center justify-between gap-2 rounded-2xl border border-dashed border-border/60 bg-card/40 px-3 py-2 text-[11px]">
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold uppercase tracking-wider text-muted-foreground">Pin the venue (for GPS check-in)</p>
-              {pinnedPlace ? (
-                <p className="mt-0.5 truncate text-foreground">
-                  📍 {pinnedPlace.short} · {pinnedPlace.lat.toFixed(4)}, {pinnedPlace.lon.toFixed(4)}
-                </p>
-              ) : (
-                <p className="mt-0.5 text-muted-foreground">Optional — needed so attendees can check in on arrival.</p>
-              )}
-            </div>
-            <PlaceSearch
-              value={pinnedPlace?.short ?? ""}
-              onSelect={(p) => {
-                setPinnedPlace(p);
-                if (!form.location.trim()) set("location", p.short);
-              }}
-              variant="chip"
-            />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Date" icon={<CalendarIcon className="h-3.5 w-3.5" />} error={errors.date}>
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) => set("date", e.target.value)}
+                className="w-full bg-transparent text-xs outline-none [color-scheme:light] dark:[color-scheme:dark]"
+              />
+            </Field>
+            <Field label="Time" icon={<Clock className="h-3.5 w-3.5" />} error={errors.time}>
+              <input
+                type="time"
+                value={form.time}
+                onChange={(e) => set("time", e.target.value)}
+                className="w-full bg-transparent text-xs outline-none [color-scheme:light] dark:[color-scheme:dark]"
+              />
+            </Field>
           </div>
 
-          {isIndoorCategory && (
+          <div>
+            <Label icon={<ImageIcon className="h-3.5 w-3.5" />}>Cover Photo (Optional)</Label>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
+            {imagePreview ? (
+              <div className="relative mt-2 overflow-hidden rounded-2xl border border-border/60">
+                <img src={imagePreview} alt="Cover preview" className="h-40 w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={clearImage}
+                  className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 shadow transition hover:scale-105 active:scale-95"
+                  aria-label="Remove photo"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="mt-2 flex h-28 w-full items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 text-muted-foreground transition hover:border-primary/60 hover:text-primary active:scale-[0.99]"
+              >
+                <div className="flex flex-col items-center gap-1 text-xs">
+                  <ImageIcon className="h-5 w-5" />
+                  <span>Tap to choose cover image</span>
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* STEP 1: Where & who */}
+      {currentStep === 1 && (
+        <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+          <div>
+            <Label icon={<MonitorSmartphone className="h-3.5 w-3.5" />}>Format</Label>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {[
+                { on: false, emoji: "📍", label: "In-Person Venue" },
+                { on: true, emoji: "💻", label: "Online / Virtual" },
+              ].map((opt) => {
+                const active = form.is_online === opt.on;
+                return (
+                  <button
+                    type="button"
+                    key={opt.label}
+                    onClick={() => set("is_online", opt.on)}
+                    className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-xs font-semibold transition ${
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border/60 bg-card text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    <span className="text-base leading-none">{opt.emoji}</span>
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {form.is_online ? (
+            <>
+              <Field
+                label="Meeting URL"
+                icon={<LinkIcon className="h-3.5 w-3.5" />}
+                error={errors.meeting_link}
+                hint="Google Meet, Discord, Zoom…"
+              >
+                <input
+                  type="url"
+                  value={form.meeting_link}
+                  onChange={(e) => set("meeting_link", e.target.value)}
+                  maxLength={500}
+                  placeholder="https://meet.google.com/xyz-abcd-efg"
+                  className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                />
+              </Field>
+              <p className="-mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Lock className="h-3 w-3 text-primary shrink-0" />
+                <span>Link is securely hidden until you approve attendee join requests.</span>
+              </p>
+            </>
+          ) : (
+            <>
+              <Field label="Venue Location" icon={<MapPin className="h-3.5 w-3.5" />} error={errors.location}>
+                <input
+                  value={form.location}
+                  onChange={(e) => set("location", e.target.value)}
+                  maxLength={120}
+                  placeholder={isIndoorCategory ? "Third Wave Coffee, Indiranagar" : "Turf Arena, Indiranagar"}
+                  className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                />
+              </Field>
+              <div className="-mt-2 flex items-center justify-between gap-2 rounded-2xl border border-dashed border-border/60 bg-card/40 px-3 py-2 text-[11px]">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold uppercase tracking-wider text-muted-foreground">Pin venue on map</p>
+                  {pinnedPlace ? (
+                    <p className="mt-0.5 truncate text-foreground font-medium">
+                      📍 {pinnedPlace.short} ({pinnedPlace.lat.toFixed(3)}, {pinnedPlace.lon.toFixed(3)})
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-muted-foreground">Enables 15 km hyper-local discovery and GPS check-in.</p>
+                  )}
+                </div>
+                <PlaceSearch
+                  value={pinnedPlace?.short ?? ""}
+                  onSelect={(p) => {
+                    setPinnedPlace(p);
+                    if (!form.location.trim()) set("location", p.short);
+                  }}
+                  variant="chip"
+                />
+              </div>
+            </>
+          )}
+
+          <Field label="Available Squad Slots" icon={<Users className="h-3.5 w-3.5" />} error={errors.slots} hint="Max 50">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={50}
+              value={form.slots}
+              onChange={(e) => set("slots", e.target.value)}
+              className="w-full bg-transparent text-sm font-semibold outline-none"
+            />
+          </Field>
+        </div>
+      )}
+
+      {/* STEP 2: Details & preview */}
+      {currentStep === 2 && (
+        <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+          <Field label="Cost per Attendee" icon={<DollarSign className="h-3.5 w-3.5" />} error={errors.cost} hint="0 for free plans">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-muted-foreground">₹</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                value={form.cost}
+                onChange={(e) => set("cost", e.target.value)}
+                className="w-full bg-transparent text-sm font-semibold outline-none"
+              />
+            </div>
+          </Field>
+
+          <Field
+            label="Topic & Interest Tags"
+            icon={<Hash className="h-3.5 w-3.5" />}
+            hint="Comma separated"
+          >
+            <input
+              value={form.topic_tags}
+              onChange={(e) => set("topic_tags", e.target.value)}
+              maxLength={120}
+              placeholder="e.g. Beginners welcome, casual, weekend"
+              className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </Field>
+
+          {!form.is_online && (
             <div>
-              <Label icon={<Check className="h-3.5 w-3.5" />}>Venue amenities</Label>
-              <div className="mt-2 flex flex-wrap gap-2">
+              <Label icon={<Check className="h-3.5 w-3.5" />}>Venue Amenities</Label>
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {AMENITIES.map((a) => {
                   const active = amenities.includes(a.key);
                   const Icon = a.icon;
@@ -549,88 +666,104 @@ function Create() {
               </div>
             </div>
           )}
-        </>
+
+          <div className="rounded-2xl border border-border/60 bg-card/50 p-3.5">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Shield className="h-3.5 w-3.5 text-primary" /> Safety & Audience
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              <SafetyToggle
+                icon={<span className="text-base leading-none">♀︎</span>}
+                label="Women-only plan"
+                hint="Visible and joinable only by female members."
+                checked={womenOnly}
+                onChange={setWomenOnly}
+              />
+              <SafetyToggle
+                icon={<BadgeCheck className="h-3.5 w-3.5" />}
+                label="Verified users only"
+                hint="Requires attendees to have completed verification."
+                checked={verifiedOnly}
+                onChange={setVerifiedOnly}
+              />
+            </div>
+          </div>
+
+          {/* Live Card Preview matching Android CreatePlanScreen Step 3 */}
+          <div>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              <Eye className="h-3.5 w-3.5 text-primary" /> Feed Card Preview
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-bold text-primary">
+                  {form.category || "General"}
+                </span>
+                <span className="text-xs font-bold text-foreground">
+                  {Number(form.cost) > 0 ? `₹${form.cost}` : "Free"}
+                </span>
+              </div>
+              <h3 className="mt-2 text-sm font-bold line-clamp-1">{form.title || "Your Plan Title"}</h3>
+              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                {form.description || "Plan description preview..."}
+              </p>
+              <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> {form.is_online ? "Online event" : form.location || "Venue"}
+                </span>
+                <span className="flex items-center gap-1 font-semibold">
+                  <Users className="h-3 w-3" /> {form.slots} spots
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      <Field
-        label="Topic / skill tags"
-        icon={<Hash className="h-3.5 w-3.5" />}
-        hint="Optional — comma separated"
-      >
-        <input
-          value={form.topic_tags}
-          onChange={(e) => set("topic_tags", e.target.value)}
-          maxLength={120}
-          placeholder="e.g. Beginners welcome, casual, English"
-          className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-      </Field>
+      {/* Fixed Bottom Wizard Navigation matching Android CreatePlanScreen */}
+      <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-card/95 backdrop-blur-md px-5 py-3">
+        <div className="mx-auto flex max-w-md items-center justify-between gap-3">
+          {currentStep > 0 ? (
+            <button
+              type="button"
+              disabled={mutation.isPending || uploading}
+              onClick={() => setCurrentStep((s) => s - 1)}
+              className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2.5 text-xs font-semibold hover:bg-accent transition active:scale-95 disabled:opacity-50"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </button>
+          ) : (
+            <div />
+          )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Total slots" icon={<Users className="h-3.5 w-3.5" />} error={errors.slots}>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={50}
-            value={form.slots}
-            onChange={(e) => set("slots", e.target.value)}
-            className="w-full bg-transparent text-sm outline-none"
-          />
-        </Field>
-        <Field label="Cost / head" icon={<DollarSign className="h-3.5 w-3.5" />} error={errors.cost}>
-          <div className="flex items-center gap-1">
-            <span className="text-sm text-muted-foreground">₹</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              value={form.cost}
-              onChange={(e) => set("cost", e.target.value)}
-              className="w-full bg-transparent text-sm outline-none"
-            />
-          </div>
-        </Field>
-      </div>
-
-      <div className="rounded-2xl border border-border/60 bg-card/50 p-3">
-        <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <Shield className="h-3.5 w-3.5 text-primary" /> Safety controls
-        </p>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Restricted plans are hidden from non-matching users, and the exact venue is
-          masked on the feed until you approve their join request.
-        </p>
-        <div className="mt-3 flex flex-col gap-2">
-          <SafetyToggle
-            icon={<span className="text-base leading-none">♀︎</span>}
-            label="Women-only plan"
-            hint="Visible & joinable only by female-identified users."
-            checked={womenOnly}
-            onChange={setWomenOnly}
-          />
-          <SafetyToggle
-            icon={<BadgeCheck className="h-3.5 w-3.5" />}
-            label="Verified users only"
-            hint="Requires a verified profile (ID / email / phone)."
-            checked={verifiedOnly}
-            onChange={setVerifiedOnly}
-          />
+          {currentStep < 2 ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (currentStep === 0 && validateStep1()) {
+                  setCurrentStep(1);
+                } else if (currentStep === 1 && validateStep2()) {
+                  setCurrentStep(2);
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-full bg-primary px-6 py-2.5 text-xs font-semibold text-primary-foreground hover:scale-105 active:scale-95 transition"
+            >
+              Continue <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={mutation.isPending || uploading}
+              onClick={onSubmit}
+              className="flex items-center gap-1.5 rounded-full bg-primary px-6 py-2.5 text-xs font-semibold text-primary-foreground hover:scale-105 active:scale-95 transition disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" />
+              {uploading ? "Uploading photo…" : mutation.isPending ? "Publishing…" : "Publish plan"}
+            </button>
+          )}
         </div>
-      </div>
-
-      <button
-        type="submit"
-        disabled={mutation.isPending || uploading}
-        className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-4 text-sm font-semibold text-primary-foreground transition active:scale-[0.99] disabled:opacity-60"
-      >
-        {uploading ? "Uploading photo…" : mutation.isPending ? "Publishing…" : (
-          <>
-            <Check className="h-4 w-4" /> Publish plan
-          </>
-        )}
-      </button>
-    </form>
+      </footer>
+    </div>
   );
 }
 
@@ -653,8 +786,8 @@ function SafetyToggle({
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">{label}</span>
-        <span className="block text-[11px] text-muted-foreground">{hint}</span>
+        <span className="block text-xs font-semibold">{label}</span>
+        <span className="block text-[10px] text-muted-foreground">{hint}</span>
       </span>
       <button
         type="button"
@@ -662,9 +795,9 @@ function SafetyToggle({
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${checked ? "bg-primary" : "bg-secondary"}`}
+        className={`relative inline-flex h-5 w-10 shrink-0 items-center rounded-full transition ${checked ? "bg-primary" : "bg-secondary"}`}
       >
-        <span className={`inline-block h-5 w-5 rounded-full bg-background shadow transition ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
+        <span className={`inline-block h-4 w-4 rounded-full bg-background shadow transition ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
       </button>
     </div>
   );

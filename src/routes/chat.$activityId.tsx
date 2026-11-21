@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, UserX, CheckCircle2, Loader2, Plus, BarChart3 } from "lucide-react";
+import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, UserX, CheckCircle2, Loader2, Plus, BarChart3, Flag } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -11,6 +11,7 @@ import { ExpenseCard, isExpenseMessage } from "@/components/expense-card";
 import { SplitExpenseModal } from "@/components/split-expense-modal";
 import { PollCard, isPollMessage } from "@/components/poll-card";
 import { CreatePollModal } from "@/components/create-poll-modal";
+import { ReportModal } from "@/components/report-modal";
 import { MemoryBanner } from "@/components/memory-banner";
 import { PageLoader } from "@/components/ui/loader";
 
@@ -29,6 +30,7 @@ function ChatPage() {
   const [splitOpen, setSplitOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: activity, isLoading: isActivityLoading } = useQuery({
@@ -163,19 +165,29 @@ function ChatPage() {
           </p>
         </div>
         {!isHost && activity?.host_id && (
-          <button
-            onClick={() => {
-              if (confirm(`Block ${hostName}? You won't see their events anymore.`)) {
-                blockMut.mutate(activity.host_id);
-              }
-            }}
-            disabled={blockMut.isPending}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
-            title={`Block ${hostName}`}
-            aria-label={`Block ${hostName}`}
-          >
-            <UserX className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setReportOpen(true)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
+              title="Report content or user"
+              aria-label="Report"
+            >
+              <Flag className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`Block ${hostName}? You won't see their events anymore.`)) {
+                  blockMut.mutate(activity.host_id);
+                }
+              }}
+              disabled={blockMut.isPending}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
+              title={`Block ${hostName}`}
+              aria-label={`Block ${hostName}`}
+            >
+              <UserX className="h-4 w-4" />
+            </button>
+          </div>
         )}
       </header>
 
@@ -317,6 +329,13 @@ function ChatPage() {
         activityId={activityId}
         open={pollOpen}
         onOpenChange={setPollOpen}
+      />
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="activity"
+        targetId={activityId}
+        targetTitle={activity?.title ?? "Activity"}
       />
     </div>
   );

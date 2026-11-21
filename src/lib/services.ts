@@ -130,7 +130,7 @@ export async function listActivities(): Promise<ActivityWithHost[]> {
     )
     .is("deleted_at", null)
     .order("date_time", { ascending: true })
-    .limit(25);
+    .limit(60);
 
   if (error) {
     console.error("[listActivities] fallback fetch failed", error);
@@ -138,6 +138,49 @@ export async function listActivities(): Promise<ActivityWithHost[]> {
   }
   const rows = (data ?? []) as Activity[];
   return attachHosts(rows);
+}
+
+export async function fetchNearbyActivities(
+  lat: number,
+  lng: number,
+  radiusKm = 15.0,
+  limit = 50,
+  offset = 0
+): Promise<ActivityWithHost[]> {
+  try {
+    const { data, error } = await (supabase as unknown as {
+      rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: Activity[] | null; error: unknown }>;
+    }).rpc("get_nearby_activities", {
+      user_lat: lat,
+      user_lng: lng,
+      radius_km: radiusKm,
+      limit_count: limit,
+      offset_count: offset,
+    });
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return attachHosts(data);
+    }
+  } catch (err) {
+    console.warn("[fetchNearbyActivities] 5-arg RPC failed, trying 3-arg", err);
+  }
+
+  try {
+    const { data, error } = await (supabase as unknown as {
+      rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: Activity[] | null; error: unknown }>;
+    }).rpc("get_nearby_activities", {
+      user_lat: lat,
+      user_lng: lng,
+      radius_km: radiusKm,
+    });
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const slice = data.slice(offset, offset + limit);
+      return attachHosts(slice);
+    }
+  } catch (err) {
+    console.warn("[fetchNearbyActivities] 3-arg RPC failed, falling back to listActivities", err);
+  }
+
+  return listActivities();
 }
 
 export type NewActivity = {
@@ -1097,6 +1140,102 @@ export async function castPollVote(pollId: string, optionIndex: number): Promise
   if (error) throw error;
 }
 
+export async function retractPollVote(pollId: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in to retract vote");
+  const client = supabase as unknown as {
+    from: (t: string) => {
+      delete: () => {
+        eq: (c1: string, v1: string) => {
+          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
+        };
+      };
+    };
+  };
+  const { error } = await client
+    .from("poll_votes")
+    .delete()
+    .eq("poll_id", pollId)
+    .eq("user_id", uid);
+  if (error) throw error;
+}
+
+export async function togglePollClosed(pollId: string, close: boolean): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in to manage poll");
+  const client = supabase as unknown as {
+    from: (t: string) => {
+      update: (p: Record<string, unknown>) => {
+        eq: (c1: string, v1: string) => {
+          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
+        };
+      };
+    };
+  };
+  const { error } = await client
+    .from("polls")
+    .update({ closed_at: close ? new Date().toISOString() : null })
+    .eq("id", pollId)
+    .eq("created_by", uid);
+  if (error) throw error;
+}
+
+export async function updatePoll(pollId: string, question: string, options?: string[]): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in to edit poll");
+  const payload: Record<string, unknown> = { question: question.trim() };
+  if (options && options.length >= 2) {
+    payload.options = options.map((o) => o.trim()).filter(Boolean);
+  }
+  const client = supabase as unknown as {
+    from: (t: string) => {
+      update: (p: Record<string, unknown>) => {
+        eq: (c1: string, v1: string) => {
+          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
+        };
+      };
+    };
+  };
+  const { error } = await client
+    .from("polls")
+    .update(payload)
+    .eq("id", pollId)
+    .eq("created_by", uid);
+  if (error) throw error;
+}
+
+export async function deletePoll(pollId: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in to delete poll");
+  const client = supabase as unknown as {
+    from: (t: string) => {
+      delete: () => {
+        eq: (c: string, v: string) => Promise<{ error: unknown }>;
+      };
+    };
+  };
+  // Cascade delete votes first
+  await client.from("poll_votes").delete().eq("poll_id", pollId);
+  const { error } = await (supabase as unknown as {
+    from: (t: string) => {
+      delete: () => {
+        eq: (c1: string, v1: string) => {
+          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
+        };
+      };
+    };
+  })
+    .from("polls")
+    .delete()
+    .eq("id", pollId)
+    .eq("created_by", uid);
+  if (error) throw error;
+}
+
 // ---------- Ratings (Post-Event Reviews) ----------
 export type Rating = {
   id: string;
@@ -1318,4 +1457,49 @@ export async function isUserBlocked(userA: string, userB: string): Promise<boole
     .limit(1);
   if (error) return false;
   return (data ?? []).length > 0;
+}
+
+// ---------- Reporting (Safety & Moderation) ----------
+export type ReportReason =
+  | "harassment"
+  | "unsafe_behavior"
+  | "fake_profile"
+  | "inappropriate_content"
+  | "spam"
+  | "other";
+
+export async function submitReport(input: {
+  targetType: "user" | "activity" | "chat_message";
+  targetId: string;
+  reason: ReportReason;
+  notes?: string;
+}): Promise<boolean> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in to submit a report");
+  try {
+    const { error } = await (supabase as unknown as {
+      from: (t: string) => {
+        insert: (r: Record<string, unknown>) => Promise<{ error: unknown }>;
+      };
+    })
+      .from("reports")
+      .insert({
+        reporter_id: uid,
+        target_type: input.targetType,
+        target_id: input.targetId,
+        reason: input.reason,
+        notes: input.notes?.trim() || null,
+        created_at: new Date().toISOString(),
+        status: "open",
+      });
+    if (error) {
+      console.warn("[submitReport] insert failed", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[submitReport] threw", err);
+    return false;
+  }
 }
