@@ -3,7 +3,6 @@ import 'package:myapp/models/activity.dart';
 import 'package:myapp/models/expense.dart';
 import 'package:myapp/models/join_request.dart';
 import 'package:myapp/models/notification_item.dart';
-import 'package:myapp/models/poll.dart';
 import 'package:myapp/state/activities_state.dart';
 import 'package:myapp/state/chat_state.dart';
 import 'package:myapp/state/notifications_state.dart';
@@ -69,38 +68,6 @@ void main() {
       final success = await state.respondToRequest('req_test', JoinStatus.rejected);
       expect(success, isFalse);
       state.dispose();
-    });
-  });
-
-  group('Phase 2 - 3. Polls and Single-Choice Voting Integrity', () {
-    test('Single-choice voting updates option vote counts cleanly', () {
-      final initialPoll = Poll(
-        id: 'poll_1',
-        activityId: 'act_1',
-        creatorId: 'user_creator',
-        question: 'Dinner choice?',
-        options: [
-          PollOption(id: '0', text: 'Pizza', voterIds: ['user_a']),
-          PollOption(id: '1', text: 'Burgers', voterIds: []),
-        ],
-        createdAt: DateTime.now(),
-      );
-
-      expect(initialPoll.totalVotes, 1);
-      expect(initialPoll.userVotedOptionId('user_a'), '0');
-      expect(initialPoll.userVotedOptionId('user_b'), isNull);
-
-      // User A switches vote from Pizza to Burgers
-      final switchedOptions = [
-        PollOption(id: '0', text: 'Pizza', voterIds: []),
-        PollOption(id: '1', text: 'Burgers', voterIds: ['user_a']),
-      ];
-      final updatedPoll = initialPoll.copyWith(options: switchedOptions);
-
-      expect(updatedPoll.totalVotes, 1);
-      expect(updatedPoll.userVotedOptionId('user_a'), '1');
-      expect(updatedPoll.options[0].votes, 0);
-      expect(updatedPoll.options[1].votes, 1);
     });
   });
 

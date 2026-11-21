@@ -506,10 +506,38 @@ class _AttendeeRowState extends State<_AttendeeRow> {
                 OutlinedButton.icon(
                   onPressed: _isProcessing
                       ? null
-                      : () => _handleAction(
-                          'remove',
-                          () => state.removeAttendee(widget.req.id),
-                        ),
+                      : () async {
+                          final personName = _AttendeeRow.resolveRequesterName(user);
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: Text('Remove $personName?'),
+                              content: const Text(
+                                'They will be removed from this plan and will lose access to the group chat.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.destructive,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: const Text('Remove'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed == true) {
+                            await _handleAction(
+                              'remove',
+                              () => state.removeAttendee(widget.req.id),
+                            );
+                          }
+                        },
                   icon: _isProcessing && _processingAction == 'remove'
                       ? const SizedBox(
                           width: 12,

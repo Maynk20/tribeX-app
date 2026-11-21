@@ -266,7 +266,7 @@ function Profile() {
             <ul className="flex flex-col gap-2">
               {joinedSorted.map((p) => {
                 const ended = isEventEnded(p);
-                const canRate = ended && (p.is_online || !!p.checked_in_at);
+                const canRate = ended;
                 return (
                   <li key={p.id} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-card p-3">
                     <div className="flex items-center gap-3">
@@ -310,11 +310,6 @@ function Profile() {
                         <Sparkles className="h-3 w-3" /> Event ended · Rate your squad
                       </button>
                     )}
-                    {ended && !canRate && (
-                      <p className="text-center text-[10px] text-muted-foreground">
-                        Rating unlocks after check-in at the venue.
-                      </p>
-                    )}
                   </li>
                 );
               })}
@@ -329,53 +324,64 @@ function Profile() {
             {hostedSorted.map((p) => {
               const pending = pendingByActivity[p.id] ?? 0;
               const attendees = Math.max(0, (p.total_slots ?? 0) - (p.slots_left ?? 0));
+              const isEnded = isEventEnded(p);
               return (
-                <li key={p.id} className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-lg">
-                    {emojiFor(p.category)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{p.title}</p>
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(p.date_time).toLocaleDateString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {attendees}/{p.total_slots} joined
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Trophy className="h-3 w-3" /> Hosting
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      onClick={() => setManageActivityId(p.id)}
-                      className={`relative flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 ${
-                        pending > 0
-                          ? "bg-primary text-primary-foreground hover:scale-105"
-                          : "border border-border/60 bg-background text-foreground hover:border-primary/60"
-                      }`}
-                      title="Manage requests"
-                    >
-                      Manage
-                      {pending > 0 && (
-                        <span className="ml-0.5 rounded-full bg-background/25 px-1.5 py-0.5 text-[10px] font-bold">
-                          {pending}
+                <li key={p.id} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-card p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-lg">
+                      {emojiFor(p.category)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{p.title}</p>
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(p.date_time).toLocaleDateString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                         </span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setDeletingPlan(p)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
-                      aria-label="Delete plan"
-                      title="Delete plan"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {attendees}/{p.total_slots} joined
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Trophy className="h-3 w-3" /> Hosting
+                        </span>
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        onClick={() => setManageActivityId(p.id)}
+                        className={`relative flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95 ${
+                          pending > 0
+                            ? "bg-primary text-primary-foreground hover:scale-105"
+                            : "border border-border/60 bg-background text-foreground hover:border-primary/60"
+                        }`}
+                        title="Manage requests"
+                      >
+                        Manage
+                        {pending > 0 && (
+                          <span className="ml-0.5 rounded-full bg-background/25 px-1.5 py-0.5 text-[10px] font-bold">
+                            {pending}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setDeletingPlan(p)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
+                        aria-label="Delete plan"
+                        title="Delete plan"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
+                  {isEnded && (
+                    <button
+                      onClick={() => setRatingPlan(p)}
+                      className="flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition active:scale-95"
+                    >
+                      <Sparkles className="h-3 w-3" /> Event ended · Rate your squad
+                    </button>
+                  )}
                 </li>
               );
             })}

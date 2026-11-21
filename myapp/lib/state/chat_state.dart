@@ -8,11 +8,9 @@ import '../core/utils/date_formatter.dart';
 import '../models/activity.dart';
 import '../models/expense.dart';
 import '../models/message.dart';
-import '../models/poll.dart';
 import '../models/rating_item.dart';
 import '../models/user_profile.dart';
 import '../services/notification_service.dart';
-import '../services/poll_service.dart';
 import '../services/supabase_service.dart';
 
 class ChatState extends ChangeNotifier {
@@ -20,13 +18,8 @@ class ChatState extends ChangeNotifier {
 
   final Map<String, List<Message>> _messagesByActivity = {};
   final Map<String, Expense> _expenses = {};
-  final Map<String, Poll> _polls = {};
   final List<RatingItem> _ratings = [];
   final Set<String> _pendingExpenseFetches = {};
-  final Set<String> _pendingPollFetches = {};
-  final Set<String> _votingPollIds = {};
-  final Map<String, int> _userPollVotes = {};
-  final Map<String, DateTime> _userPollVoteTimes = {};
   final Map<String, RealtimeChannel> _activeChannels = {};
   final Map<String, List<ExpenseMember>> _squadMembersByActivity = {};
   final Map<String, UserProfile> _profileCache = {};
@@ -35,17 +28,11 @@ class ChatState extends ChangeNotifier {
   List<Activity> _userChats = [];
   bool _isLoadingUserChats = false;
   bool _isDisposed = false;
-  PollService _pollService = PollService();
   String? _activeChatActivityId;
 
   String? get activeChatActivityId => _activeChatActivityId;
   void setActiveChat(String? activityId) {
     _activeChatActivityId = activityId;
-  }
-
-  @visibleForTesting
-  void setPollServiceForTesting(PollService service) {
-    _pollService = service;
   }
 
   List<Activity> get userChats => List.unmodifiable(_userChats);
@@ -73,13 +60,6 @@ class ChatState extends ChangeNotifier {
 
   Expense? getExpense(String expenseId) => _expenses[expenseId];
 
-  Poll? getPoll(String pollId) => _polls[pollId];
-
-  @visibleForTesting
-  void setPollForTesting(Poll poll) {
-    _polls[poll.id] = poll;
-  }
-
   @visibleForTesting
   void setSquadMembersForTesting(
     String activityId,
@@ -104,28 +84,6 @@ class ChatState extends ChangeNotifier {
       await fetchExpense(expenseId);
     } finally {
       _pendingExpenseFetches.remove(expenseId);
-    }
-  }
-
-  Future<void> fetchPollIfNeeded(String pollId, {bool force = false}) async {
-    if (!force && _polls.containsKey(pollId)) {
-      if (!_pendingPollFetches.contains(pollId) && !_isDisposed) {
-        _pendingPollFetches.add(pollId);
-        unawaited(
-          fetchPoll(pollId).whenComplete(() {
-            _pendingPollFetches.remove(pollId);
-          }),
-        );
-      }
-      return;
-    }
-    if (_pendingPollFetches.contains(pollId) || _isDisposed) return;
-
-    _pendingPollFetches.add(pollId);
-    try {
-      await fetchPoll(pollId);
-    } finally {
-      _pendingPollFetches.remove(pollId);
     }
   }
 
@@ -249,10 +207,8 @@ class ChatState extends ChangeNotifier {
 
       _messagesByActivity[activityId] = merged;
 
-      // Pre-fetch all polls and expenses in messages in background
+      // Pre-fetch all expenses in messages in background
       for (final m in msgs) {
-        final pid = m.pollId;
-        if (pid != null) unawaited(fetchPollIfNeeded(pid));
         final eid = m.expenseId;
         if (eid != null) unawaited(fetchExpenseIfNeeded(eid));
       }
@@ -397,8 +353,6 @@ class ChatState extends ChangeNotifier {
       _messagesByActivity[activityId] = merged;
 
       for (final m in olderMsgs) {
-        final pid = m.pollId;
-        if (pid != null) unawaited(fetchPollIfNeeded(pid));
         final eid = m.expenseId;
         if (eid != null) unawaited(fetchExpenseIfNeeded(eid));
       }
@@ -521,82 +475,6 @@ class ChatState extends ChangeNotifier {
     }
   }
 
-  bool _pollsEqual(Poll a, Poll b) {
-    if (a.id != b.id) return false;
-    if (a.question != b.question) return false;
-    if (a.isClosed != b.isClosed) return false;
-    if (a.options.length != b.options.length) return false;
-    for (int i = 0; i < a.options.length; i++) {
-      final optA = a.options[i];
-      final optB = b.options[i];
-      if (optA.id != optB.id || optA.text != optB.text) return false;
-      if (optA.voterIds.length != optB.voterIds.length) return false;
-      final setA = optA.voterIds.map((v) => v.trim().toLowerCase()).toSet();
-      final setB = optB.voterIds.map((v) => v.trim().toLowerCase()).toSet();
-      if (!setA.containsAll(setB)) return false;
-    }
-    return true;
-  }
-
-  Future<void> fetchPoll(String pollId, {bool force = false}) async {
-    final client = SupabaseService.client;
-    if (client == null || _isDisposed) return;
-    // Don't overwrite state while user is actively voting on this poll unless forced
-    if (!force && _votingPollIds.contains(pollId)) return;
-
-    try {
-      final fetchedPoll = await _pollService.fetchPoll(pollId);
-
-      if (fetchedPoll == null) {
-        return;
-      }
-
-      if (!_isDisposed && (force || !_votingPollIds.contains(pollId))) {
-        Poll poll = fetchedPoll;
-
-        // Safeguard recent local user vote against replication delay:
-        final recentOptionIdx = _userPollVotes[pollId];
-        final recentVoteTime = _userPollVoteTimes[pollId];
-        final currentUid = client.auth.currentUser?.id.trim().toLowerCase();
-
-        if (recentOptionIdx != null &&
-            recentVoteTime != null &&
-            currentUid != null &&
-            DateTime.now().difference(recentVoteTime).inSeconds < 15) {
-          final serverVoted = poll.userVotedOptionId(currentUid);
-          if (serverVoted == null ||
-              serverVoted != recentOptionIdx.toString()) {
-            // Server hasn't reflected local vote yet; merge local vote into poll
-            final mergedOptions = poll.options.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final opt = entry.value;
-              final voters = opt.voterIds
-                  .where((v) => v.trim().toLowerCase() != currentUid)
-                  .toList();
-              if (idx == recentOptionIdx) {
-                voters.add(currentUid);
-              }
-              return opt.copyWith(voterIds: voters);
-            }).toList();
-            poll = poll.copyWith(options: mergedOptions);
-          } else {
-            // Server has caught up; clear tracking
-            _userPollVotes.remove(pollId);
-            _userPollVoteTimes.remove(pollId);
-          }
-        }
-
-        final existing = _polls[poll.id];
-        if (existing == null || !_pollsEqual(existing, poll)) {
-          _polls[poll.id] = poll;
-          notifyListeners();
-        }
-      }
-    } catch (e) {
-      debugPrint('fetchPoll fatal error: $e');
-    }
-  }
-
   void _subscribeActivityChat(String activityId) {
     if (_activeChannels.containsKey(activityId) || _isDisposed) return;
     final client = SupabaseService.client;
@@ -616,58 +494,6 @@ class ChatState extends ChangeNotifier {
           callback: (payload) {
             if (!_isDisposed) {
               _handleRealtimeMessageEvent(activityId, payload);
-            }
-          },
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'polls',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'activity_id',
-            value: activityId,
-          ),
-          callback: (payload) {
-            if (!_isDisposed) {
-              if (payload.eventType == PostgresChangeEvent.delete) {
-                final pollId = payload.oldRecord['id']?.toString();
-                if (pollId != null) {
-                  final existing = _polls[pollId];
-                  if (existing != null) {
-                    _polls[pollId] = existing.copyWith(isDeleted: true);
-                    notifyListeners();
-                  }
-                }
-                return;
-              }
-              final pollId =
-                  payload.newRecord['id']?.toString() ??
-                  payload.oldRecord['id']?.toString();
-              if (pollId != null) {
-                fetchPoll(pollId, force: true);
-              }
-            }
-          },
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'poll_votes',
-          callback: (payload) {
-            if (!_isDisposed) {
-              final pollId =
-                  payload.newRecord['poll_id']?.toString() ??
-                  payload.oldRecord['poll_id']?.toString();
-              if (pollId != null) {
-                fetchPoll(pollId, force: true);
-              } else {
-                // On DELETE events (vote retraction), oldRecord may lack poll_id under default REPLICA IDENTITY.
-                // Refresh all loaded polls for this activity so vote counts remain synced across all users.
-                for (final pId in _polls.keys.toList()) {
-                  fetchPoll(pId, force: true);
-                }
-              }
             }
           },
         )
@@ -784,8 +610,6 @@ class ChatState extends ChangeNotifier {
         return a.id.compareTo(b.id);
       });
 
-      final pid = msg.pollId;
-      if (pid != null) unawaited(fetchPollIfNeeded(pid));
       final eid = msg.expenseId;
       if (eid != null) unawaited(fetchExpenseIfNeeded(eid));
 
@@ -801,9 +625,7 @@ class ChatState extends ChangeNotifier {
                 : 'Squad Member');
 
         String notifBody = msg.text;
-        if (msg.pollId != null) {
-          notifBody = '📊 Created a group poll';
-        } else if (msg.expenseId != null) {
+        if (msg.expenseId != null) {
           notifBody = '💰 Added an expense split';
         }
 
@@ -1441,390 +1263,30 @@ class ChatState extends ChangeNotifier {
     }
   }
 
-  Future<bool> createPoll({
-    required String activityId,
-    required String creatorId,
-    required String question,
-    required List<String> optionTexts,
-    UserProfile? creator,
-  }) async {
+  Future<void> fetchRatings(String planId) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return false;
-
-    // Enforce server-side authenticated user identity
-    final authUser = client.auth.currentUser;
-    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
-    if (verifiedCreatorId.isEmpty) {
-      debugPrint('createPoll error: Unauthenticated user');
-      return false;
-    }
+    if (client == null || _isDisposed || planId.isEmpty) return;
 
     try {
-      final pollId = const Uuid().v4();
+      final res = await client
+          .from('ratings')
+          .select()
+          .eq('plan_id', planId);
+      final list = (res as List)
+          .map((json) => RatingItem.fromJson(json as Map<String, dynamic>))
+          .toList();
 
-      // Optimistically store poll immediately so it renders in 0 ms
-      final initialPoll = Poll(
-        id: pollId,
-        activityId: activityId,
-        creatorId: verifiedCreatorId,
-        question: question.trim(),
-        options: optionTexts
-            .asMap()
-            .entries
-            .map(
-              (e) => PollOption(
-                id: e.key.toString(),
-                text: e.value,
-                voterIds: const [],
-              ),
-            )
-            .toList(),
-        createdAt: DateTime.now().toUtc(),
-      );
-      _polls[pollId] = initialPoll;
-      notifyListeners();
-
-      await _pollService.createPoll(
-        activityId: activityId,
-        creatorId: verifiedCreatorId,
-        question: question,
-        optionTexts: optionTexts,
-        clientPollId: pollId,
-      );
-
-      // TanStack-compatible format: [[poll:<uuid>]] <question>
-      final formattedText = '[[poll:$pollId]] ${question.trim()}';
-
-      final messageSent = await sendMessage(
-        activityId: activityId,
-        senderId: verifiedCreatorId,
-        text: formattedText,
-        sender: creator,
-      );
-
-      if (!messageSent) {
-        debugPrint(
-          'createPoll: poll $pollId was saved, but its chat message failed',
-        );
-        return false;
-      }
-
-      await fetchPoll(pollId, force: true);
-      return true;
-    } catch (e) {
-      debugPrint('createPoll error: $e');
-      return false;
-    }
-  }
-
-  Future<bool> updatePoll({
-    required String pollId,
-    required String creatorId,
-    required String question,
-    List<String>? optionTexts,
-  }) async {
-    if (_isDisposed) return false;
-    final client = SupabaseService.client;
-    final authUser = client?.auth.currentUser;
-    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
-    if (verifiedCreatorId.isEmpty) return false;
-
-    final currentPoll = _polls[pollId];
-    if (currentPoll != null) {
-      List<PollOption>? updatedOptions;
-      if (optionTexts != null && optionTexts.length >= 2) {
-        updatedOptions = optionTexts
-            .asMap()
-            .entries
-            .map(
-              (e) => PollOption(
-                id: e.key.toString(),
-                text: e.value,
-                voterIds: currentPoll.options.length > e.key
-                    ? currentPoll.options[e.key].voterIds
-                    : const [],
-              ),
-            )
-            .toList();
-      }
-      _polls[pollId] = currentPoll.copyWith(
-        question: question.trim(),
-        options: updatedOptions,
-      );
-      notifyListeners();
-    }
-
-    if (client == null) {
-      return true;
-    }
-
-    try {
-      final success = await _pollService.updatePoll(
-        pollId: pollId,
-        creatorId: verifiedCreatorId,
-        question: question,
-        optionTexts: optionTexts,
-      );
-
-      if (success) {
-        // Synchronize in-memory message text if present in activity messages
-        for (final entry in _messagesByActivity.entries) {
-          final idx = entry.value.indexWhere((m) => m.pollId == pollId);
-          if (idx != -1) {
-            final old = entry.value[idx];
-            entry.value[idx] = old.copyWith(
-              text: '[[poll:$pollId]] ${question.trim()}',
-            );
-            notifyListeners();
-            break;
-          }
+      for (final r in list) {
+        final idx = _ratings.indexWhere((existing) => existing.id == r.id);
+        if (idx != -1) {
+          _ratings[idx] = r;
+        } else {
+          _ratings.add(r);
         }
-        await fetchPoll(pollId, force: true);
-      } else if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        notifyListeners();
       }
-      return success;
-    } catch (e) {
-      debugPrint('updatePoll error: $e');
-      if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        notifyListeners();
-      }
-      return false;
-    }
-  }
-
-  Future<bool> togglePollClosed({
-    required String pollId,
-    required String creatorId,
-    required bool close,
-  }) async {
-    if (_isDisposed) return false;
-    final client = SupabaseService.client;
-    final authUser = client?.auth.currentUser;
-    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
-    if (verifiedCreatorId.isEmpty) return false;
-
-    final currentPoll = _polls[pollId];
-    if (currentPoll != null) {
-      _polls[pollId] = currentPoll.copyWith(
-        closedAt: close ? DateTime.now().toUtc() : null,
-        clearClosedAt: !close,
-      );
-      notifyListeners();
-    }
-
-    if (client == null) {
-      return true;
-    }
-
-    try {
-      final success = await _pollService.togglePollClosed(
-        pollId: pollId,
-        creatorId: verifiedCreatorId,
-        close: close,
-      );
-
-      if (success) {
-        await fetchPoll(pollId, force: true);
-      } else if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        notifyListeners();
-      }
-      return success;
-    } catch (e) {
-      debugPrint('togglePollClosed error: $e');
-      if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        notifyListeners();
-      }
-      return false;
-    }
-  }
-
-  Future<bool> deletePoll({
-    required String pollId,
-    required String creatorId,
-    required String activityId,
-  }) async {
-    if (_isDisposed) return false;
-    final client = SupabaseService.client;
-    final authUser = client?.auth.currentUser;
-    final verifiedCreatorId = (authUser?.id ?? creatorId).trim().toLowerCase();
-    if (verifiedCreatorId.isEmpty) return false;
-
-    final currentPoll = _polls[pollId];
-    if (currentPoll != null) {
-      _polls[pollId] = currentPoll.copyWith(isDeleted: true);
-      notifyListeners();
-    }
-
-    if (client == null) {
-      return true;
-    }
-
-    try {
-      final success = await _pollService.deletePoll(
-        pollId: pollId,
-        creatorId: verifiedCreatorId,
-      );
-
-      if (!success && currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        notifyListeners();
-      }
-      return success;
-    } catch (e) {
-      debugPrint('deletePoll error: $e');
-      if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        notifyListeners();
-      }
-      return false;
-    }
-  }
-
-  Future<bool> votePoll(String pollId, String optionId, String userId) async {
-    final client = SupabaseService.client;
-    final authUser = client?.auth.currentUser;
-    final verifiedUserId = (authUser?.id ?? userId).trim().toLowerCase();
-    if (verifiedUserId.isEmpty) {
-      debugPrint('votePoll error: Unauthenticated user');
-      return false;
-    }
-
-    final currentPoll = _polls[pollId];
-    if (currentPoll != null && (currentPoll.isClosed || currentPoll.isDeleted)) {
-      debugPrint('votePoll error: Poll is closed or deleted');
-      return false;
-    }
-
-    int optionIdx = -1;
-    if (currentPoll != null) {
-      optionIdx = currentPoll.options.indexWhere(
-        (o) => o.id == optionId || o.text == optionId,
-      );
-    }
-    if (optionIdx == -1) {
-      optionIdx = int.tryParse(optionId) ?? 0;
-    }
-
-    // Lock poll ID and record local vote to prevent background periodic sync from overwriting optimistic UI
-    _votingPollIds.add(pollId);
-    _userPollVotes[pollId] = optionIdx;
-    _userPollVoteTimes[pollId] = DateTime.now();
-
-    // Optimistic local update (instant 0 ms visual response)
-    if (currentPoll != null) {
-      final updatedOptions = currentPoll.options.asMap().entries.map((entry) {
-        final idx = entry.key;
-        final opt = entry.value;
-        final newVoters = opt.voterIds
-            .where((v) => v.trim().toLowerCase() != verifiedUserId)
-            .toList();
-        if (idx == optionIdx) {
-          newVoters.add(verifiedUserId);
-        }
-        return opt.copyWith(voterIds: newVoters);
-      }).toList();
-
-      _polls[pollId] = currentPoll.copyWith(options: updatedOptions);
       if (!_isDisposed) notifyListeners();
-    }
-
-    if (client == null) {
-      // Local/offline test mode
-      _votingPollIds.remove(pollId);
-      return true;
-    }
-
-    try {
-      final ok = await _pollService.votePoll(
-        pollId: pollId,
-        userId: verifiedUserId,
-        optionIndex: optionIdx,
-      );
-
-      _votingPollIds.remove(pollId);
-      if (ok) {
-        await fetchPoll(pollId, force: true);
-      } else if (currentPoll != null) {
-        _userPollVotes.remove(pollId);
-        _userPollVoteTimes.remove(pollId);
-        _polls[pollId] = currentPoll;
-        if (!_isDisposed) notifyListeners();
-      }
-      return ok;
     } catch (e) {
-      debugPrint('votePoll error: $e');
-      _votingPollIds.remove(pollId);
-      _userPollVotes.remove(pollId);
-      _userPollVoteTimes.remove(pollId);
-      if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        if (!_isDisposed) notifyListeners();
-      }
-      return false;
-    } finally {
-      _votingPollIds.remove(pollId);
-    }
-  }
-
-  Future<bool> retractPollVote(String pollId, String userId) async {
-    if (_isDisposed) return false;
-
-    final client = SupabaseService.client;
-    final authUser = client?.auth.currentUser;
-    final verifiedUserId = (authUser?.id ?? userId).trim().toLowerCase();
-    if (verifiedUserId.isEmpty) return false;
-
-    _votingPollIds.add(pollId);
-    _userPollVotes.remove(pollId);
-    _userPollVoteTimes.remove(pollId);
-
-    final currentPoll = _polls[pollId];
-    if (currentPoll != null) {
-      final updatedOptions = currentPoll.options.map((opt) {
-        final newVoters = opt.voterIds
-            .where((v) => v.trim().toLowerCase() != verifiedUserId)
-            .toList();
-        return opt.copyWith(voterIds: newVoters);
-      }).toList();
-
-      _polls[pollId] = currentPoll.copyWith(options: updatedOptions);
-      if (!_isDisposed) notifyListeners();
-    }
-
-    if (client == null) {
-      _votingPollIds.remove(pollId);
-      return true;
-    }
-
-    try {
-      final ok = await _pollService.retractVote(
-        pollId: pollId,
-        userId: verifiedUserId,
-      );
-
-      _votingPollIds.remove(pollId);
-      if (ok) {
-        await fetchPoll(pollId, force: true);
-      } else if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        if (!_isDisposed) notifyListeners();
-      }
-      return ok;
-    } catch (e) {
-      debugPrint('retractPollVote error: $e');
-      _votingPollIds.remove(pollId);
-      if (currentPoll != null) {
-        _polls[pollId] = currentPoll;
-        if (!_isDisposed) notifyListeners();
-      }
-      return false;
-    } finally {
-      _votingPollIds.remove(pollId);
+      debugPrint('fetchRatings error: $e');
     }
   }
 
@@ -1878,10 +1340,6 @@ class ChatState extends ChangeNotifier {
     _activeChannels.clear();
     _messagesByActivity.clear();
     _expenses.clear();
-    _polls.clear();
-    _userPollVotes.clear();
-    _userPollVoteTimes.clear();
-    _votingPollIds.clear();
     _ratings.clear();
     if (!_isDisposed) notifyListeners();
   }

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myapp/models/expense.dart';
 import 'package:myapp/models/message.dart';
-import 'package:myapp/models/poll.dart';
 import 'package:myapp/services/location_service.dart';
 import 'package:myapp/state/activities_state.dart';
 
@@ -201,33 +200,21 @@ void main() {
   });
 
   group('3. Messaging Dual-Format Compatibility & State Management', () {
-    test(
-      'Parses TanStack web format [[expense:<uuid>]] and [[poll:<uuid>]]',
-      () {
-        final expMsg = Message(
-          id: 'm1',
-          activityId: 'act1',
-          senderId: 'u1',
-          text: '[[expense:11111111-2222-3333-4444-555555555555]] Turf rent · ₹1200.00',
-          createdAt: DateTime.now(),
-        );
-        expect(
-          expMsg.expenseId,
-          equals('11111111-2222-3333-4444-555555555555'),
-        );
+    test('Parses TanStack web format [[expense:<uuid>]]', () {
+      final expMsg = Message(
+        id: 'm1',
+        activityId: 'act1',
+        senderId: 'u1',
+        text: '[[expense:11111111-2222-3333-4444-555555555555]] Turf rent · ₹1200.00',
+        createdAt: DateTime.now(),
+      );
+      expect(
+        expMsg.expenseId,
+        equals('11111111-2222-3333-4444-555555555555'),
+      );
+    });
 
-        final pollMsg = Message(
-          id: 'm2',
-          activityId: 'act1',
-          senderId: 'u1',
-          text: '[[poll:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee]] What time should we start?',
-          createdAt: DateTime.now(),
-        );
-        expect(pollMsg.pollId, equals('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'));
-      },
-    );
-
-    test('Parses legacy Flutter formats EXPENSE:<id> and POLL:<id>', () {
+    test('Parses legacy Flutter formats EXPENSE:<id>', () {
       final expMsg = Message(
         id: 'm1',
         activityId: 'act1',
@@ -236,18 +223,9 @@ void main() {
         createdAt: DateTime.now(),
       );
       expect(expMsg.expenseId, equals('11111111-2222-3333-4444-555555555555'));
-
-      final pollMsg = Message(
-        id: 'm2',
-        activityId: 'act1',
-        senderId: 'u1',
-        text: 'POLL:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-        createdAt: DateTime.now(),
-      );
-      expect(pollMsg.pollId, equals('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'));
     });
 
-    test('Plain text messages return null for expenseId and pollId', () {
+    test('Plain text messages return null for expenseId', () {
       final msg = Message(
         id: 'm3',
         activityId: 'act1',
@@ -256,7 +234,6 @@ void main() {
         createdAt: DateTime.now(),
       );
       expect(msg.expenseId, isNull);
-      expect(msg.pollId, isNull);
     });
 
     test('Message state transitions: sending, failure, and retry preserve message text', () {
@@ -446,122 +423,6 @@ void main() {
 
       // Verify paid count
       expect(expense.paidCount, equals(1));
-    });
-  });
-
-  group('5. Chat Poll System Comprehensive Tests', () {
-    test(
-      'Parses poll message with whitespace and arbitrary alphanumeric ID',
-      () {
-        final msg1 = Message(
-          id: 'm1',
-          activityId: 'a1',
-          senderId: 'u1',
-          text: '  [[poll:custom_poll_999]] Saturday game time?  ',
-          createdAt: DateTime.now(),
-        );
-        expect(msg1.pollId, equals('custom_poll_999'));
-
-        final msg2 = Message(
-          id: 'm2',
-          activityId: 'a1',
-          senderId: 'u1',
-          text: 'POLL:quick_poll_42 Which turf?',
-          createdAt: DateTime.now(),
-        );
-        expect(msg2.pollId, equals('quick_poll_42'));
-      },
-    );
-
-    test('Poll.fromJson parses options and votes correctly', () {
-      final json = {
-        'id': 'poll-abc',
-        'activity_id': 'act-1',
-        'created_by': 'user-1',
-        'question': 'Which ground?',
-        'options': ['Turf A', 'Turf B', 'Turf C'],
-        'poll_votes': [
-          {'user_id': 'voter-1', 'option_index': 0},
-          {'user_id': 'voter-2', 'option_index': 0},
-          {'user_id': 'voter-3', 'option_index': 1},
-        ],
-        'created_at': DateTime.now().toIso8601String(),
-      };
-
-      final poll = Poll.fromJson(json);
-      expect(poll.id, equals('poll-abc'));
-      expect(poll.question, equals('Which ground?'));
-      expect(poll.options.length, equals(3));
-      expect(poll.options[0].text, equals('Turf A'));
-      expect(poll.options[0].votes, equals(2));
-      expect(poll.options[1].votes, equals(1));
-      expect(poll.options[2].votes, equals(0));
-      expect(poll.totalVotes, equals(3));
-      expect(poll.hasVoted('voter-1'), isTrue);
-      expect(poll.hasVoted('voter-999'), isFalse);
-      expect(poll.userVotedOptionId('voter-1'), equals('0'));
-      expect(poll.userVotedOptionId('voter-3'), equals('1'));
-      expect(poll.isClosed, isFalse);
-    });
-
-    test('Poll parses closed_at timestamp correctly', () {
-      final closedTime = DateTime.now().subtract(const Duration(hours: 1));
-      final json = {
-        'id': 'poll-closed',
-        'activity_id': 'act-1',
-        'created_by': 'user-1',
-        'question': 'Morning or Evening?',
-        'options': ['Morning', 'Evening'],
-        'closed_at': closedTime.toIso8601String(),
-        'created_at': DateTime.now().toIso8601String(),
-      };
-
-      final poll = Poll.fromJson(json);
-      expect(poll.isClosed, isTrue);
-      expect(poll.closedAt, isNotNull);
-    });
-
-    test('Poll vote toggling and retraction logic', () {
-      final opt0 = PollOption(
-        id: '0',
-        text: 'Option A',
-        voterIds: ['u1', 'u2'],
-      );
-      final opt1 = PollOption(id: '1', text: 'Option B', voterIds: ['u3']);
-      final poll = Poll(
-        id: 'p1',
-        activityId: 'a1',
-        creatorId: 'u1',
-        question: 'Pick one',
-        options: [opt0, opt1],
-        createdAt: DateTime.now(),
-      );
-
-      // Verify voter u1 voted on option 0
-      expect(poll.userVotedOptionId('u1'), equals('0'));
-
-      // Switch vote for u1 to option 1
-      final switchedOptions = poll.options.map((opt) {
-        final newVoters = List<String>.from(opt.voterIds)..remove('u1');
-        if (opt.id == '1') newVoters.add('u1');
-        return opt.copyWith(voterIds: newVoters);
-      }).toList();
-      final switchedPoll = poll.copyWith(options: switchedOptions);
-
-      expect(switchedPoll.userVotedOptionId('u1'), equals('1'));
-      expect(switchedPoll.options[0].votes, equals(1));
-      expect(switchedPoll.options[1].votes, equals(2));
-
-      // Retract vote for u1 completely
-      final retractedOptions = switchedPoll.options.map((opt) {
-        final newVoters = List<String>.from(opt.voterIds)..remove('u1');
-        return opt.copyWith(voterIds: newVoters);
-      }).toList();
-      final retractedPoll = switchedPoll.copyWith(options: retractedOptions);
-
-      expect(retractedPoll.hasVoted('u1'), isFalse);
-      expect(retractedPoll.userVotedOptionId('u1'), isNull);
-      expect(retractedPoll.totalVotes, equals(2));
     });
   });
 }

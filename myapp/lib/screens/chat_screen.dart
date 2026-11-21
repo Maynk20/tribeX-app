@@ -7,13 +7,12 @@ import '../core/theme/app_colors.dart';
 import '../core/utils/app_toast.dart';
 import '../core/utils/date_formatter.dart';
 import '../models/activity.dart';
+import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/chat_state.dart';
 import '../state/notifications_state.dart';
-import '../widgets/chat/create_poll_modal.dart';
 import '../widgets/chat/expense_card_widget.dart';
 import '../widgets/chat/message_bubble_widget.dart';
-import '../widgets/chat/poll_card_widget.dart';
 import '../widgets/chat/split_expense_modal.dart';
 import '../widgets/common/report_modal.dart';
 
@@ -383,17 +382,17 @@ class _ChatScreenState extends State<ChatScreen> {
               tooltip: 'Meeting details',
               onPressed: () => _showVirtualMeetingDetails(context, hostName),
             ),
-          if (!isHost && host != null)
+          if (!isHost) ...[
             IconButton(
-              icon: const Icon(Icons.person_remove_outlined, size: 20),
-              tooltip: 'Block host',
+              icon: const Icon(Icons.logout, size: 20),
+              tooltip: 'Leave activity',
               onPressed: () {
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: Text('Block $hostName?'),
+                    title: const Text('Leave Activity?'),
                     content: const Text(
-                      "You won't see their events anymore in your feed.",
+                      'Are you sure you want to leave this plan? You will lose access to the group chat.',
                     ),
                     actions: [
                       TextButton(
@@ -401,23 +400,65 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: const Text('Cancel'),
                       ),
                       ElevatedButton(
-                        onPressed: () {
-                          authState.blockUser(host.id);
+                        onPressed: () async {
                           Navigator.of(ctx).pop();
-                          Navigator.of(context).pop();
-                          AppToast.show(context, 'Host blocked');
+                          final actState = context.read<ActivitiesState>();
+                          final ok = await actState.leaveActivity(widget.activity.id);
+                          if (!context.mounted) return;
+                          if (ok) {
+                            AppToast.show(context, 'You have left the plan');
+                            Navigator.of(context).pop();
+                          } else {
+                            AppToast.show(context, 'Could not leave plan', isError: true);
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.destructive,
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text('Block'),
+                        child: const Text('Leave'),
                       ),
                     ],
                   ),
                 );
               },
             ),
+            if (host != null)
+              IconButton(
+                icon: const Icon(Icons.person_remove_outlined, size: 20),
+                tooltip: 'Block host',
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text('Block $hostName?'),
+                      content: const Text(
+                        "You won't see their events anymore in your feed.",
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            authState.blockUser(host.id);
+                            Navigator.of(ctx).pop();
+                            Navigator.of(context).pop();
+                            AppToast.show(context, 'Host blocked');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.destructive,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Block'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -522,11 +563,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     messages[msgIndex - 1].senderId != m.senderId ||
                     isFirstMsgOfDay ||
                     messages[msgIndex - 1].isSystemEvent ||
-                    messages[msgIndex - 1].expenseId != null ||
-                    messages[msgIndex - 1].pollId != null;
+                    messages[msgIndex - 1].expenseId != null;
 
                 final expId = m.expenseId;
-                final pollId = m.pollId;
                 final isMine = me != null && m.senderId == me.id;
 
                 Widget contentWidget;
@@ -536,59 +575,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: ExpenseCardWidget(
                       expenseId: expId,
                       currentUserId: me?.id,
-                    ),
-                  );
-                } else if (pollId != null) {
-                  contentWidget = RepaintBoundary(
-                    key: ValueKey('poll_$pollId'),
-                    child: Column(
-                      crossAxisAlignment: isMine
-                          ? CrossAxisAlignment.end
-                          : CrossAxisAlignment.start,
-                      children: [
-                        PollCardWidget(
-                          pollId: pollId,
-                          currentUserId: me?.id,
-                        ),
-                        if (m.isFailed)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: 4,
-                              right: 8,
-                              bottom: 4,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline,
-                                  size: 14,
-                                  color: AppColors.destructive,
-                                ),
-                                const SizedBox(width: 4),
-                                const Text(
-                                  'Poll message failed to post · ',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.destructive,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                InkWell(
-                                  onTap: () => chatState.retrySendMessage(m),
-                                  child: const Text(
-                                    'Retry',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
                     ),
                   );
                 } else {
@@ -727,59 +713,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                                 Text(
                                   'UPI bill split',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: AppColors.mutedForegroundLight,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(width: 1, height: 40, color: border),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () {
-                        setState(() => _attachMenuOpen = false);
-                        CreatePollModal.show(
-                          context,
-                          activityId: widget.activity.id,
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(14),
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryMuted,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.bar_chart,
-                                color: AppColors.primary,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Create poll',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  'Group decision',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: AppColors.mutedForegroundLight,

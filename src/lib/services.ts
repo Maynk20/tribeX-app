@@ -489,6 +489,20 @@ export async function removeJoinRequest(requestId: string): Promise<JoinRequest>
   return data as JoinRequest;
 }
 
+export async function leaveActivity(activityId: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) throw new Error("Sign in to leave activity");
+
+  const { error } = await supabase
+    .from("join_requests")
+    .update({ status: "rejected" })
+    .eq("activity_id", activityId)
+    .eq("user_id", uid);
+
+  if (error) throw error;
+}
+
 // ---------- Notifications ----------
 export async function listNotifications(userId: string): Promise<Notification[]> {
   const { data, error } = await supabase
@@ -584,6 +598,10 @@ export async function uploadAvatar(userId: string, file: File): Promise<string> 
   if (signErr) throw signErr;
   await updateProfile(userId, { avatar_url: signed.signedUrl });
   return signed.signedUrl;
+}
+
+export async function removeAvatar(userId: string): Promise<void> {
+  await updateProfile(userId, { avatar_url: null });
 }
 
 export async function saveVerifiedProfileLocation(userId: string): Promise<Profile> {
@@ -1056,184 +1074,6 @@ export async function listEventMemories(activityId: string): Promise<EventMemory
     .limit(25);
   if (error) throw error;
   return data ?? [];
-}
-
-// ---------- Polls ----------
-export type Poll = {
-  id: string;
-  activity_id: string;
-  created_by: string;
-  question: string;
-  options: string[];
-  closed_at: string | null;
-  created_at: string;
-};
-export type PollVote = { id: string; poll_id: string; user_id: string; option_index: number; created_at: string };
-export type PollWithVotes = Poll & { votes: PollVote[] };
-
-export async function createPoll(input: {
-  activityId: string;
-  question: string;
-  options: string[];
-}): Promise<Poll> {
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) throw new Error("Sign in to create a poll");
-  const q = input.question.trim();
-  const opts = input.options.map((o) => o.trim()).filter(Boolean);
-  if (!q) throw new Error("Poll question is required");
-  if (opts.length < 2) throw new Error("Add at least 2 options");
-  if (opts.length > 6) throw new Error("Max 6 options");
-  const client = supabase as unknown as {
-    from: (t: string) => {
-      insert: (r: Record<string, unknown>) => {
-        select: () => { single: () => Promise<{ data: Poll | null; error: unknown }> };
-      };
-    };
-  };
-  const { data, error } = await client
-    .from("polls")
-    .insert({ activity_id: input.activityId, created_by: uid, question: q, options: opts })
-    .select()
-    .single();
-  if (error) throw error;
-  // Drop a chat marker
-  await supabase.from("messages").insert({
-    activity_id: input.activityId,
-    sender_id: uid,
-    text: `[[poll:${data!.id}]] ${q}`,
-  });
-  return data!;
-}
-
-export async function getPoll(pollId: string): Promise<PollWithVotes | null> {
-  const client = supabase as unknown as {
-    from: (t: string) => {
-      select: (c: string) => {
-        eq: (col: string, val: string) => {
-          maybeSingle?: () => Promise<{ data: Poll | null; error: unknown }>;
-          order?: (c: string, o: { ascending: boolean }) => Promise<{ data: PollVote[] | null; error: unknown }>;
-        };
-      };
-    };
-  };
-  const { data: poll, error } = await client.from("polls").select("*").eq("id", pollId).maybeSingle!();
-  if (error) throw error;
-  if (!poll) return null;
-  const { data: votes, error: vErr } = await client.from("poll_votes").select("*").eq("poll_id", pollId).order!("created_at", { ascending: true });
-  if (vErr) throw vErr;
-  return { ...poll, votes: votes ?? [] };
-}
-
-export async function castPollVote(pollId: string, optionIndex: number): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) throw new Error("Sign in to vote");
-  const client = supabase as unknown as {
-    from: (t: string) => {
-      upsert: (r: Record<string, unknown>, opts: { onConflict: string }) => Promise<{ error: unknown }>;
-    };
-  };
-  const { error } = await client
-    .from("poll_votes")
-    .upsert({ poll_id: pollId, user_id: uid, option_index: optionIndex }, { onConflict: "poll_id,user_id" });
-  if (error) throw error;
-}
-
-export async function retractPollVote(pollId: string): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) throw new Error("Sign in to retract vote");
-  const client = supabase as unknown as {
-    from: (t: string) => {
-      delete: () => {
-        eq: (c1: string, v1: string) => {
-          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
-        };
-      };
-    };
-  };
-  const { error } = await client
-    .from("poll_votes")
-    .delete()
-    .eq("poll_id", pollId)
-    .eq("user_id", uid);
-  if (error) throw error;
-}
-
-export async function togglePollClosed(pollId: string, close: boolean): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) throw new Error("Sign in to manage poll");
-  const client = supabase as unknown as {
-    from: (t: string) => {
-      update: (p: Record<string, unknown>) => {
-        eq: (c1: string, v1: string) => {
-          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
-        };
-      };
-    };
-  };
-  const { error } = await client
-    .from("polls")
-    .update({ closed_at: close ? new Date().toISOString() : null })
-    .eq("id", pollId)
-    .eq("created_by", uid);
-  if (error) throw error;
-}
-
-export async function updatePoll(pollId: string, question: string, options?: string[]): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) throw new Error("Sign in to edit poll");
-  const payload: Record<string, unknown> = { question: question.trim() };
-  if (options && options.length >= 2) {
-    payload.options = options.map((o) => o.trim()).filter(Boolean);
-  }
-  const client = supabase as unknown as {
-    from: (t: string) => {
-      update: (p: Record<string, unknown>) => {
-        eq: (c1: string, v1: string) => {
-          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
-        };
-      };
-    };
-  };
-  const { error } = await client
-    .from("polls")
-    .update(payload)
-    .eq("id", pollId)
-    .eq("created_by", uid);
-  if (error) throw error;
-}
-
-export async function deletePoll(pollId: string): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) throw new Error("Sign in to delete poll");
-  const client = supabase as unknown as {
-    from: (t: string) => {
-      delete: () => {
-        eq: (c: string, v: string) => Promise<{ error: unknown }>;
-      };
-    };
-  };
-  // Cascade delete votes first
-  await client.from("poll_votes").delete().eq("poll_id", pollId);
-  const { error } = await (supabase as unknown as {
-    from: (t: string) => {
-      delete: () => {
-        eq: (c1: string, v1: string) => {
-          eq: (c2: string, v2: string) => Promise<{ error: unknown }>;
-        };
-      };
-    };
-  })
-    .from("polls")
-    .delete()
-    .eq("id", pollId)
-    .eq("created_by", uid);
-  if (error) throw error;
 }
 
 // ---------- Ratings (Post-Event Reviews) ----------

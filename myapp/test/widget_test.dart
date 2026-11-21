@@ -4,7 +4,6 @@ import 'package:myapp/core/constants/categories.dart';
 import 'package:myapp/models/expense.dart';
 import 'package:myapp/models/join_request.dart';
 import 'package:myapp/models/message.dart';
-import 'package:myapp/models/poll.dart';
 import 'package:myapp/models/user_profile.dart';
 import 'package:myapp/services/location_service.dart';
 import 'package:myapp/services/report_service.dart';
@@ -88,27 +87,6 @@ void main() {
       expect(expense.members.last.isPaid, isFalse);
     });
 
-    test('Poll option voting count calculation', () {
-      final poll = Poll(
-        id: "poll_1",
-        activityId: "act_1",
-        creatorId: "u1",
-        question: "Which turf time works best?",
-        options: [
-          PollOption(id: "opt_1", text: "6:00 PM", voterIds: ["u1", "u2"]),
-          PollOption(id: "opt_2", text: "8:00 PM", voterIds: ["u3"]),
-        ],
-        createdAt: DateTime.now(),
-      );
-
-      expect(poll.totalVotes, 3);
-      expect(poll.options[0].votes, 2);
-      expect(poll.options[1].votes, 1);
-      expect(poll.hasVoted("u1"), isTrue);
-      expect(poll.hasVoted("u4"), isFalse);
-      expect(poll.userVotedOptionId("u1"), "opt_1");
-    });
-
     test('JoinRequest status and pending count math', () {
       final reqs = [
         JoinRequest(
@@ -166,7 +144,6 @@ void main() {
       expect(initialMsgs, isEmpty);
 
       expect(chat.getExpense('non_existent_exp'), isNull);
-      expect(chat.getPoll('non_existent_poll'), isNull);
 
       chat.dispose();
     });
@@ -241,54 +218,6 @@ void main() {
       },
     );
 
-    test(
-      'Poll enforces single choice: voting for new option removes old voter id',
-      () {
-        final initialPoll = Poll(
-          id: "poll_1",
-          activityId: "act_1",
-          creatorId: "u1",
-          question: "Preferred game format?",
-          options: [
-            PollOption(id: "0", text: "T20", voterIds: ["u_voter1"]),
-            PollOption(id: "1", text: "ODI", voterIds: []),
-          ],
-          createdAt: DateTime.now(),
-        );
-
-        expect(initialPoll.userVotedOptionId("u_voter1"), "0");
-        expect(initialPoll.options[0].votes, 1);
-        expect(initialPoll.options[1].votes, 0);
-
-        // Simulate switching vote from option 0 to option 1
-        const targetIdx = 1;
-        const voterId = "u_voter1";
-        final updatedOptions = initialPoll.options.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final opt = entry.value;
-          final newVoters = List<String>.from(opt.voterIds)..remove(voterId);
-          if (idx == targetIdx) {
-            newVoters.add(voterId);
-          }
-          return opt.copyWith(voterIds: newVoters);
-        }).toList();
-
-        final updatedPoll = Poll(
-          id: initialPoll.id,
-          activityId: initialPoll.activityId,
-          creatorId: initialPoll.creatorId,
-          question: initialPoll.question,
-          options: updatedOptions,
-          createdAt: initialPoll.createdAt,
-        );
-
-        expect(updatedPoll.userVotedOptionId(voterId), "1");
-        expect(updatedPoll.options[0].votes, 0);
-        expect(updatedPoll.options[1].votes, 1);
-        expect(updatedPoll.totalVotes, 1);
-      },
-    );
-
     test('Message model recognizes temporary optimistic IDs vs DB IDs', () {
       final tempMsg = Message(
         id: 'temp_1728470000000',
@@ -308,7 +237,6 @@ void main() {
       );
       expect(realMsg.id.startsWith('temp_'), isFalse);
       expect(realMsg.expenseId, isNull);
-      expect(realMsg.pollId, isNull);
     });
 
     test('PlaceItem correctly stores and retains coordinates', () {

@@ -122,6 +122,13 @@ function Explore() {
   const [deletingPlan, setDeletingPlan] = useState<Activity | null>(null);
   const [reportingPlan, setReportingPlan] = useState<Activity | null>(null);
 
+  const { data: viewerProfile } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: () => getProfile(user!.id),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const viewerCoords = useMemo(() => {
     const lat = place?.lat ?? viewerProfile?.latitude;
     const lon = place?.lon ?? viewerProfile?.longitude;
@@ -156,12 +163,6 @@ function Explore() {
     enabled: !!user,
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-  });
-  const { data: viewerProfile } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: () => getProfile(user!.id),
-    enabled: !!user,
-    staleTime: 5 * 60 * 1000,
   });
   const viewerIsFemale = (() => {
     const g = (viewerProfile?.gender ?? "").toLowerCase().trim();

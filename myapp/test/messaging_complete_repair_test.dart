@@ -122,7 +122,7 @@ void main() {
       expect(sysMsg2.systemDisplayText, 'Host updated the plan details');
     });
 
-    test('Message correctly extracts expenseId and pollId tokens', () {
+    test('Message correctly extracts expenseId token', () {
       final expMsg = Message(
         id: 'msg-exp',
         activityId: 'act-1',
@@ -131,17 +131,6 @@ void main() {
         createdAt: DateTime.now().toUtc(),
       );
       expect(expMsg.expenseId, 'exp-999');
-      expect(expMsg.pollId, isNull);
-
-      final pollMsg = Message(
-        id: 'msg-poll',
-        activityId: 'act-1',
-        senderId: 'u-1',
-        text: '[[poll:poll-888]]',
-        createdAt: DateTime.now().toUtc(),
-      );
-      expect(pollMsg.pollId, 'poll-888');
-      expect(pollMsg.expenseId, isNull);
     });
   });
 

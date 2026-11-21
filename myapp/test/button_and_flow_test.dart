@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:myapp/models/activity.dart';
 import 'package:myapp/models/message.dart';
-import 'package:myapp/models/poll.dart';
 import 'package:myapp/models/user_profile.dart';
 import 'package:myapp/state/activities_state.dart';
 import 'package:myapp/state/chat_state.dart';
@@ -13,7 +12,6 @@ import 'package:myapp/widgets/chat/check_in_panel.dart';
 import 'package:myapp/widgets/chat/expense_card_widget.dart';
 import 'package:myapp/widgets/chat/memory_banner_widget.dart';
 import 'package:myapp/widgets/chat/message_bubble_widget.dart';
-import 'package:myapp/widgets/chat/poll_card_widget.dart';
 import 'package:myapp/widgets/common/custom_bottom_nav.dart';
 import 'package:myapp/widgets/common/place_search_dialog.dart';
 
@@ -121,43 +119,6 @@ void main() {
         expect(selectedPlace!.lon, 77.6408);
       },
     );
-
-    testWidgets('PollCardWidget renders options and handles vote interaction', (
-      WidgetTester tester,
-    ) async {
-      final chatState = ChatState();
-      final poll = Poll(
-        id: 'poll_test_1',
-        activityId: 'act_1',
-        creatorId: 'user_host',
-        question: 'What time for turf football?',
-        options: [
-          PollOption(id: '0', text: '6:00 PM', voterIds: ['user_host']),
-          PollOption(id: '1', text: '7:30 PM', voterIds: []),
-        ],
-        createdAt: DateTime.now(),
-      );
-
-      // Inject poll into state
-      await tester.pumpWidget(
-        ChangeNotifierProvider<ChatState>.value(
-          value: chatState,
-          child: MaterialApp(
-            home: Scaffold(
-              body: PollCardWidget(
-                pollId: poll.id,
-                currentUserId: 'user_attendee',
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // When poll is not yet in chatState map, shows loading
-      expect(find.text('Loading poll details…'), findsOneWidget);
-
-      chatState.dispose();
-    });
 
     testWidgets('ExpenseCardWidget renders total amount and members', (
       WidgetTester tester,

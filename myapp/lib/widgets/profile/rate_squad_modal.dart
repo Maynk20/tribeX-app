@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
+import '../../models/join_request.dart';
 import '../../models/rating_item.dart';
 import '../../models/user_profile.dart';
 import '../../state/activities_state.dart';
@@ -33,6 +34,17 @@ class _RateSquadModalState extends State<RateSquadModal> {
   final Set<String> _submittingIds = {};
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ActivitiesState>().fetchRequestsForActivity(widget.activity.id);
+        context.read<ChatState>().fetchRatings(widget.activity.id);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     for (final c in _comments.values) {
       c.dispose();
@@ -40,7 +52,7 @@ class _RateSquadModalState extends State<RateSquadModal> {
     super.dispose();
   }
 
-  static String _resolvePersonName(UserProfile person) {
+    static String _resolvePersonName(UserProfile person) {
     final name = person.fullName.trim();
     final lower = name.toLowerCase();
     final isGeneric = name.isEmpty ||
@@ -50,8 +62,8 @@ class _RateSquadModalState extends State<RateSquadModal> {
         lower == 'unknown user';
     if (!isGeneric) return name;
     final uname = person.username.trim();
-    if (uname.isNotEmpty) return uname;
-    return name.isNotEmpty ? name : 'Attendee';
+    if (uname.isNotEmpty) return '@$uname';
+    return 'Attendee';
   }
 
   Future<void> _submitSingleRating({
@@ -117,7 +129,7 @@ class _RateSquadModalState extends State<RateSquadModal> {
     for (final req in requests) {
       if (req.user != null &&
           req.user!.id != me?.id &&
-          req.status.name == 'accepted') {
+          (req.status == JoinStatus.accepted || req.status.name == 'accepted')) {
         if (!people.any((p) => p.id == req.user!.id)) {
           people.add(req.user!);
         }

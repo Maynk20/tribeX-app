@@ -1418,9 +1418,38 @@ class ActivitiesState extends ChangeNotifier {
             .update({'status': 'rejected'})
             .eq('id', requestId);
       }
+      // Update local request cache
+      _joinRequests.removeWhere((r) => r.id == requestId);
+      _rebuildJoinRequestIndices();
+      notifyListeners();
       await fetchActivities();
       return true;
     } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> leaveActivity(String activityId) async {
+    final client = SupabaseService.client;
+    final user = client?.auth.currentUser;
+    if (client == null || user == null || _isDisposed) return false;
+
+    try {
+      await client
+          .from('join_requests')
+          .update({'status': 'rejected'})
+          .eq('activity_id', activityId)
+          .eq('user_id', user.id);
+
+      _joinRequests.removeWhere((r) =>
+          r.activityId == activityId &&
+          (r.userId == user.id || r.user?.id == user.id));
+      _rebuildJoinRequestIndices();
+      notifyListeners();
+      await fetchActivities();
+      return true;
+    } catch (e) {
+      debugPrint('leaveActivity error: $e');
       return false;
     }
   }

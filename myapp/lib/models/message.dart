@@ -119,18 +119,4 @@ class Message {
     }
     return null;
   }
-
-  /// Check if text is encoded poll card `[[poll:<id>]]` or `POLL:<id>`
-  String? get pollId {
-    final trimmed = text.trim();
-    final webMatch = RegExp(r'\[\[poll:([a-zA-Z0-9_-]+)\]\]')
-        .firstMatch(trimmed);
-    if (webMatch != null) return webMatch.group(1);
-
-    if (trimmed.startsWith('POLL:')) {
-      final raw = trimmed.substring('POLL:'.length).trim();
-      return raw.split(' ').first;
-    }
-    return null;
-  }
 }

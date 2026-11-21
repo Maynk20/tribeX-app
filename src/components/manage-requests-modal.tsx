@@ -97,7 +97,12 @@ export function ManageRequestsModal({
                     busy={busy}
                     onAccept={() => respond.mutate({ id: person.join_request_id, status: "accepted" })}
                     onDecline={() => respond.mutate({ id: person.join_request_id, status: "rejected" })}
-                    onRemove={() => remove.mutate(person.join_request_id)}
+                    onRemove={() => {
+                      const name = person.full_name || person.username || "this attendee";
+                      if (confirm(`Remove ${name} from this plan? They will lose access to the group chat.`)) {
+                        remove.mutate(person.join_request_id);
+                      }
+                    }}
                   />
                 );
               })}

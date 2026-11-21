@@ -90,21 +90,33 @@ class MessageBubbleWidget extends StatelessWidget {
         .firstOrNull;
 
     String senderName = '';
-    if (message.sender?.fullName.isNotEmpty == true &&
-        message.sender!.fullName != 'Squad Member' &&
-        message.sender!.fullName != 'User') {
-      senderName = message.sender!.fullName;
-    } else if (cachedProfile?.fullName.isNotEmpty == true &&
-        cachedProfile!.fullName != 'Squad Member' &&
-        cachedProfile.fullName != 'User') {
-      senderName = cachedProfile.fullName;
-    } else if (squadMember?.name.isNotEmpty == true &&
-        squadMember!.name != 'Squad Member') {
-      senderName = squadMember.name;
-    } else if (message.sender?.username.isNotEmpty == true) {
-      senderName = message.sender!.username;
-    } else if (cachedProfile?.username.isNotEmpty == true) {
-      senderName = cachedProfile!.username;
+    final mName = message.sender?.fullName.trim() ?? '';
+    final cName = cachedProfile?.fullName.trim() ?? '';
+    final sName = squadMember?.name.trim() ?? '';
+    final mUname = message.sender?.username.trim() ?? '';
+    final cUname = cachedProfile?.username.trim() ?? '';
+
+    bool isGenericName(String n) {
+      final l = n.toLowerCase();
+      return n.isEmpty ||
+          l == 'user' ||
+          l == 'squad member' ||
+          l == 'squad mate' ||
+          l == 'unknown user' ||
+          l == 'unknown' ||
+          l == 'attendee';
+    }
+
+    if (!isGenericName(mName)) {
+      senderName = mName;
+    } else if (!isGenericName(cName)) {
+      senderName = cName;
+    } else if (!isGenericName(sName)) {
+      senderName = sName;
+    } else if (mUname.isNotEmpty) {
+      senderName = '@$mUname';
+    } else if (cUname.isNotEmpty) {
+      senderName = '@$cUname';
     } else {
       final currentUserId = SupabaseService.client?.auth.currentUser?.id;
       if (currentUserId != null && message.senderId == currentUserId) {

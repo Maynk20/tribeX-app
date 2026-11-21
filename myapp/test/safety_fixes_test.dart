@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myapp/models/activity.dart';
 import 'package:myapp/models/expense.dart';
-import 'package:myapp/models/poll.dart';
 import 'package:myapp/services/location_service.dart';
 import 'package:myapp/services/report_service.dart';
 import 'package:myapp/state/activities_state.dart';
@@ -139,35 +138,6 @@ void main() {
 
       final out = exp.toJson();
       expect(out['created_by'], 'host_123');
-    });
-  });
-
-  group('Poll Schema Compatibility', () {
-    test('Poll parses created_by and poll_votes with option_index', () {
-      final json = {
-        'id': 'poll_1',
-        'activity_id': 'act_1',
-        'created_by': 'user_abc',
-        'question': 'What time should we meet?',
-        'options': ['5:00 PM', '6:00 PM', '7:00 PM'],
-        'poll_votes': [
-          {'poll_id': 'poll_1', 'user_id': 'u1', 'option_index': 0},
-          {'poll_id': 'poll_1', 'user_id': 'u2', 'option_index': 0},
-          {'poll_id': 'poll_1', 'user_id': 'u3', 'option_index': 1},
-        ],
-      };
-      final poll = Poll.fromJson(json);
-      expect(poll.id, 'poll_1');
-      expect(poll.creatorId, 'user_abc');
-      expect(poll.options.length, 3);
-      expect(poll.options[0].text, '5:00 PM');
-      expect(poll.options[0].votes, 2);
-      expect(poll.options[1].votes, 1);
-      expect(poll.options[2].votes, 0);
-      expect(poll.totalVotes, 3);
-
-      final out = poll.toJson();
-      expect(out['created_by'], 'user_abc');
     });
   });
 

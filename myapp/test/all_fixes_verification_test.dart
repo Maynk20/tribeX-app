@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myapp/models/activity.dart';
 import 'package:myapp/models/join_request.dart';
-import 'package:myapp/models/poll.dart';
 import 'package:myapp/models/user_profile.dart';
 import 'package:myapp/screens/profile_screen.dart';
 import 'package:myapp/services/location_service.dart';
@@ -351,67 +350,6 @@ void main() {
       expect(filtered.any((a) => a.id == 'plan_far'), isFalse);
       // Virtual plan must ALWAYS be included regardless of coordinates
       expect(filtered.any((a) => a.id == 'plan_virtual'), isTrue);
-    });
-  });
-
-  group('Fix 7 — Multi-User Chat & Authoritative Poll Voting Synchronization', () {
-    test('Single-choice poll replaces user vote when switching options', () {
-      final initialPoll = Poll(
-        id: 'poll_choice_1',
-        activityId: 'act_01',
-        creatorId: 'host_01',
-        question: 'Which day works best for football?',
-        options: [
-          PollOption(id: 'opt_1', text: 'Saturday Morning', voterIds: ['user_bob']),
-          PollOption(id: 'opt_2', text: 'Sunday Evening', voterIds: []),
-        ],
-        createdAt: DateTime.now(),
-      );
-
-      // User Bob initially voted for option 1
-      expect(initialPoll.hasVoted('user_bob'), isTrue);
-      expect(initialPoll.userVotedOptionId('user_bob'), 'opt_1');
-      expect(initialPoll.options[0].votes, 1);
-      expect(initialPoll.options[1].votes, 0);
-
-      // User Bob switches his vote to option 2 (Sunday Evening)
-      final switchedOptions = initialPoll.options.map((opt) {
-        final voters = List<String>.from(opt.voterIds);
-        voters.remove('user_bob');
-        if (opt.id == 'opt_2') {
-          voters.add('user_bob');
-        }
-        return opt.copyWith(voterIds: voters);
-      }).toList();
-
-      final switchedPoll = initialPoll.copyWith(options: switchedOptions);
-
-      expect(switchedPoll.hasVoted('user_bob'), isTrue);
-      expect(switchedPoll.userVotedOptionId('user_bob'), 'opt_2');
-      expect(switchedPoll.options[0].votes, 0);
-      expect(switchedPoll.options[1].votes, 1);
-      expect(switchedPoll.totalVotes, 1);
-    });
-
-    test('Multi-user votes aggregate authoritatively across distinct users', () {
-      final multiUserPoll = Poll(
-        id: 'poll_agg_1',
-        activityId: 'act_01',
-        creatorId: 'host_01',
-        question: 'Dinner venue?',
-        options: [
-          PollOption(id: 'opt_1', text: 'Italian Bistro', voterIds: ['user_alice', 'user_david']),
-          PollOption(id: 'opt_2', text: 'Rooftop Brewery', voterIds: ['user_bob', 'user_charlie', 'user_eve']),
-        ],
-        createdAt: DateTime.now(),
-      );
-
-      expect(multiUserPoll.totalVotes, 5);
-      expect(multiUserPoll.options[0].votes, 2);
-      expect(multiUserPoll.options[1].votes, 3);
-      expect(multiUserPoll.hasVoted('user_alice'), isTrue);
-      expect(multiUserPoll.hasVoted('user_eve'), isTrue);
-      expect(multiUserPoll.hasVoted('user_frank'), isFalse);
     });
   });
 }

@@ -91,10 +91,6 @@ function CompleteProfile() {
       });
   }, [user, navigate]);
 
-  if (loading || (user && profileLoading)) {
-    return <PageLoader label="Checking profile status" />;
-  }
-
   // Debounced username availability check.
   useEffect(() => {
     const trimmed = username.trim();
@@ -173,6 +169,10 @@ function CompleteProfile() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (loading || (user && profileLoading)) {
+    return <PageLoader label="Checking profile status" />;
   }
 
   const initial = (fullName || user?.email || "U")[0]?.toUpperCase() ?? "U";

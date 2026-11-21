@@ -144,6 +144,51 @@ class StorageService {
     }
   }
 
+  /// Upload user profile avatar to Supabase Storage ('avatars' bucket)
+  static Future<String?> uploadAvatar({
+    required String userId,
+    required Uint8List bytes,
+    required String extension,
+  }) async {
+    final client = SupabaseService.client;
+    if (client == null) return null;
+
+    final cleanExt = extension.replaceAll('.', '').toLowerCase();
+    final filename = 'avatar-${DateTime.now().millisecondsSinceEpoch}.$cleanExt';
+    final path = '$userId/$filename';
+    final mimeType = cleanExt == 'png'
+        ? 'image/png'
+        : (cleanExt == 'webp' ? 'image/webp' : 'image/jpeg');
+
+    if (bytes.lengthInBytes > 5 * 1024 * 1024) {
+      throw Exception('Image must be under 5MB');
+    }
+
+    try {
+      await client.storage.from('avatars').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: mimeType,
+              upsert: true,
+            ),
+          );
+
+      try {
+        final signedUrl = await client.storage.from('avatars').createSignedUrl(
+              path,
+              60 * 60 * 24 * 365,
+            );
+        return signedUrl;
+      } catch (_) {
+        return client.storage.from('avatars').getPublicUrl(path);
+      }
+    } catch (e) {
+      debugPrint('uploadAvatar error: $e');
+      rethrow;
+    }
+  }
+
   /// Upload raw image bytes to Supabase Storage with Base64 data URI fallback
   static Future<String> uploadBytes({
     required Uint8List bytes,

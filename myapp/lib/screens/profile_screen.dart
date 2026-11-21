@@ -731,6 +731,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final pendingCount = actState.getPendingCountForActivity(
                       p.id,
                     );
+                    final isEnded = p.dateTime.isBefore(DateTime.now());
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(14),
@@ -741,164 +742,200 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           color: border.withValues(alpha: 0.6),
                         ),
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryMuted,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              AppCategories.emojiFor(p.category),
-                              style: const TextStyle(fontSize: 20),
-                            ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryMuted,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  AppCategories.emojiFor(p.category),
+                                  style: const TextStyle(fontSize: 20),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      p.title,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${p.totalSlots - p.slotsLeft}/${p.totalSlots} joined',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? AppColors.mutedForegroundDark
+                                            : AppColors.mutedForegroundLight,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  ManageRequestsModal.show(
+                                    context,
+                                    activityId: p.id,
+                                    activityTitle: p.title,
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: pendingCount > 0
+                                        ? AppColors.primary
+                                        : AppColors.primaryMuted,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    pendingCount > 0
+                                        ? 'Manage ($pendingCount)'
+                                        : 'Manage',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: pendingCount > 0
+                                          ? Colors.white
+                                          : AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () {
+                                  EditPlanModal.show(context, activity: p);
+                                },
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.backgroundDark
+                                        : AppColors.backgroundLight,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: border.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    LucideIcons.pencil,
+                                    size: 14,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatScreen(activity: p),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.backgroundDark
+                                        : AppColors.backgroundLight,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: border.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    LucideIcons.messageSquare,
+                                    size: 14,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () {
+                                  DeletePlanDialog.show(
+                                    context,
+                                    activity: p,
+                                    onConfirmDelete: () {
+                                      actState.deleteActivity(p.id);
+                                    },
+                                  );
+                                },
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.backgroundDark
+                                        : AppColors.backgroundLight,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: border.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    LucideIcons.trash2,
+                                    size: 14,
+                                    color: AppColors.destructive,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  p.title,
-                                  style: const TextStyle(
-                                    fontSize: 14,
+                          if (isEnded) ...[
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  RateSquadModal.show(context, activity: p);
+                                },
+                                icon: const Icon(
+                                  LucideIcons.sparkles,
+                                  size: 14,
+                                ),
+                                label: const Text(
+                                  'Event ended · Rate your squad',
+                                  style: TextStyle(
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${p.totalSlots - p.slotsLeft}/${p.totalSlots} joined',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark
-                                        ? AppColors.mutedForegroundDark
-                                        : AppColors.mutedForegroundLight,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.warning,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(999),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              ManageRequestsModal.show(
-                                context,
-                                activityId: p.id,
-                                activityTitle: p.title,
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: pendingCount > 0
-                                    ? AppColors.primary
-                                    : AppColors.primaryMuted,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                pendingCount > 0
-                                    ? 'Manage ($pendingCount)'
-                                    : 'Manage',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: pendingCount > 0
-                                      ? Colors.white
-                                      : AppColors.primary,
-                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () {
-                              EditPlanModal.show(context, activity: p);
-                            },
-                            child: Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.backgroundDark
-                                    : AppColors.backgroundLight,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: border.withValues(alpha: 0.6),
-                                ),
-                              ),
-                              child: const Icon(
-                                LucideIcons.pencil,
-                                size: 14,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChatScreen(activity: p),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.backgroundDark
-                                    : AppColors.backgroundLight,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: border.withValues(alpha: 0.6),
-                                ),
-                              ),
-                              child: const Icon(
-                                LucideIcons.messageSquare,
-                                size: 14,
-                                color: AppColors.secondary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () {
-                              DeletePlanDialog.show(
-                                context,
-                                activity: p,
-                                onConfirmDelete: () {
-                                  actState.deleteActivity(p.id);
-                                },
-                              );
-                            },
-                            child: Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.backgroundDark
-                                    : AppColors.backgroundLight,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: border.withValues(alpha: 0.6),
-                                ),
-                              ),
-                              child: const Icon(
-                                LucideIcons.trash2,
-                                size: 14,
-                                color: AppColors.destructive,
-                              ),
-                            ),
-                          ),
+                          ],
                         ],
                       ),
                     );

@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +11,7 @@ import '../core/utils/location_feedback.dart';
 import '../models/user_profile.dart';
 import '../services/location_service.dart';
 import '../services/report_service.dart';
+import '../services/storage_service.dart';
 import '../state/activities_state.dart';
 import '../state/auth_state.dart';
 import '../state/theme_state.dart';
@@ -934,7 +937,6 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
     with WidgetsBindingObserver {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _unameCtrl;
-  late final TextEditingController _avatarCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _cityCtrl;
   late final TextEditingController _bioCtrl;
@@ -948,12 +950,87 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
   bool _waitingForSettingsReturn = false;
   int _locationFetchToken = 0;
 
-  static const List<String> presetAvatars = [
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
-    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80",
-    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80",
-  ];
+  Uint8List? _pickedAvatarBytes;
+  String? _pickedAvatarExt;
+  bool _avatarRemoved = false;
+  bool _isUploadingAvatar = false;
+
+  Future<void> _pickAvatar(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.lengthInBytes > 5 * 1024 * 1024) {
+        if (mounted) AppToast.show(context, 'Image must be under 5MB', isError: true);
+        return;
+      }
+      final ext = file.path.split('.').lastOrNull ?? 'jpg';
+      setState(() {
+        _pickedAvatarBytes = bytes;
+        _pickedAvatarExt = ext;
+        _avatarRemoved = false;
+      });
+    } catch (e) {
+      if (mounted) AppToast.show(context, 'Could not load image: $e', isError: true);
+    }
+  }
+
+  void _showPhotoOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.cardDark : AppColors.cardLight,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Wrap(
+              children: [
+                ListTile(
+                  leading: const Icon(LucideIcons.image),
+                  title: const Text('Choose from Gallery'),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _pickAvatar(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(LucideIcons.camera),
+                  title: const Text('Take a Photo'),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _pickAvatar(ImageSource.camera);
+                  },
+                ),
+                if (_pickedAvatarBytes != null || (widget.user.avatarUrl != null && !_avatarRemoved))
+                  ListTile(
+                    leading: const Icon(LucideIcons.trash2, color: AppColors.destructive),
+                    title: const Text('Remove Photo', style: TextStyle(color: AppColors.destructive)),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      setState(() {
+                        _pickedAvatarBytes = null;
+                        _pickedAvatarExt = null;
+                        _avatarRemoved = true;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -961,7 +1038,6 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
     WidgetsBinding.instance.addObserver(this);
     _nameCtrl = TextEditingController(text: widget.user.fullName);
     _unameCtrl = TextEditingController(text: widget.user.username);
-    _avatarCtrl = TextEditingController(text: widget.user.avatarUrl ?? "");
     _phoneCtrl = TextEditingController(text: widget.user.phone ?? "");
     _cityCtrl = TextEditingController(text: widget.user.city ?? "");
     _bioCtrl = TextEditingController(text: widget.user.bio ?? "");
@@ -975,7 +1051,6 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
     WidgetsBinding.instance.removeObserver(this);
     _nameCtrl.dispose();
     _unameCtrl.dispose();
-    _avatarCtrl.dispose();
     _phoneCtrl.dispose();
     _cityCtrl.dispose();
     _bioCtrl.dispose();
@@ -1111,13 +1186,38 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
 
     setState(() => _isSaving = true);
 
+    String? finalAvatarUrl = widget.user.avatarUrl;
+    if (_avatarRemoved) {
+      finalAvatarUrl = null;
+    } else if (_pickedAvatarBytes != null && _pickedAvatarExt != null) {
+      setState(() => _isUploadingAvatar = true);
+      try {
+        final uploaded = await StorageService.uploadAvatar(
+          userId: widget.user.id,
+          bytes: _pickedAvatarBytes!,
+          extension: _pickedAvatarExt!,
+        );
+        if (uploaded != null) {
+          finalAvatarUrl = uploaded;
+        }
+      } catch (e) {
+        setState(() {
+          _isSaving = false;
+          _isUploadingAvatar = false;
+        });
+        if (mounted) AppToast.show(context, 'Avatar upload failed: $e', isError: true);
+        return;
+      } finally {
+        if (mounted) setState(() => _isUploadingAvatar = false);
+      }
+    }
+
+    if (!mounted) return;
     final auth = context.read<AuthState>();
     final success = await auth.updateProfile(
       fullName: name,
       username: uname,
-      avatarUrl: _avatarCtrl.text.trim().isNotEmpty
-          ? _avatarCtrl.text.trim()
-          : null,
+      avatarUrl: finalAvatarUrl,
       phone: _phoneCtrl.text.trim().isNotEmpty
           ? _phoneCtrl.text.trim()
           : null,
@@ -1169,7 +1269,10 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
 
-    final currentAvatar = _avatarCtrl.text.trim();
+    final hasAvatar = _pickedAvatarBytes != null ||
+        (!_avatarRemoved &&
+            widget.user.avatarUrl != null &&
+            widget.user.avatarUrl!.isNotEmpty);
     final initialChar = widget.user.fullName.isNotEmpty
         ? widget.user.fullName[0].toUpperCase()
         : (widget.user.username.isNotEmpty
@@ -1243,91 +1346,119 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
             ),
             const SizedBox(height: 20),
 
-            // Avatar Preview & Input
+            // Avatar Preview & Upload Action
             Center(
               child: Column(
                 children: [
-                  Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: AppColors.primary,
-                        backgroundImage: currentAvatar.isNotEmpty
-                            ? NetworkImage(currentAvatar)
-                            : null,
-                        child: currentAvatar.isEmpty
-                            ? Text(
-                                initialChar,
-                                style: const TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : null,
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
+                  GestureDetector(
+                    onTap: _showPhotoOptions,
+                    child: Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundColor: AppColors.primary,
+                          backgroundImage: _pickedAvatarBytes != null
+                              ? MemoryImage(_pickedAvatarBytes!)
+                              : (!_avatarRemoved &&
+                                      widget.user.avatarUrl != null &&
+                                      widget.user.avatarUrl!.isNotEmpty
+                                  ? NetworkImage(widget.user.avatarUrl!)
+                                      as ImageProvider
+                                  : null),
+                          child: !hasAvatar
+                              ? Text(
+                                  initialChar,
+                                  style: const TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : null,
                         ),
-                        child: const Icon(
-                          LucideIcons.camera,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: presetAvatars.map((url) {
-                        final isSelected = _avatarCtrl.text == url;
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _avatarCtrl.text = url;
-                            });
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : Colors.transparent,
-                                width: 2,
-                              ),
-                            ),
-                            child: CircleAvatar(
-                              radius: 16,
-                              backgroundImage: NetworkImage(url),
-                            ),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: cardBg, width: 2),
                           ),
-                        );
-                      }).toList(),
+                          child: const Icon(
+                            LucideIcons.camera,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _showPhotoOptions,
+                        icon: const Icon(LucideIcons.upload, size: 14),
+                        label: Text(
+                          hasAvatar ? 'Change Photo' : 'Upload Photo',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                        ),
+                      ),
+                      if (hasAvatar) ...[
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _pickedAvatarBytes = null;
+                              _pickedAvatarExt = null;
+                              _avatarRemoved = true;
+                            });
+                          },
+                          icon: const Icon(
+                            LucideIcons.trash2,
+                            size: 14,
+                            color: AppColors.destructive,
+                          ),
+                          label: const Text(
+                            'Remove',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.destructive,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_isUploadingAvatar) ...[
+                    const SizedBox(height: 8),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Uploading photo…',
+                          style: TextStyle(fontSize: 11, color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 16),
-
-            TextField(
-              controller: _avatarCtrl,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Avatar Image URL',
-                prefixIcon: Icon(LucideIcons.image, size: 18),
-                hintText: 'Paste image link or choose preset above',
-              ),
-            ),
             const SizedBox(height: 12),
             TextField(
               controller: _nameCtrl,

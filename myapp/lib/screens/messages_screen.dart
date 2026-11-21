@@ -286,17 +286,17 @@ class _MessagesScreenState extends State<MessagesScreen> {
                               } else if (lastMsg.expenseId != null ||
                                   lastMsg.text.startsWith('EXPENSE:')) {
                                 subtitleText = '💰 Split expense request';
-                              } else if (lastMsg.pollId != null ||
-                                  lastMsg.text.startsWith('POLL:')) {
-                                subtitleText = '📊 Group poll created';
                               } else {
-                                final senderName =
-                                    lastMsg.sender?.fullName.isNotEmpty == true
-                                        ? lastMsg.sender!.fullName
-                                        : (lastMsg.sender?.username.isNotEmpty ==
-                                                  true
-                                              ? lastMsg.sender!.username
-                                              : 'Squad Member');
+                                final sFullName = lastMsg.sender?.fullName.trim() ?? '';
+                                final sUname = lastMsg.sender?.username.trim() ?? '';
+                                final isGeneric = sFullName.isEmpty ||
+                                    sFullName.toLowerCase() == 'user' ||
+                                    sFullName.toLowerCase() == 'squad member' ||
+                                    sFullName.toLowerCase() == 'squad mate' ||
+                                    sFullName.toLowerCase() == 'unknown user';
+                                final senderName = !isGeneric
+                                    ? sFullName
+                                    : (sUname.isNotEmpty ? sUname : 'Member');
                                 if (lastMsg.senderId == user.id) {
                                   subtitleText = 'You: ${lastMsg.text}';
                                 } else {

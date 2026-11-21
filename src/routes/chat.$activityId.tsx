@@ -1,16 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, UserX, CheckCircle2, Loader2, Plus, BarChart3, Flag } from "lucide-react";
+import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, UserX, CheckCircle2, Loader2, Plus, Flag, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { listMessages, sendMessage, emojiFor, listAttendees, checkInActivity, markNoShow, blockUser, type MessageWithSender, type JoinRequestWithUser } from "@/lib/services";
+import { listMessages, sendMessage, emojiFor, listAttendees, checkInActivity, markNoShow, blockUser, leaveActivity, type MessageWithSender, type JoinRequestWithUser } from "@/lib/services";
 import { friendlyError } from "@/lib/friendly-error";
 import { ExpenseCard, isExpenseMessage } from "@/components/expense-card";
 import { SplitExpenseModal } from "@/components/split-expense-modal";
-import { PollCard, isPollMessage } from "@/components/poll-card";
-import { CreatePollModal } from "@/components/create-poll-modal";
 import { ReportModal } from "@/components/report-modal";
 import { MemoryBanner } from "@/components/memory-banner";
 import { PageLoader } from "@/components/ui/loader";
@@ -28,7 +26,6 @@ function ChatPage() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
-  const [pollOpen, setPollOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -166,6 +163,28 @@ function ChatPage() {
         </div>
         {!isHost && activity?.host_id && (
           <div className="flex items-center gap-1.5">
+            {myRequest && (
+              <button
+                onClick={async () => {
+                  if (confirm("Are you sure you want to leave this plan? You will lose access to the group chat.")) {
+                    try {
+                      await leaveActivity(activityId);
+                      toast.success("You left the plan");
+                      qc.invalidateQueries({ queryKey: ["user-activities", user?.id] });
+                      qc.invalidateQueries({ queryKey: ["activities"] });
+                      navigate({ to: "/messages" });
+                    } catch (err) {
+                      toast.error(friendlyError(err, "Couldn't leave plan"));
+                    }
+                  }
+                }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
+                title="Leave plan"
+                aria-label="Leave plan"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={() => setReportOpen(true)}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
@@ -234,16 +253,6 @@ function ChatPage() {
                   </li>
                 );
               }
-              const pollId = isPollMessage(m.text);
-              if (pollId) {
-                return (
-                  <li key={m.id} className="flex justify-center">
-                    <div className="w-full max-w-sm">
-                      <PollCard pollId={pollId} currentUserId={user?.id} />
-                    </div>
-                  </li>
-                );
-              }
               return <MessageBubble key={m.id} m={m} mine={m.sender_id === user!.id} />;
             })}
             <div ref={bottomRef} />
@@ -272,19 +281,6 @@ function ChatPage() {
                 <span>
                   <span className="block font-semibold">Split expense</span>
                   <span className="block text-[11px] text-muted-foreground">Post a bill with UPI split</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAttachOpen(false); setPollOpen(true); }}
-                className="flex w-full items-center gap-3 border-t border-border/60 px-4 py-3 text-left text-sm transition hover:bg-accent"
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-primary">
-                  <BarChart3 className="h-4 w-4" />
-                </span>
-                <span>
-                  <span className="block font-semibold">Create poll</span>
-                  <span className="block text-[11px] text-muted-foreground">Quick group decision</span>
                 </span>
               </button>
             </div>
@@ -325,11 +321,6 @@ function ChatPage() {
         onOpenChange={setSplitOpen}
         currentUserId={user?.id}
       />
-      <CreatePollModal
-        activityId={activityId}
-        open={pollOpen}
-        onOpenChange={setPollOpen}
-      />
       <ReportModal
         open={reportOpen}
         onClose={() => setReportOpen(false)}
@@ -343,9 +334,12 @@ function ChatPage() {
 
 function MessageBubble({ m, mine }: { m: MessageWithSender; mine: boolean }) {
   const time = new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const senderName = m.sender?.full_name || m.sender?.username || "Squad Member";
+  const rawName = m.sender?.full_name?.trim();
+  const rawUname = m.sender?.username?.trim();
+  const isGeneric = !rawName || ["user", "squad member", "squad mate", "unknown user"].includes(rawName.toLowerCase());
+  const senderName = !isGeneric ? rawName : (rawUname ? `@${rawUname}` : (mine ? "You" : "Member"));
   const avatarUrl = m.sender?.avatar_url;
-  const initial = (senderName || "U")[0]?.toUpperCase() ?? "U";
+  const initial = (senderName.replace(/^@/, "") || "U")[0]?.toUpperCase() ?? "U";
 
   return (
     <li className={`flex gap-2 ${mine ? "justify-end" : "justify-start"}`}>

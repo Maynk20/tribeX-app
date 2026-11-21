@@ -26,6 +26,7 @@ import {
   getProfile,
   updateProfile,
   uploadAvatar,
+  removeAvatar,
   listBlockedUsers,
   unblockUser,
   saveVerifiedProfileLocation,
@@ -69,10 +70,6 @@ function SettingsPage() {
     enabled: !!user,
   });
 
-  if (isSessionLoading || (user && isProfileLoading)) {
-    return <PageLoader label="Loading settings" />;
-  }
-
   const { data: blockedUsers = [] } = useQuery({
     queryKey: ["blocked-users", user?.id],
     queryFn: () => listBlockedUsers(user!.id),
@@ -95,6 +92,12 @@ function SettingsPage() {
   // Avatar uploading state
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Edit Details modal avatar state
+  const [modalAvatarFile, setModalAvatarFile] = useState<File | null>(null);
+  const [modalAvatarPreview, setModalAvatarPreview] = useState<string | null>(null);
+  const [modalAvatarRemoved, setModalAvatarRemoved] = useState(false);
+  const modalFileRef = useRef<HTMLInputElement>(null);
 
   // Push notification states
   const [pushOn, setPushOn] = useState(false);
@@ -209,6 +212,37 @@ function SettingsPage() {
     }
   }
 
+  function onPickModalAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Pick an image file (JPG, PNG, or WebP)");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    setModalAvatarFile(file);
+    setModalAvatarPreview(URL.createObjectURL(file));
+    setModalAvatarRemoved(false);
+  }
+
+  async function onRemoveAvatar() {
+    if (!user) return;
+    setUploading(true);
+    try {
+      await removeAvatar(user.id);
+      await qc.invalidateQueries({ queryKey: ["profile", user.id] });
+      toast.success("Photo removed");
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   function openEdit() {
     setEditDraft({
       full_name: profile?.full_name ?? "",
@@ -218,6 +252,9 @@ function SettingsPage() {
       bio: profile?.bio ?? "",
       username: profile?.username ?? "",
     });
+    setModalAvatarFile(null);
+    setModalAvatarPreview(profile?.avatar_url ?? null);
+    setModalAvatarRemoved(false);
     setShowEditDetails(true);
   }
 
@@ -240,6 +277,12 @@ function SettingsPage() {
     }
     setSavingEdit(true);
     try {
+      if (modalAvatarRemoved) {
+        await removeAvatar(user.id);
+      } else if (modalAvatarFile) {
+        await uploadAvatar(user.id, modalAvatarFile);
+      }
+
       await updateProfile(user.id, {
         full_name: name,
         username: uname,
@@ -324,6 +367,10 @@ function SettingsPage() {
     deleteAccountMut.mutate();
   };
 
+  if (isSessionLoading || (user && isProfileLoading)) {
+    return <PageLoader label="Loading settings" />;
+  }
+
   const displayName = profile?.full_name || profile?.username || "You";
   const initial = (displayName[0] ?? "U").toUpperCase();
 
@@ -377,6 +424,18 @@ function SettingsPage() {
                 initial
               )}
             </div>
+            {profile?.avatar_url && (
+              <button
+                type="button"
+                onClick={onRemoveAvatar}
+                disabled={uploading}
+                className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-destructive text-destructive-foreground shadow transition hover:scale-105 active:scale-95 disabled:opacity-60"
+                aria-label="Remove avatar"
+                title="Remove photo"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
@@ -558,6 +617,57 @@ function SettingsPage() {
                 </button>
               </div>
               <div className="flex flex-col gap-3 text-sm">
+                {/* Profile Photo Section */}
+                <div className="flex flex-col items-center gap-3 border-b border-border/60 pb-4">
+                  <div className="relative">
+                    <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary text-3xl font-bold text-primary-foreground border-2 border-border/60">
+                      {modalAvatarPreview && !modalAvatarRemoved ? (
+                        <img src={modalAvatarPreview} alt="Preview" className="h-full w-full object-cover" />
+                      ) : (
+                        initial
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => modalFileRef.current?.click()}
+                      className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground shadow transition hover:scale-105 active:scale-95"
+                      title="Change Photo"
+                      aria-label="Change Photo"
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                    </button>
+                    <input
+                      ref={modalFileRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={onPickModalAvatar}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => modalFileRef.current?.click()}
+                      className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold hover:bg-secondary/80"
+                    >
+                      {modalAvatarPreview && !modalAvatarRemoved ? "Change Photo" : "Upload Photo"}
+                    </button>
+                    {modalAvatarPreview && !modalAvatarRemoved && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalAvatarFile(null);
+                          setModalAvatarPreview(null);
+                          setModalAvatarRemoved(true);
+                        }}
+                        className="rounded-full border border-destructive/40 px-3 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10"
+                      >
+                        Remove Photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <label className="flex flex-col gap-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Full Name
