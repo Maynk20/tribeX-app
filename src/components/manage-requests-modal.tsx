@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
-import { BadgeCheck, Check, MapPin, Navigation, Star, Trash2, UserX, X } from "lucide-react";
+import { BadgeCheck, Check, MapPin, Navigation, Star, Trash2, UserX, X, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import {
   listActivityJoinProfiles,
@@ -48,70 +49,117 @@ export function ManageRequestsModal({
     onError: (e: Error) => toast.error(friendlyError(e, "Couldn't remove this user")),
   });
 
+  const [personToRemove, setPersonToRemove] = useState<HostJoinProfile | null>(null);
+
   if (!open || !activityId) return null;
   if (typeof document === "undefined") return null;
 
   const pendingCount = people.filter((p) => p.status === "pending").length;
   const acceptedCount = people.filter((p) => p.status === "accepted").length;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[99998] bg-black/80 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="fixed left-1/2 top-1/2 z-[99999] max-h-[85vh] w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border/60 bg-background p-5 shadow-2xl"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">Manage joiners</h2>
-            {activityTitle && <p className="mt-0.5 text-xs text-muted-foreground">{activityTitle}</p>}
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {pendingCount} pending · {acceptedCount} joined
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 transition hover:bg-accent"
-            aria-label="Close"
+  return (
+    <>
+      {createPortal(
+        <div className="fixed inset-0 z-[99998] bg-black/80 p-4 backdrop-blur-sm" onClick={onClose}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed left-1/2 top-1/2 z-[99999] max-h-[85vh] w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border/60 bg-background p-5 shadow-2xl"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="mt-4 max-h-[64vh] overflow-y-auto">
-          {isLoading ? (
-            <div className="flex flex-col gap-2">
-              {[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-secondary" />)}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold tracking-tight">Manage joiners</h2>
+                {activityTitle && <p className="mt-0.5 text-xs text-muted-foreground">{activityTitle}</p>}
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {pendingCount} pending · {acceptedCount} joined
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 transition hover:bg-accent"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          ) : people.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">No join requests or attendees yet.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {people.map((person) => {
-                const busy =
-                  (respond.isPending && respond.variables?.id === person.join_request_id) ||
-                  (remove.isPending && remove.variables === person.join_request_id);
-                return (
-                  <AttendeeRow
-                    key={person.join_request_id}
-                    person={person}
-                    busy={busy}
-                    onAccept={() => respond.mutate({ id: person.join_request_id, status: "accepted" })}
-                    onDecline={() => respond.mutate({ id: person.join_request_id, status: "rejected" })}
-                    onRemove={() => {
-                      const name = person.full_name || person.username || "this attendee";
-                      if (confirm(`Remove ${name} from this plan? They will lose access to the group chat.`)) {
-                        remove.mutate(person.join_request_id);
-                      }
-                    }}
-                  />
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body,
+
+            <div className="mt-4 max-h-[64vh] overflow-y-auto">
+              {isLoading ? (
+                <div className="flex flex-col gap-2">
+                  {[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-secondary" />)}
+                </div>
+              ) : people.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">No join requests or attendees yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {people.map((person) => {
+                    const busy =
+                      (respond.isPending && respond.variables?.id === person.join_request_id) ||
+                      (remove.isPending && remove.variables === person.join_request_id);
+                    return (
+                      <AttendeeRow
+                        key={person.join_request_id}
+                        person={person}
+                        busy={busy}
+                        onAccept={() => respond.mutate({ id: person.join_request_id, status: "accepted" })}
+                        onDecline={() => respond.mutate({ id: person.join_request_id, status: "rejected" })}
+                        onRemove={() => setPersonToRemove(person)}
+                      />
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {personToRemove &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[999999] bg-black/80 p-4 backdrop-blur-sm"
+            onClick={() => !remove.isPending && setPersonToRemove(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="fixed left-1/2 top-1/2 z-[1000000] w-[90vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border/60 bg-background p-6 shadow-2xl"
+            >
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+                  <ShieldAlert className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">
+                  Remove {personToRemove.full_name || personToRemove.username || "attendee"}?
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  They will be removed from this plan and will lose access to the group chat.
+                </p>
+              </div>
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  disabled={remove.isPending}
+                  onClick={() => {
+                    remove.mutate(personToRemove.join_request_id, {
+                      onSettled: () => setPersonToRemove(null),
+                    });
+                  }}
+                  className="w-full rounded-full bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+                >
+                  {remove.isPending ? "Removing…" : "Yes, Remove"}
+                </button>
+                <button
+                  disabled={remove.isPending}
+                  onClick={() => setPersonToRemove(null)}
+                  className="w-full rounded-full border border-border/60 py-2.5 text-sm font-semibold transition hover:bg-accent"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 

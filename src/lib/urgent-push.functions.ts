@@ -9,7 +9,7 @@ const inputSchema = z.object({ activityId: z.string().uuid() });
 
 export const notifyUrgentSpot = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => inputSchema.parse(input))
+  .validator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data, context }) => {
     // Only the host of the activity may fan out urgent pushes for it.
     const { data: owner } = await context.supabase

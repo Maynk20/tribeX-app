@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, UserX, CheckCircle2, Loader2, Plus, Flag, LogOut } from "lucide-react";
+import { ArrowLeft, Send, MapPin, Clock, IndianRupee, ShieldCheck, MapPinned, UserX, CheckCircle2, Loader2, Plus, Flag, LogOut, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -28,6 +29,9 @@ function ChatPage() {
   const [splitOpen, setSplitOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: activity, isLoading: isActivityLoading } = useQuery({
@@ -165,19 +169,7 @@ function ChatPage() {
           <div className="flex items-center gap-1.5">
             {myRequest && (
               <button
-                onClick={async () => {
-                  if (confirm("Are you sure you want to leave this plan? You will lose access to the group chat.")) {
-                    try {
-                      await leaveActivity(activityId);
-                      toast.success("You left the plan");
-                      qc.invalidateQueries({ queryKey: ["user-activities", user?.id] });
-                      qc.invalidateQueries({ queryKey: ["activities"] });
-                      navigate({ to: "/messages" });
-                    } catch (err) {
-                      toast.error(friendlyError(err, "Couldn't leave plan"));
-                    }
-                  }
-                }}
+                onClick={() => setShowLeaveConfirm(true)}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
                 title="Leave plan"
                 aria-label="Leave plan"
@@ -194,11 +186,7 @@ function ChatPage() {
               <Flag className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={() => {
-                if (confirm(`Block ${hostName}? You won't see their events anymore.`)) {
-                  blockMut.mutate(activity.host_id);
-                }
-              }}
+              onClick={() => setShowBlockConfirm(true)}
               disabled={blockMut.isPending}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition hover:border-destructive/60 hover:text-destructive active:scale-95"
               title={`Block ${hostName}`}
@@ -328,6 +316,105 @@ function ChatPage() {
         targetId={activityId}
         targetTitle={activity?.title ?? "Activity"}
       />
+
+      {showLeaveConfirm &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[99998] bg-black/80 p-4 backdrop-blur-sm"
+            onClick={() => !isLeaving && setShowLeaveConfirm(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="fixed left-1/2 top-1/2 z-[99999] w-[90vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border/60 bg-background p-6 shadow-2xl"
+            >
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+                  <LogOut className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">Leave this plan?</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  You will be removed from this plan and will lose access to the squad chat.
+                </p>
+              </div>
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  disabled={isLeaving}
+                  onClick={async () => {
+                    setIsLeaving(true);
+                    try {
+                      await leaveActivity(activityId);
+                      toast.success("You left the plan");
+                      qc.invalidateQueries({ queryKey: ["user-activities", user?.id] });
+                      qc.invalidateQueries({ queryKey: ["activities"] });
+                      navigate({ to: "/messages" });
+                    } catch (err) {
+                      toast.error(friendlyError(err, "Couldn't leave plan"));
+                      setIsLeaving(false);
+                      setShowLeaveConfirm(false);
+                    }
+                  }}
+                  className="w-full rounded-full bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+                >
+                  {isLeaving ? "Leaving…" : "Yes, Leave Plan"}
+                </button>
+                <button
+                  disabled={isLeaving}
+                  onClick={() => setShowLeaveConfirm(false)}
+                  className="w-full rounded-full border border-border/60 py-2.5 text-sm font-semibold transition hover:bg-accent"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {showBlockConfirm &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[99998] bg-black/80 p-4 backdrop-blur-sm"
+            onClick={() => !blockMut.isPending && setShowBlockConfirm(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="fixed left-1/2 top-1/2 z-[99999] w-[90vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border/60 bg-background p-6 shadow-2xl"
+            >
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+                  <ShieldAlert className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">Block {hostName}?</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  You won't see their events or messages anymore. You can unblock them anytime from Settings.
+                </p>
+              </div>
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  disabled={blockMut.isPending}
+                  onClick={() => {
+                    if (activity?.host_id) {
+                      blockMut.mutate(activity.host_id);
+                    }
+                  }}
+                  className="w-full rounded-full bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+                >
+                  {blockMut.isPending ? "Blocking…" : `Yes, Block ${hostName}`}
+                </button>
+                <button
+                  disabled={blockMut.isPending}
+                  onClick={() => setShowBlockConfirm(false)}
+                  className="w-full rounded-full border border-border/60 py-2.5 text-sm font-semibold transition hover:bg-accent"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

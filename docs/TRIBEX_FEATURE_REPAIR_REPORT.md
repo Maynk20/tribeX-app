@@ -220,22 +220,26 @@ Ran type-checking and production bundler from repository root:
 
 > npm run build
 vite v8.1.5 building client environment for production...
-✓ built in 863ms
+✓ built in 1.43s
 [nitro] √ You can preview this build using npx vite preview
 [nitro] √ You can deploy this build using npx nitro deploy --prebuilt
 # Exit code: 0
 ```
 
-### 7.2 Flutter Application Verification
+### 7.2 Frontend UX & API Modernization
+- **In-App Confirmation Modals**: Replaced all native browser `window.confirm()` popups in `src/routes/chat.$activityId.tsx` (Leave Plan, Block Host) and `src/components/manage-requests-modal.tsx` (Remove Attendee) with custom, responsive, theme-aware in-app dialogs using React Portals and Tailwind CSS.
+- **Server Function Modernization**: Migrated all deprecated `createServerFn().inputValidator()` calls to `.validator()` in `src/lib/otp-auth.functions.ts`, `src/lib/push.functions.ts`, and `src/lib/urgent-push.functions.ts`, eliminating build-time warnings.
+
+### 7.3 Flutter Application Verification
 Ran static analysis and full test suite under `/myapp`:
 ```bash
 > flutter analyze
 Analyzing myapp...
-No issues found! (ran in 8.2s)
+No issues found! (ran in 67.6s)
 # Exit code: 0
 
 > flutter test
-00:37 +175: All tests passed!
+00:38 +175: All tests passed!
 # Exit code: 0 (175 passed out of 175 tests)
 ```
 

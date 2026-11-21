@@ -407,17 +407,17 @@ export async function handleVerifySignUpOtp(inputData: { email: string; code: st
 
 // TanStack Start createServerFn exports for Web client
 export const requestSignInOtp = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => emailSchema.parse(input))
+  .validator((input: unknown) => emailSchema.parse(input))
   .handler(async ({ data }) => handleRequestSignInOtp(data));
 
 export const requestSignUpOtp = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => signupSchema.parse(input))
+  .validator((input: unknown) => signupSchema.parse(input))
   .handler(async ({ data }) => handleRequestSignUpOtp(data));
 
 export const verifySignInOtp = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => verifySchema.parse(input))
+  .validator((input: unknown) => verifySchema.parse(input))
   .handler(async ({ data }) => handleVerifySignInOtp(data));
 
 export const verifySignUpOtp = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => verifySignupSchema.parse(input))
+  .validator((input: unknown) => verifySignupSchema.parse(input))
   .handler(async ({ data }) => handleVerifySignUpOtp(data));
