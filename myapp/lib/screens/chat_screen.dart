@@ -16,6 +16,7 @@ import '../widgets/chat/message_bubble_widget.dart';
 import '../widgets/chat/split_expense_modal.dart';
 import '../widgets/common/report_modal.dart';
 import '../widgets/activity/manage_requests_modal.dart';
+import '../widgets/profile/rate_squad_modal.dart';
 
 class ChatScreen extends StatefulWidget {
   final Activity activity;
@@ -382,6 +383,14 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               tooltip: 'Meeting details',
               onPressed: () => _showVirtualMeetingDetails(context, hostName),
+            ),
+          if (widget.activity.dateTime.isBefore(DateTime.now()))
+            IconButton(
+              icon: const Icon(Icons.star_outline, size: 22, color: AppColors.warning),
+              tooltip: 'Rate squad',
+              onPressed: () {
+                RateSquadModal.show(context, activity: widget.activity);
+              },
             ),
           if (isHost)
             IconButton(

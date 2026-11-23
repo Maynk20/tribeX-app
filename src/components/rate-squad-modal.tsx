@@ -32,11 +32,11 @@ export function RateSquadModal({
   viewerId: string | null;
 }) {
   const qc = useQueryClient();
-  const enabled = !!(open && planId && hostId && viewerId);
+  const enabled = !!(open && planId && viewerId);
 
   const { data: participants = [], isLoading: loadingPeople } = useQuery({
     queryKey: ["rate-participants", planId, viewerId],
-    queryFn: () => listRateableParticipants(planId!, hostId!, viewerId!),
+    queryFn: () => listRateableParticipants(planId!, hostId ?? "", viewerId!),
     enabled,
     staleTime: 60_000,
   });

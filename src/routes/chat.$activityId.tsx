@@ -18,6 +18,7 @@ import {
   LogOut,
   ShieldAlert,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +32,7 @@ import {
   markNoShow,
   blockUser,
   leaveActivity,
+  isEventEnded,
   type MessageWithSender,
   type JoinRequestWithUser,
 } from "@/lib/services";
@@ -39,6 +41,7 @@ import { ExpenseCard, isExpenseMessage } from "@/components/expense-card";
 import { SplitExpenseModal } from "@/components/split-expense-modal";
 import { ReportModal } from "@/components/report-modal";
 import { ManageRequestsModal } from "@/components/manage-requests-modal";
+import { RateSquadModal } from "@/components/rate-squad-modal";
 import { MemoryBanner } from "@/components/memory-banner";
 import { PageLoader } from "@/components/ui/loader";
 
@@ -58,6 +61,7 @@ function ChatPage() {
   const [attachOpen, setAttachOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [rateOpen, setRateOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -222,6 +226,16 @@ function ChatPage() {
             )}
           </p>
         </div>
+        {activity && isEventEnded(activity) && (
+          <button
+            onClick={() => setRateOpen(true)}
+            className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-95"
+            title="Rate your squad"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Rate</span> Squad
+          </button>
+        )}
         {isHost && (
           <div className="flex items-center gap-1.5">
             <button
@@ -404,6 +418,14 @@ function ChatPage() {
           setManageOpen(false);
           refetchAttendees();
         }}
+      />
+      <RateSquadModal
+        open={rateOpen}
+        onClose={() => setRateOpen(false)}
+        planId={activityId}
+        planTitle={activity?.title}
+        hostId={activity?.host_id ?? null}
+        viewerId={user?.id ?? null}
       />
 
       {showLeaveConfirm &&

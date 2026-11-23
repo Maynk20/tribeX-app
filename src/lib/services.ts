@@ -1246,6 +1246,24 @@ export async function upsertRating(input: {
   if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
     throw new Error("Pick a star rating between 1 and 5");
   }
+
+  // 1. Try atomic submit_squad_rating RPC
+  try {
+    const { data: rpcData, error: rpcErr } = await (supabase as unknown as {
+      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: Rating | null; error: unknown }>;
+    }).rpc("submit_squad_rating", {
+      _plan_id: input.plan_id,
+      _reviewee_id: input.reviewee_id,
+      _rating: input.rating,
+      _badges: input.badges ?? [],
+      _comment: (input.comment ?? "").trim().slice(0, 500) || null,
+    });
+    if (!rpcErr && rpcData) return rpcData as Rating;
+  } catch (err) {
+    console.warn("[upsertRating] RPC fallback to direct upsert:", err);
+  }
+
+  // 2. Direct table upsert fallback
   const client = supabase as unknown as {
     from: (t: string) => {
       upsert: (r: Record<string, unknown>, opts: { onConflict: string }) => {
@@ -1278,9 +1296,25 @@ export async function listRateableParticipants(
   hostId: string,
   viewerId: string,
 ): Promise<PublicProfile[]> {
+  try {
+    const { data: squad, error } = await (supabase as unknown as {
+      rpc: (fn: string, args: Record<string, unknown>) => Promise<{
+        data: { user_id: string; full_name: string; username: string; avatar_url: string; is_host: boolean }[] | null;
+        error: unknown;
+      }>;
+    }).rpc("get_squad_members", { _activity_id: planId });
+    if (!error && squad && squad.length > 0) {
+      const ids = squad.map((s) => s.user_id).filter((id) => id !== viewerId);
+      const map = await fetchPublicProfiles(ids);
+      return Array.from(map.values());
+    }
+  } catch (err) {
+    console.warn("[listRateableParticipants] get_squad_members fallback:", err);
+  }
+
   const attendees = await listAttendees(planId);
   const ids = new Set<string>();
-  ids.add(hostId);
+  if (hostId) ids.add(hostId);
   attendees.forEach((a) => ids.add(a.user_id));
   ids.delete(viewerId);
   const map = await fetchPublicProfiles(Array.from(ids));

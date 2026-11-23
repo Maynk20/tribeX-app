@@ -43,17 +43,21 @@ class RatingItem {
   });
 
   factory RatingItem.fromJson(Map<String, dynamic> json) {
-    final tagsRaw =
-        (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+    final badgesRaw = (json['badges'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        (json['tags'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
         const [];
 
     return RatingItem(
       id: (json['id'] ?? '') as String,
-      planId: (json['activity_id'] ?? '') as String,
+      planId: (json['plan_id'] ?? json['activity_id'] ?? '') as String,
       reviewerId: (json['reviewer_id'] ?? '') as String,
       revieweeId: (json['reviewee_id'] ?? '') as String,
-      rating: ((json['stars'] ?? 5) as num).toInt(),
-      badges: tagsRaw,
+      rating: ((json['rating'] ?? json['stars'] ?? 5) as num).toInt(),
+      badges: badgesRaw,
       comment: json['comment'] as String?,
       createdAt: json['created_at'] != null
           ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
@@ -63,13 +67,14 @@ class RatingItem {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'activity_id': planId,
+      if (id.isNotEmpty && !id.startsWith('rat_')) 'id': id,
+      'plan_id': planId,
       'reviewer_id': reviewerId,
       'reviewee_id': revieweeId,
-      'stars': rating,
-      'tags': badges,
-      'comment': comment,
+      'rating': rating,
+      'badges': badges,
+      if (comment != null && comment!.trim().isNotEmpty)
+        'comment': comment!.trim(),
       'created_at': createdAt.toIso8601String(),
     };
   }

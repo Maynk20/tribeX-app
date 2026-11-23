@@ -1290,32 +1290,90 @@ class ChatState extends ChangeNotifier {
     }
   }
 
-  Future<void> submitRating(RatingItem rating) async {
+  Future<bool> submitRating(RatingItem rating) async {
     final client = SupabaseService.client;
-    if (client == null || _isDisposed) return;
+    if (client == null || _isDisposed) return false;
 
     try {
-      await client.from('ratings').insert({
-        'plan_id': rating.planId,
-        'reviewer_id': rating.reviewerId,
-        'reviewee_id': rating.revieweeId,
-        'rating': rating.rating,
-        'badges': rating.badges,
-        'comment': rating.comment,
-      });
+      bool success = false;
+      dynamic submittedData;
 
-      // Recalculation is automatically handled by the database trigger
-      // `ratings_recalc_aiud` on insert/update/delete.
-
-      final idx = _ratings.indexWhere((r) => r.id == rating.id);
-      if (idx != -1) {
-        _ratings[idx] = rating;
-      } else {
-        _ratings.add(rating);
+      // 1. Try atomic security-definer RPC submit_squad_rating
+      try {
+        final rpcRes = await client.rpc(
+          'submit_squad_rating',
+          params: {
+            '_plan_id': rating.planId,
+            '_reviewee_id': rating.revieweeId,
+            '_rating': rating.rating,
+            '_badges': rating.badges,
+            '_comment': rating.comment?.trim().isEmpty == true
+                ? null
+                : rating.comment?.trim(),
+          },
+        );
+        if (rpcRes != null) {
+          success = true;
+          submittedData = rpcRes;
+        }
+      } catch (err) {
+        debugPrint('submit_squad_rating RPC error: $err');
       }
-      if (!_isDisposed) notifyListeners();
+
+      // 2. Direct table upsert fallback
+      if (!success) {
+        final res = await client
+            .from('ratings')
+            .upsert(
+              {
+                'plan_id': rating.planId,
+                'reviewer_id': rating.reviewerId,
+                'reviewee_id': rating.revieweeId,
+                'rating': rating.rating,
+                'badges': rating.badges,
+                'comment': rating.comment?.trim().isEmpty == true
+                    ? null
+                    : rating.comment?.trim(),
+                'updated_at': DateTime.now().toIso8601String(),
+              },
+              onConflict: 'plan_id,reviewer_id,reviewee_id',
+            )
+            .select()
+            .maybeSingle();
+
+        if (res != null) {
+          success = true;
+          submittedData = res;
+        }
+      }
+
+      if (success) {
+        RatingItem savedItem = rating;
+        if (submittedData is Map<String, dynamic>) {
+          savedItem = RatingItem.fromJson(submittedData);
+        }
+
+        final idx = _ratings.indexWhere(
+          (r) =>
+              (r.id.isNotEmpty &&
+                  savedItem.id.isNotEmpty &&
+                  r.id == savedItem.id) ||
+              (r.planId == savedItem.planId &&
+                  r.reviewerId == savedItem.reviewerId &&
+                  r.revieweeId == savedItem.revieweeId),
+        );
+        if (idx != -1) {
+          _ratings[idx] = savedItem;
+        } else {
+          _ratings.add(savedItem);
+        }
+        if (!_isDisposed) notifyListeners();
+        return true;
+      }
+      return false;
     } catch (e) {
       debugPrint('submitRating error: $e');
+      rethrow;
     }
   }
 

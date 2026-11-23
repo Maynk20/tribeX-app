@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_toast.dart';
 import '../../models/activity.dart';
@@ -33,15 +34,113 @@ class _RateSquadModalState extends State<RateSquadModal> {
   final Map<String, TextEditingController> _comments = {};
   final Set<String> _submittingIds = {};
 
+  List<UserProfile> _people = [];
+  bool _isLoadingPeople = true;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<ActivitiesState>().fetchRequestsForActivity(widget.activity.id);
-        context.read<ChatState>().fetchRatings(widget.activity.id);
-      }
+      _loadRateableSquad();
     });
+  }
+
+  Future<void> _loadRateableSquad() async {
+    if (!mounted) return;
+    setState(() => _isLoadingPeople = true);
+
+    final actState = context.read<ActivitiesState>();
+    final chatState = context.read<ChatState>();
+    final authState = context.read<AuthState>();
+    final me = authState.currentUser;
+    final client = SupabaseService.client;
+
+    try {
+      // 1. Fetch user's existing ratings for this plan
+      await chatState.fetchRatings(widget.activity.id);
+
+      final Map<String, UserProfile> peopleMap = {};
+
+      // 2. Try get_squad_members RPC (works for both Host and Attendees)
+      if (client != null) {
+        try {
+          final res = await client.rpc(
+            'get_squad_members',
+            params: {'_activity_id': widget.activity.id},
+          );
+          if (res is List<dynamic>) {
+            for (final m in res) {
+              if (m is Map<String, dynamic>) {
+                final uid = m['user_id']?.toString() ?? '';
+                if (uid.isNotEmpty && uid != me?.id) {
+                  final cached = actState.getCachedProfile(uid);
+                  if (cached != null && _resolvePersonName(cached) != 'Attendee') {
+                    peopleMap[uid] = cached;
+                  } else {
+                    final fetched = await actState.fetchUserProfile(uid);
+                    if (fetched != null) {
+                      peopleMap[uid] = fetched;
+                    } else {
+                      peopleMap[uid] = UserProfile(
+                        id: uid,
+                        fullName: m['full_name']?.toString() ?? 'Squad Member',
+                        username: m['username']?.toString() ?? '',
+                        avatarUrl: m['avatar_url']?.toString(),
+                        rating: 5.0,
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          debugPrint('RateSquadModal get_squad_members error: $err');
+        }
+      }
+
+      // 3. Fallback Host: if viewer is not the host, ensure host is included
+      final hostId = widget.activity.hostId;
+      if (hostId.isNotEmpty && hostId != me?.id && !peopleMap.containsKey(hostId)) {
+        final hostProf = widget.activity.host ??
+            actState.getCachedProfile(hostId) ??
+            await actState.fetchUserProfile(hostId);
+        if (hostProf != null) {
+          peopleMap[hostId] = hostProf;
+        }
+      }
+
+      // 4. Fallback Attendees: fetch join_requests
+      await actState.fetchRequestsForActivity(widget.activity.id);
+      final requests = actState.getRequestsForActivity(widget.activity.id);
+      for (final req in requests) {
+        final uid = req.userId;
+        if (uid.isNotEmpty &&
+            uid != me?.id &&
+            (req.status == JoinStatus.accepted || req.status.name == 'accepted')) {
+          if (!peopleMap.containsKey(uid)) {
+            final prof = req.user ??
+                actState.getCachedProfile(uid) ??
+                await actState.fetchUserProfile(uid);
+            if (prof != null) {
+              peopleMap[uid] = prof;
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _people = peopleMap.values.toList();
+          _isLoadingPeople = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('RateSquadModal _loadRateableSquad error: $e');
+      if (mounted) {
+        setState(() => _isLoadingPeople = false);
+      }
+    }
   }
 
   @override
@@ -52,7 +151,7 @@ class _RateSquadModalState extends State<RateSquadModal> {
     super.dispose();
   }
 
-    static String _resolvePersonName(UserProfile person) {
+  static String _resolvePersonName(UserProfile person) {
     final name = person.fullName.trim();
     final lower = name.toLowerCase();
     final isGeneric = name.isEmpty ||
@@ -77,29 +176,38 @@ class _RateSquadModalState extends State<RateSquadModal> {
   }) async {
     if (me == null || _submittingIds.contains(person.id)) return;
 
+    if (currentRating <= 0 && existing == null) {
+      AppToast.show(context, 'Please pick a star rating (1-5)', isError: true);
+      return;
+    }
+
     setState(() {
       _submittingIds.add(person.id);
     });
 
     try {
       final item = RatingItem(
-        id: "rat_${DateTime.now().millisecondsSinceEpoch}",
+        id: existing?.id ?? '',
         planId: widget.activity.id,
         reviewerId: me.id,
         revieweeId: person.id,
         rating: currentRating > 0 ? currentRating : (existing?.rating ?? 5),
         badges: currentBadges,
-        comment: commentText,
-        createdAt: DateTime.now(),
+        comment: commentText.trim().isEmpty ? null : commentText.trim(),
+        createdAt: existing?.createdAt ?? DateTime.now(),
       );
 
-      await chatState.submitRating(item);
+      final ok = await chatState.submitRating(item);
 
       if (!mounted) return;
-      AppToast.show(context, 'Rating saved for ${person.fullName}!');
-    } catch (_) {
+      if (ok) {
+        AppToast.show(context, 'Rating saved for ${_resolvePersonName(person)}!');
+      } else {
+        AppToast.show(context, 'Failed to save rating. Please try again.', isError: true);
+      }
+    } catch (e) {
       if (!mounted) return;
-      AppToast.show(context, 'Failed to save rating', isError: true);
+      AppToast.show(context, 'Failed to save rating: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -111,7 +219,6 @@ class _RateSquadModalState extends State<RateSquadModal> {
 
   @override
   Widget build(BuildContext context) {
-    final actState = context.watch<ActivitiesState>();
     final authState = context.watch<AuthState>();
     final chatState = context.watch<ChatState>();
     final me = authState.currentUser;
@@ -119,22 +226,7 @@ class _RateSquadModalState extends State<RateSquadModal> {
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
 
-    // Collect rateable people: host (if not me) + accepted attendees (if not me)
-    final people = <UserProfile>[];
-    if (widget.activity.host != null && widget.activity.host!.id != me?.id) {
-      people.add(widget.activity.host!);
-    }
-
-    final requests = actState.getRequestsForActivity(widget.activity.id);
-    for (final req in requests) {
-      if (req.user != null &&
-          req.user!.id != me?.id &&
-          (req.status == JoinStatus.accepted || req.status.name == 'accepted')) {
-        if (!people.any((p) => p.id == req.user!.id)) {
-          people.add(req.user!);
-        }
-      }
-    }
+    final people = _people;
 
     return Dialog(
       backgroundColor: cardBg,
@@ -154,29 +246,31 @@ class _RateSquadModalState extends State<RateSquadModal> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Rate your squad',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Rate your squad',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.activity.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark
-                              ? AppColors.mutedForegroundDark
-                              : AppColors.mutedForegroundLight,
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.activity.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.mutedForegroundDark
+                                : AppColors.mutedForegroundLight,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
@@ -189,302 +283,320 @@ class _RateSquadModalState extends State<RateSquadModal> {
 
             // People List
             Flexible(
-              child: people.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Text(
-                        'No other participants to rate for this plan.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? AppColors.mutedForegroundDark
-                              : AppColors.mutedForegroundLight,
-                        ),
+              child: _isLoadingPeople
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: CircularProgressIndicator(),
                       ),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: people.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 16),
-                      itemBuilder: (ctx, idx) {
-                        final person = people[idx];
-                        final isHost = person.id == widget.activity.hostId;
-                        final currentRating = _ratings[person.id] ?? 0;
-                        final currentBadges = _badges[person.id] ?? [];
-                        final commentCtrl = _comments.putIfAbsent(
-                          person.id,
-                          () => TextEditingController(),
-                        );
-                        final existing = me != null
-                            ? chatState.getMyRating(
-                                widget.activity.id,
-                                me.id,
-                                person.id,
-                              )
-                            : null;
-
-                        return Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppColors.backgroundDark
-                                : AppColors.mutedLight,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: border),
+                  : people.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Text(
+                            'No other participants to rate for this plan.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: people.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 16),
+                          itemBuilder: (ctx, idx) {
+                            final person = people[idx];
+                            final isHost = person.id == widget.activity.hostId;
+                            final existing = me != null
+                                ? chatState.getMyRating(
+                                    widget.activity.id,
+                                    me.id,
+                                    person.id,
+                                  )
+                                : null;
+
+                            final currentRating =
+                                _ratings[person.id] ?? (existing?.rating ?? 0);
+                            final currentBadges =
+                                _badges[person.id] ?? (existing?.badges ?? []);
+                            final commentCtrl = _comments.putIfAbsent(
+                              person.id,
+                              () => TextEditingController(
+                                text: existing?.comment ?? '',
+                              ),
+                            );
+
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.backgroundDark
+                                    : AppColors.mutedLight,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(color: border),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Builder(
-                                    builder: (context) {
-                                      final displayName = _resolvePersonName(person);
-                                      final initialChar = displayName.isNotEmpty
-                                          ? displayName[0].toUpperCase()
-                                          : 'A';
-                                      return CircleAvatar(
-                                        radius: 16,
-                                        backgroundColor: AppColors.primaryMuted,
-                                        backgroundImage: person.avatarUrl != null
-                                            ? NetworkImage(person.avatarUrl!)
-                                            : null,
-                                        child: person.avatarUrl == null
-                                            ? Text(
-                                                initialChar,
-                                                style: const TextStyle(
+                                  Row(
+                                    children: [
+                                      Builder(
+                                        builder: (context) {
+                                          final displayName =
+                                              _resolvePersonName(person);
+                                          final initialChar = displayName.isNotEmpty
+                                              ? displayName[0].toUpperCase()
+                                              : 'A';
+                                          return CircleAvatar(
+                                            radius: 16,
+                                            backgroundColor:
+                                                AppColors.primaryMuted,
+                                            backgroundImage: person.avatarUrl !=
+                                                    null
+                                                ? NetworkImage(person.avatarUrl!)
+                                                : null,
+                                            child: person.avatarUrl == null
+                                                ? Text(
+                                                    initialChar,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: AppColors.primary,
+                                                    ),
+                                                  )
+                                                : null,
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _resolvePersonName(person),
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            Text(
+                                              isHost ? 'Host' : 'Attendee',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark
+                                                    ? AppColors
+                                                        .mutedForegroundDark
+                                                    : AppColors
+                                                        .mutedForegroundLight,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (existing != null)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.successMuted,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.check,
+                                                size: 10,
+                                                color: AppColors.success,
+                                              ),
+                                              SizedBox(width: 3),
+                                              Text(
+                                                'Submitted',
+                                                style: TextStyle(
+                                                  fontSize: 9,
                                                   fontWeight: FontWeight.w700,
-                                                  color: AppColors.primary,
+                                                  color: AppColors.success,
                                                 ),
-                                              )
-                                            : null,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  // Stars
+                                  Row(
+                                    children: List.generate(5, (starIdx) {
+                                      final starVal = starIdx + 1;
+                                      final isFilled = starVal <= currentRating;
+                                      return GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _ratings[person.id] = starVal;
+                                          });
+                                        },
+                                        child: Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 6),
+                                          child: Icon(
+                                            Icons.star,
+                                            size: 26,
+                                            color: isFilled
+                                                ? AppColors.warning
+                                                : AppColors.mutedForegroundLight
+                                                    .withValues(alpha: 0.3),
+                                          ),
+                                        ),
                                       );
-                                    },
+                                    }),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _resolvePersonName(person),
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        Text(
-                                          isHost ? 'Host' : 'Attendee',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? AppColors.mutedForegroundDark
-                                                : AppColors
-                                                      .mutedForegroundLight,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (existing != null)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.successMuted,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.check,
-                                            size: 10,
-                                            color: AppColors.success,
-                                          ),
-                                          SizedBox(width: 3),
-                                          Text(
-                                            'Submitted',
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.success,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
+                                  const SizedBox(height: 10),
 
-                              // Stars
-                              Row(
-                                children: List.generate(5, (starIdx) {
-                                  final starVal = starIdx + 1;
-                                  final isFilled =
-                                      starVal <=
-                                      (currentRating > 0
-                                          ? currentRating
-                                          : (existing?.rating ?? 0));
-                                  return GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _ratings[person.id] = starVal;
-                                      });
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: Icon(
-                                        Icons.star,
-                                        size: 26,
-                                        color: isFilled
-                                            ? AppColors.warning
-                                            : AppColors.mutedForegroundLight
-                                                  .withValues(alpha: 0.3),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
-                              const SizedBox(height: 10),
-
-                              // Badges
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: RatingBadges.all.map((b) {
-                                  final isSelected = currentBadges.contains(
-                                    b.key,
-                                  );
-                                  return GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        final list = List<String>.from(
-                                          currentBadges,
-                                        );
-                                        if (isSelected) {
-                                          list.remove(b.key);
-                                        } else {
-                                          list.add(b.key);
-                                        }
-                                        _badges[person.id] = list;
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? AppColors.primaryMuted
-                                            : (isDark
-                                                  ? AppColors.cardDark
-                                                  : Colors.white),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(
-                                          color: isSelected
-                                              ? AppColors.primary
-                                              : border,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            b.emoji,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                            ),
+                                  // Badges
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: RatingBadges.all.map((b) {
+                                      final isSelected =
+                                          currentBadges.contains(b.key);
+                                      return GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            final list = List<String>.from(
+                                              currentBadges,
+                                            );
+                                            if (isSelected) {
+                                              list.remove(b.key);
+                                            } else {
+                                              list.add(b.key);
+                                            }
+                                            _badges[person.id] = list;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            b.label,
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: isSelected
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w500,
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? AppColors.primaryMuted
+                                                : (isDark
+                                                    ? AppColors.cardDark
+                                                    : Colors.white),
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            border: Border.all(
                                               color: isSelected
                                                   ? AppColors.primary
-                                                  : (isDark
-                                                        ? AppColors
-                                                              .foregroundDark
-                                                        : AppColors
-                                                              .foregroundLight),
+                                                  : border,
                                             ),
                                           ),
-                                        ],
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                b.emoji,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                b.label,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                                  color: isSelected
+                                                      ? AppColors.primary
+                                                      : (isDark
+                                                          ? AppColors
+                                                              .foregroundDark
+                                                          : AppColors
+                                                              .foregroundLight),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  // Comment
+                                  TextField(
+                                    controller: commentCtrl,
+                                    decoration: const InputDecoration(
+                                      hintText:
+                                          'Optional note (private to them)…',
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
                                       ),
                                     ),
-                                  );
-                                }).toList(),
-                              ),
-                              const SizedBox(height: 8),
-
-                              // Comment
-                              TextField(
-                                controller: commentCtrl,
-                                decoration: const InputDecoration(
-                                  hintText: 'Optional note (private to them)…',
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
+                                    style: const TextStyle(fontSize: 12),
                                   ),
-                                ),
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              const SizedBox(height: 10),
+                                  const SizedBox(height: 10),
 
-                              // Submit single button
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed:
-                                      (_submittingIds.contains(person.id) ||
-                                          (currentRating <= 0 &&
-                                              existing == null))
-                                      ? null
-                                      : () => _submitSingleRating(
-                                          me: me,
-                                          person: person,
-                                          currentRating: currentRating,
-                                          existing: existing,
-                                          currentBadges: currentBadges,
-                                          commentText: commentCtrl.text.trim(),
-                                          chatState: chatState,
+                                  // Submit single button
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: (_submittingIds
+                                                  .contains(person.id) ||
+                                              (currentRating <= 0 &&
+                                                  existing == null))
+                                          ? null
+                                          : () => _submitSingleRating(
+                                                me: me,
+                                                person: person,
+                                                currentRating: currentRating,
+                                                existing: existing,
+                                                currentBadges: currentBadges,
+                                                commentText:
+                                                    commentCtrl.text.trim(),
+                                                chatState: chatState,
+                                              ),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8,
                                         ),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8,
+                                      ),
+                                      child: _submittingIds.contains(person.id)
+                                          ? const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.black,
+                                              ),
+                                            )
+                                          : Text(
+                                              existing != null
+                                                  ? 'Update Rating'
+                                                  : 'Submit Rating',
+                                              style:
+                                                  const TextStyle(fontSize: 11),
+                                            ),
                                     ),
                                   ),
-                                  child: _submittingIds.contains(person.id)
-                                      ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.black,
-                                          ),
-                                        )
-                                      : Text(
-                                          existing != null
-                                              ? 'Update Rating'
-                                              : 'Submit Rating',
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
