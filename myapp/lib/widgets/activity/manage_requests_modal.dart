@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_toast.dart';
 import '../../models/join_request.dart';
 import '../../models/user_profile.dart';
 import '../../state/activities_state.dart';
@@ -54,7 +55,10 @@ class _ManageRequestsModalState extends State<ManageRequestsModal> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<ActivitiesState>();
-    final requests = state.getRequestsForActivity(widget.activityId);
+    final rawRequests = state.getRequestsForActivity(widget.activityId);
+    final requests = rawRequests
+        .where((r) => r.status == JoinStatus.pending || r.status == JoinStatus.accepted)
+        .toList();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.cardDark : AppColors.cardLight;
     final border = isDark ? AppColors.borderDark : AppColors.borderLight;
@@ -151,7 +155,10 @@ class _ManageRequestsModalState extends State<ManageRequestsModal> {
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (ctx, idx) {
                         final req = requests[idx];
-                        return _AttendeeRow(req: req);
+                        return _AttendeeRow(
+                          key: ValueKey(req.id.isNotEmpty ? req.id : '${req.activityId}:${req.userId}'),
+                          req: req,
+                        );
                       },
                     ),
             ),
@@ -165,7 +172,7 @@ class _ManageRequestsModalState extends State<ManageRequestsModal> {
 class _AttendeeRow extends StatefulWidget {
   final JoinRequest req;
 
-  const _AttendeeRow({required this.req});
+  const _AttendeeRow({super.key, required this.req});
 
   static String resolveRequesterName(UserProfile? prof) {
     final fName = prof?.fullName.trim();
@@ -249,11 +256,29 @@ class _AttendeeRowState extends State<_AttendeeRow> {
     });
 
     try {
-      await actionFn();
+      final success = await actionFn();
       if (mounted) {
+        if (success) {
+          AppToast.show(
+            context,
+            action == 'remove'
+                ? 'User removed from plan'
+                : (action == 'accept' ? 'Request accepted' : 'Request declined'),
+          );
+        } else {
+          AppToast.show(
+            context,
+            'Could not $action user. Please try again.',
+            isError: true,
+          );
+        }
         await context
             .read<ActivitiesState>()
             .fetchRequestsForActivity(widget.req.activityId);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppToast.show(context, 'Error: $e', isError: true);
       }
     } finally {
       if (mounted) {
@@ -534,7 +559,11 @@ class _AttendeeRowState extends State<_AttendeeRow> {
                           if (confirmed == true) {
                             await _handleAction(
                               'remove',
-                              () => state.removeAttendee(widget.req.id),
+                              () => state.removeAttendee(
+                                widget.req.id,
+                                activityId: widget.req.activityId,
+                                userId: widget.req.userId,
+                              ),
                             );
                           }
                         },
