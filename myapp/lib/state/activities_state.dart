@@ -1405,26 +1405,112 @@ class ActivitiesState extends ChangeNotifier {
     }
   }
 
-  Future<bool> removeAttendee(String requestId) async {
+  Future<bool> removeAttendee(
+    String requestId, {
+    String? activityId,
+    String? userId,
+  }) async {
     final client = SupabaseService.client;
     if (client == null || _isDisposed) return false;
 
     try {
-      try {
-        await client.rpc('remove_join_request', params: {'_req_id': requestId});
-      } catch (_) {
-        await client
-            .from('join_requests')
-            .update({'status': 'rejected'})
-            .eq('id', requestId);
+      bool success = false;
+
+      // 1. Try remove_join_request RPC if requestId is available
+      if (requestId.trim().isNotEmpty) {
+        try {
+          await client.rpc('remove_join_request', params: {'_req_id': requestId.trim()});
+          success = true;
+        } catch (err) {
+          debugPrint('remove_join_request RPC error: $err');
+        }
       }
+
+      // 2. Try remove_user_from_activity RPC if activityId and userId are provided
+      if (!success &&
+          activityId != null &&
+          userId != null &&
+          activityId.trim().isNotEmpty &&
+          userId.trim().isNotEmpty) {
+        try {
+          await client.rpc('remove_user_from_activity', params: {
+            '_activity_id': activityId.trim(),
+            '_user_id': userId.trim(),
+          });
+          success = true;
+        } catch (err) {
+          debugPrint('remove_user_from_activity RPC error: $err');
+        }
+      }
+
+      // 3. Fallback to direct join_requests table update
+      if (!success) {
+        if (requestId.trim().isNotEmpty) {
+          await client
+              .from('join_requests')
+              .update({'status': 'rejected'})
+              .eq('id', requestId.trim());
+          success = true;
+        } else if (activityId != null &&
+            userId != null &&
+            activityId.trim().isNotEmpty &&
+            userId.trim().isNotEmpty) {
+          await client
+              .from('join_requests')
+              .update({'status': 'rejected'})
+              .eq('activity_id', activityId.trim())
+              .eq('user_id', userId.trim());
+          success = true;
+        }
+      }
+
       // Update local request cache
-      _joinRequests.removeWhere((r) => r.id == requestId);
+      _joinRequests.removeWhere((r) =>
+          (requestId.trim().isNotEmpty && r.id == requestId.trim()) ||
+          (activityId != null &&
+              userId != null &&
+              r.activityId == activityId.trim() &&
+              (r.userId == userId.trim() || r.user?.id == userId.trim())));
       _rebuildJoinRequestIndices();
       notifyListeners();
       await fetchActivities();
       return true;
     } catch (e) {
+      debugPrint('removeAttendee error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> removeUserFromActivity({
+    required String activityId,
+    required String userId,
+  }) async {
+    final client = SupabaseService.client;
+    if (client == null || _isDisposed) return false;
+
+    try {
+      try {
+        await client.rpc('remove_user_from_activity', params: {
+          '_activity_id': activityId,
+          '_user_id': userId,
+        });
+      } catch (err) {
+        debugPrint('remove_user_from_activity RPC fallback to table update: $err');
+        await client
+            .from('join_requests')
+            .update({'status': 'rejected'})
+            .eq('activity_id', activityId)
+            .eq('user_id', userId);
+      }
+      _joinRequests.removeWhere((r) =>
+          r.activityId == activityId &&
+          (r.userId == userId || r.user?.id == userId));
+      _rebuildJoinRequestIndices();
+      notifyListeners();
+      await fetchActivities();
+      return true;
+    } catch (e) {
+      debugPrint('removeUserFromActivity error: $e');
       return false;
     }
   }
@@ -1567,24 +1653,27 @@ class ActivitiesState extends ChangeNotifier {
         return getRequestsForActivity(activityId);
       }
 
-      // 2. Fallback to querying join_requests directly
+      // 2. Fallback to querying join_requests directly (pending and accepted only)
       dynamic reqsRes;
       try {
         reqsRes = await client
             .from('join_requests')
             .select('*, profiles_public(*)')
-            .eq('activity_id', activityId);
+            .eq('activity_id', activityId)
+            .inFilter('status', ['pending', 'accepted']);
       } catch (_) {
         try {
           reqsRes = await client
               .from('join_requests')
               .select('*, profiles(*)')
-              .eq('activity_id', activityId);
+              .eq('activity_id', activityId)
+              .inFilter('status', ['pending', 'accepted']);
         } catch (_) {
           reqsRes = await client
               .from('join_requests')
               .select('*')
-              .eq('activity_id', activityId);
+              .eq('activity_id', activityId)
+              .inFilter('status', ['pending', 'accepted']);
         }
       }
 
