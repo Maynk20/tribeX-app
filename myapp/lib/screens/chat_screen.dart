@@ -15,6 +15,7 @@ import '../widgets/chat/expense_card_widget.dart';
 import '../widgets/chat/message_bubble_widget.dart';
 import '../widgets/chat/split_expense_modal.dart';
 import '../widgets/common/report_modal.dart';
+import '../widgets/activity/manage_requests_modal.dart';
 
 class ChatScreen extends StatefulWidget {
   final Activity activity;
@@ -381,6 +382,18 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               tooltip: 'Meeting details',
               onPressed: () => _showVirtualMeetingDetails(context, hostName),
+            ),
+          if (isHost)
+            IconButton(
+              icon: const Icon(Icons.group_outlined, size: 22, color: AppColors.primary),
+              tooltip: 'Manage squad',
+              onPressed: () {
+                ManageRequestsModal.show(
+                  context,
+                  activityId: widget.activity.id,
+                  activityTitle: widget.activity.title,
+                );
+              },
             ),
           if (!isHost) ...[
             IconButton(
