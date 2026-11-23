@@ -370,17 +370,17 @@ class AuthState extends ChangeNotifier {
       'has_completed_profile': true,
       'terms_accepted_at': termsAcceptedAt.toIso8601String(),
       'terms_version': 'v1.0',
-      if (clearAvatarUrl) 'avatar_url': null,
-      if (!clearAvatarUrl && avatarUrl != null) 'avatar_url': avatarUrl,
-      if (fullName != null) 'full_name': fullName,
-      if (username != null) 'username': username,
-      if (phone != null) 'phone': phone,
-      if (gender != null) 'gender': gender,
-      if (city != null) 'city': city,
-      if (bio != null) 'bio': bio,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
     };
+    if (clearAvatarUrl) updates['avatar_url'] = null;
+    if (!clearAvatarUrl && avatarUrl != null) updates['avatar_url'] = avatarUrl;
+    if (fullName != null) updates['full_name'] = fullName;
+    if (username != null) updates['username'] = username;
+    if (phone != null) updates['phone'] = phone;
+    if (gender != null) updates['gender'] = gender;
+    if (city != null) updates['city'] = city;
+    if (bio != null) updates['bio'] = bio;
+    if (latitude != null) updates['latitude'] = latitude;
+    if (longitude != null) updates['longitude'] = longitude;
 
     try {
       final client = SupabaseService.client;
