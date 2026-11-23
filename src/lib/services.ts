@@ -454,11 +454,46 @@ export async function listPendingRequestsForActivity(activityId: string): Promis
 }
 
 export async function listActivityJoinProfiles(activityId: string): Promise<HostJoinProfile[]> {
-  const { data, error } = await (supabase as unknown as {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: HostJoinProfile[] | null; error: unknown }>;
-  }).rpc("list_activity_join_profiles", { _activity_id: activityId });
-  if (error) throw error;
-  return data ?? [];
+  try {
+    const { data, error } = await (supabase as unknown as {
+      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: HostJoinProfile[] | null; error: unknown }>;
+    }).rpc("list_activity_join_profiles", { _activity_id: activityId });
+    if (!error && data) return data;
+  } catch (err) {
+    console.warn("[listActivityJoinProfiles] RPC failed, falling back to direct table query:", err);
+  }
+
+  // Fallback: direct table query filtering status in ('pending', 'accepted')
+  const { data: rows, error: directErr } = await (supabase as any)
+    .from("join_requests")
+    .select("id, activity_id, user_id, status, checked_in_at, no_show, created_at, profiles_public(*)")
+    .eq("activity_id", activityId)
+    .in("status", ["pending", "accepted"])
+    .order("created_at", { ascending: true });
+
+  if (directErr) throw directErr;
+  return (rows ?? []).map((r: any) => {
+    const prof = r.profiles_public ?? {};
+    return {
+      join_request_id: r.id,
+      activity_id: r.activity_id,
+      user_id: r.user_id,
+      status: r.status,
+      checked_in_at: r.checked_in_at,
+      no_show: r.no_show,
+      requested_at: r.created_at,
+      full_name: prof.full_name ?? null,
+      username: prof.username ?? null,
+      avatar_url: prof.avatar_url ?? null,
+      rating: prof.rating ?? 5,
+      reliability_score: prof.reliability_score ?? 100,
+      is_verified: prof.is_verified ?? false,
+      city: prof.city ?? null,
+      latitude: prof.latitude ?? null,
+      longitude: prof.longitude ?? null,
+      total_reviews: prof.total_reviews ?? 0,
+    };
+  });
 }
 
 export async function respondToJoinRequest(requestId: string, status: "accepted" | "rejected") {
@@ -481,12 +516,74 @@ export async function respondToJoinRequest(requestId: string, status: "accepted"
   return data;
 }
 
-export async function removeJoinRequest(requestId: string): Promise<JoinRequest> {
-  const { data, error } = await (supabase as unknown as {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: JoinRequest | null; error: unknown }>;
-  }).rpc("remove_join_request", { _req_id: requestId });
+export async function removeJoinRequest(
+  requestId: string,
+  activityId?: string,
+  userId?: string,
+): Promise<JoinRequest | null> {
+  // 1. Try remove_join_request RPC if requestId is provided
+  if (requestId && requestId.trim().length > 0) {
+    try {
+      const { data, error } = await (supabase as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: JoinRequest | null; error: unknown }>;
+      }).rpc("remove_join_request", { _req_id: requestId.trim() });
+      if (!error && data) return data as JoinRequest;
+    } catch (err) {
+      console.warn("[removeJoinRequest] RPC failed, falling back to direct table update:", err);
+    }
+  }
+
+  // 2. Try remove_user_from_activity RPC if activityId and userId are provided
+  if (activityId && userId && activityId.trim().length > 0 && userId.trim().length > 0) {
+    try {
+      await removeUserFromActivity(activityId.trim(), userId.trim());
+      return null;
+    } catch (err) {
+      console.warn("[removeJoinRequest] removeUserFromActivity fallback failed:", err);
+    }
+  }
+
+  // 3. Fallback: direct table update
+  if (requestId && requestId.trim().length > 0) {
+    const { data, error } = await supabase
+      .from("join_requests")
+      .update({ status: "rejected" })
+      .eq("id", requestId.trim())
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    return data as JoinRequest | null;
+  } else if (activityId && userId) {
+    const { data, error } = await supabase
+      .from("join_requests")
+      .update({ status: "rejected" })
+      .eq("activity_id", activityId.trim())
+      .eq("user_id", userId.trim())
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    return data as JoinRequest | null;
+  }
+
+  return null;
+}
+
+export async function removeUserFromActivity(activityId: string, userId: string): Promise<void> {
+  try {
+    const { error } = await (supabase as unknown as {
+      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
+    }).rpc("remove_user_from_activity", { _activity_id: activityId, _user_id: userId });
+    if (!error) return;
+  } catch (err) {
+    console.warn("[removeUserFromActivity] RPC failed, falling back to direct table update:", err);
+  }
+
+  const { error } = await supabase
+    .from("join_requests")
+    .update({ status: "rejected" })
+    .eq("activity_id", activityId)
+    .eq("user_id", userId);
   if (error) throw error;
-  return data as JoinRequest;
 }
 
 export async function leaveActivity(activityId: string): Promise<void> {
