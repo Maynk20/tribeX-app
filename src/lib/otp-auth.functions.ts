@@ -59,12 +59,12 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 }
 
 async function sendOtpEmail(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
-  const GMAIL_USER = (process.env.GMAIL_USER || "tribex.apk@gmail.com").trim();
-  const GMAIL_APP_PASS = (process.env.GMAIL_APP_PASS || "xmva hdqc hoqq xkly").replace(/\s+/g, "");
+  const GMAIL_USER = (process.env.GMAIL_USER || "").trim();
+  const GMAIL_APP_PASS = (process.env.GMAIL_APP_PASS || "").replace(/\s+/g, "");
 
   if (!GMAIL_USER || !GMAIL_APP_PASS) {
     console.log("\n==========================================");
-    console.log(`[DEV FALLBACK] Security Code for ${to}:`);
+    console.log(`[DEV / LOCAL FALLBACK] Security Code for ${to}:`);
     console.log(`🔑 OTP CODE:  ${code}`);
     console.log("==========================================\n");
     return { ok: true };
