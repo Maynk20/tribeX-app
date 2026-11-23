@@ -41,7 +41,8 @@ export function ManageRequestsModal({
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => removeJoinRequest(id),
+    mutationFn: (person: HostJoinProfile) =>
+      removeJoinRequest(person.join_request_id, person.activity_id, person.user_id),
     onSuccess: () => {
       toast.success("User removed from plan");
       invalidateHostPlan(qc, activityId);
@@ -94,7 +95,7 @@ export function ManageRequestsModal({
                   {people.map((person) => {
                     const busy =
                       (respond.isPending && respond.variables?.id === person.join_request_id) ||
-                      (remove.isPending && remove.variables === person.join_request_id);
+                      (remove.isPending && remove.variables?.join_request_id === person.join_request_id);
                     return (
                       <AttendeeRow
                         key={person.join_request_id}
@@ -139,7 +140,7 @@ export function ManageRequestsModal({
                 <button
                   disabled={remove.isPending}
                   onClick={() => {
-                    remove.mutate(personToRemove.join_request_id, {
+                    remove.mutate(personToRemove, {
                       onSettled: () => setPersonToRemove(null),
                     });
                   }}
