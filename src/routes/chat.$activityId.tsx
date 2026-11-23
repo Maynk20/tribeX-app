@@ -17,6 +17,7 @@ import {
   Flag,
   LogOut,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +38,7 @@ import { friendlyError } from "@/lib/friendly-error";
 import { ExpenseCard, isExpenseMessage } from "@/components/expense-card";
 import { SplitExpenseModal } from "@/components/split-expense-modal";
 import { ReportModal } from "@/components/report-modal";
+import { ManageRequestsModal } from "@/components/manage-requests-modal";
 import { MemoryBanner } from "@/components/memory-banner";
 import { PageLoader } from "@/components/ui/loader";
 
@@ -55,6 +57,7 @@ function ChatPage() {
   const [splitOpen, setSplitOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -219,6 +222,18 @@ function ChatPage() {
             )}
           </p>
         </div>
+        {isHost && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setManageOpen(true)}
+              className="flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/80 px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary active:scale-95"
+              title="Manage Squad & Attendees"
+            >
+              <Users className="h-3.5 w-3.5 text-primary" />
+              <span className="hidden sm:inline">Manage</span> Squad
+            </button>
+          </div>
+        )}
         {!isHost && activity?.host_id && (
           <div className="flex items-center gap-1.5">
             {myRequest && (
@@ -380,6 +395,15 @@ function ChatPage() {
         targetType="activity"
         targetId={activityId}
         targetTitle={activity?.title ?? "Activity"}
+      />
+      <ManageRequestsModal
+        activityId={activityId}
+        activityTitle={activity?.title}
+        open={manageOpen}
+        onClose={() => {
+          setManageOpen(false);
+          refetchAttendees();
+        }}
       />
 
       {showLeaveConfirm &&
