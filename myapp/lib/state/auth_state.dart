@@ -333,20 +333,25 @@ class AuthState extends ChangeNotifier {
     String? city,
     String? bio,
     String? avatarUrl,
+    bool clearAvatarUrl = false,
     double? latitude,
     double? longitude,
   }) async {
     if (_currentUser == null || _isDisposed) return false;
 
     final cur = _currentUser!;
+    final avatarChanged = clearAvatarUrl
+        ? cur.avatarUrl != null
+        : (avatarUrl != null && avatarUrl != cur.avatarUrl);
+
     final hasChanges =
+        avatarChanged ||
         (fullName != null && fullName != cur.fullName) ||
         (username != null && username != cur.username) ||
         (phone != null && phone != cur.phone) ||
         (gender != null && gender != cur.gender) ||
         (city != null && city != cur.city) ||
         (bio != null && bio != cur.bio) ||
-        (avatarUrl != null && avatarUrl != cur.avatarUrl) ||
         (latitude != null && latitude != cur.latitude) ||
         (longitude != null && longitude != cur.longitude) ||
         !cur.hasCompletedProfile;
@@ -365,15 +370,16 @@ class AuthState extends ChangeNotifier {
       'has_completed_profile': true,
       'terms_accepted_at': termsAcceptedAt.toIso8601String(),
       'terms_version': 'v1.0',
-      if (fullName != null) ...{'full_name': fullName},
-      if (username != null) ...{'username': username},
-      if (phone != null) ...{'phone': phone},
-      if (gender != null) ...{'gender': gender},
-      if (city != null) ...{'city': city},
-      if (bio != null) ...{'bio': bio},
-      if (avatarUrl != null) ...{'avatar_url': avatarUrl},
-      if (latitude != null) ...{'latitude': latitude},
-      if (longitude != null) ...{'longitude': longitude},
+      if (clearAvatarUrl) 'avatar_url': null,
+      if (!clearAvatarUrl && avatarUrl != null) 'avatar_url': avatarUrl,
+      if (fullName != null) 'full_name': fullName,
+      if (username != null) 'username': username,
+      if (phone != null) 'phone': phone,
+      if (gender != null) 'gender': gender,
+      if (city != null) 'city': city,
+      if (bio != null) 'bio': bio,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
 
     try {
@@ -388,7 +394,8 @@ class AuthState extends ChangeNotifier {
         gender: gender,
         city: city,
         bio: bio,
-        avatarUrl: avatarUrl,
+        avatarUrl: clearAvatarUrl ? null : (avatarUrl ?? cur.avatarUrl),
+        clearAvatarUrl: clearAvatarUrl,
         latitude: latitude,
         longitude: longitude,
         hasCompletedProfile: true,

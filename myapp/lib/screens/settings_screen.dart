@@ -1217,7 +1217,8 @@ class _EditProfileModalContentState extends State<_EditProfileModalContent>
     final success = await auth.updateProfile(
       fullName: name,
       username: uname,
-      avatarUrl: finalAvatarUrl,
+      avatarUrl: _avatarRemoved ? null : finalAvatarUrl,
+      clearAvatarUrl: _avatarRemoved,
       phone: _phoneCtrl.text.trim().isNotEmpty
           ? _phoneCtrl.text.trim()
           : null,

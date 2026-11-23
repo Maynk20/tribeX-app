@@ -234,7 +234,14 @@ function SettingsPage() {
     setUploading(true);
     try {
       await removeAvatar(user.id);
+      qc.setQueryData(["profile", user.id], (old: unknown) =>
+        old && typeof old === "object" ? { ...old, avatar_url: null } : old,
+      );
+      qc.setQueryData(["onboarding-status", user.id], (old: unknown) =>
+        old && typeof old === "object" ? { ...old, avatar_url: null } : old,
+      );
       await qc.invalidateQueries({ queryKey: ["profile", user.id] });
+      await qc.invalidateQueries({ queryKey: ["onboarding-status", user.id] });
       toast.success("Photo removed");
     } catch (err) {
       toast.error(friendlyError(err));
@@ -277,10 +284,12 @@ function SettingsPage() {
     }
     setSavingEdit(true);
     try {
+      let nextAvatarUrl = profile?.avatar_url ?? null;
       if (modalAvatarRemoved) {
         await removeAvatar(user.id);
+        nextAvatarUrl = null;
       } else if (modalAvatarFile) {
-        await uploadAvatar(user.id, modalAvatarFile);
+        nextAvatarUrl = await uploadAvatar(user.id, modalAvatarFile);
       }
 
       await updateProfile(user.id, {
@@ -290,8 +299,28 @@ function SettingsPage() {
         gender: editDraft.gender || null,
         city: editDraft.city || null,
         bio: editDraft.bio.trim() || null,
+        avatar_url: nextAvatarUrl,
       } as Parameters<typeof updateProfile>[1]);
+
+      qc.setQueryData(["profile", user.id], (old: unknown) =>
+        old && typeof old === "object"
+          ? {
+              ...old,
+              avatar_url: nextAvatarUrl,
+              full_name: name,
+              username: uname,
+              phone: editDraft.phone.trim() || null,
+              gender: editDraft.gender || null,
+              city: editDraft.city || null,
+              bio: editDraft.bio.trim() || null,
+            }
+          : old,
+      );
+      qc.setQueryData(["onboarding-status", user.id], (old: unknown) =>
+        old && typeof old === "object" ? { ...old, avatar_url: nextAvatarUrl } : old,
+      );
       await qc.invalidateQueries({ queryKey: ["profile", user.id] });
+      await qc.invalidateQueries({ queryKey: ["onboarding-status", user.id] });
       setShowEditDetails(false);
       toast.success("Profile updated");
     } catch (err) {
